@@ -658,7 +658,7 @@ def test_countdown_is_not_hidden_on_a_phone():
 # --- L6: backups panel ----------------------------------------------------------------------
 
 
-def test_backups_are_three_cards_with_danger_restores(client, monkeypatch):
+def test_backups_are_three_cards_with_ghost_restores(client, monkeypatch):
     monkeypatch.setattr(
         "tow.web.services.list_restore_points",
         lambda: [{"id": "20260924T091524Z-deadbeef", "created_at": "2026-09-24T09:15:24+00:00", "bytes": 4096}],
@@ -671,35 +671,48 @@ def test_backups_are_three_cards_with_danger_restores(client, monkeypatch):
     assert cards == ["backup-night", "backup-manual", "backup-file"]
     manual = transfer.split('id="backup-manual"', 1)[1].split("</article>", 1)[0]
     assert 'data-confirm="' in manual
-    assert '<button class="danger" type="submit" data-busy-label="Восстановление…">Восстановить</button>' in manual
+    # V2 (1.32.1): Restore saves the current data first - not a deletion: ghost, its confirmation
+    # says it is serious (data-confirm-danger) and names the action.
+    assert '<button class="ghost" type="submit" data-busy-label="Восстановление…">Восстановить</button>' in manual
+    assert 'data-confirm-label="Восстановить" data-confirm-danger' in manual
     file_card = transfer.split('id="backup-file"', 1)[1].split("</article>", 1)[0]
-    assert '<button class="danger" type="submit" name="operation" value="restore" data-confirm=' in file_card
+    assert '<button class="ghost" type="submit" name="operation" value="restore" data-confirm=' in file_card
+    assert 'class="danger"' not in transfer
 
 
 def test_the_default_backup_folder_is_shown_once(client):
+    """§4.2 (1.32.1): an empty field is the default folder, said in words that stay ("Default:
+    <path>"), not a placeholder that reads as a value and goes away while typing."""
     page = client.get("/settings").text
     night = page.split('id="backup-night"', 1)[1].split("</article>", 1)[0]
-    field = re.search(r'<input id="backup-path-night"[^>]*placeholder="([^"]+)"', night)
-    assert field is not None
-    assert night.count(field.group(1)) == 1  # the placeholder only, no "Now: <same path>"
+    field = re.search(r'<input id="backup-path-night"[^>]*>', night).group(0)
+    assert "placeholder" not in field
+    assert 'value=""' in field
+    default = re.search(r'id="backup-path-night-where">По умолчанию: ([^<·]+?)( · |</p>)', night).group(1)
+    assert night.count(default) == 1  # once, no "Now: <same path>"
 
 
 # --- L7: network access waits for a password ----------------------------------------------------
 
 
 def _network_card(page: str) -> str:
-    return page.split('id="network-card"', 1)[1].split("</article>", 1)[0]
+    return page.split('id="access-card"', 1)[1].split('id="acc-transfer"', 1)[0]
 
 
-def test_network_access_cannot_be_ticked_before_a_password_is_set(client):
+def test_network_access_without_a_password_asks_for_it_beside_the_box(client):
+    """F1 (1.32.1): the box can be ticked; it shows the password and its reminder, and only "Save
+    and enable" sends them - the box alone saves nothing (no auto-save)."""
     card = _network_card(client.get("/settings").text)
 
     box = re.search(r'<input id="allow-lan"[^>]*>', card)
     assert box is not None
-    assert " disabled" in box.group(0)
-    assert 'aria-describedby="allow-lan-hint allow-lan-locked"' in box.group(0)
-    assert "Сначала задайте пароль выше" in card
-    assert '<button type="submit" disabled>' in card
+    assert " disabled" not in box.group(0)
+    assert "data-auto-submit" not in card.split('id="allow-lan"', 1)[0]
+    group = card.split('data-enabled-by="allow-lan"', 1)[1]
+    assert 'id="lan-password"' in group
+    assert 'id="lan-hint"' in group
+    assert ">Сохранить и включить</button>" in group
+    assert "Сначала задайте пароль" not in card
 
 
 def test_the_server_still_refuses_network_access_without_a_password(client):
@@ -716,14 +729,14 @@ def test_network_access_can_be_ticked_once_a_password_exists(client, monkeypatch
     monkeypatch.setenv("TOW_MASTER_KEY", base64.urlsafe_b64encode(b"ui-audit-test-master-key-32bytes").decode())
     monkeypatch.delenv("TOW_MASTER_KEY_FILE", raising=False)
     password = "correct-horse-battery"
-    client.post("/settings/password", data={"lan_password": password, "lan_password2": password})
+    client.post("/settings/password", data={"lan_password": password})
 
     card = _network_card(client.get("/settings").text)
 
-    assert "Сначала задайте пароль выше" not in card
     box = re.search(r'<input id="allow-lan"[^>]*>', card)
     assert box is not None
     assert " disabled" not in box.group(0)
+    assert "data-auto-submit-control" in box.group(0)  # with a password the box saves alone
 
 
 # --- M5: undo of a delete keeps the order ---------------------------------------------------

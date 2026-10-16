@@ -2,7 +2,8 @@
 {% from "_icons.html" import icon %}
 {% from "_issue_notes.html" import issue_notes_at %}
 {% from "_note.html" import note %}
-{% from "_secret.html" import reveal, saved_hint %}
+{% from "_secret.html" import reveal, saved_hint, keep_note %}
+{% from "_file.html" import file_input %}
 {% block body %}
 {% set hh = header_health() %}
 <div class="settings-page settings-page-compact">
@@ -66,10 +67,10 @@
               <input type="hidden" name="kind" value="{{ c.kind }}">
               <fieldset>
                 <legend class="sr-only">{{ t('settings.common.connection_legend', name=c.title) }}</legend>
-                <div class="field-row keep">
+                <div class="field-row">
                   <div class="field">
                     <label for="q_host-{{ c.form_id }}">{{ c.labels.host }}</label>
-                    <input id="q_host-{{ c.form_id }}" name="host" value="{{ c.host }}" class="w-l" autocomplete="off" placeholder="127.0.0.1">
+                    <input id="q_host-{{ c.form_id }}" name="host" value="{{ c.host }}" class="w-m" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{ t('settings.common.example', value='127.0.0.1') }}">
                   </div>
                   <div class="field">
                     <label for="q_port-{{ c.form_id }}">{{ c.labels.port }}</label>
@@ -87,11 +88,11 @@
                     {#- The client's own sign-in: its user name and password for this card's section
                         (never TOW's own password, never a "new" one to generate). "Saved" only
                         when a password is saved: there is nothing to keep otherwise. #}
-                    <label for="q_pass-{{ c.form_id }}">{{ c.labels.password }}</label>
-                    <span class="secret"><input id="q_pass-{{ c.form_id }}" name="password" type="password" class="w-m" autocomplete="section-{{ c.form_id }} current-password"{% if c.pass_set %} aria-describedby="q_pass-{{ c.form_id }}-saved"{% endif %}>{{ reveal('q_pass-' ~ c.form_id, c.labels.password) }}</span>
-                    {% if c.pass_set %}{{ saved_hint('q_pass-' ~ c.form_id ~ '-saved') }}{% endif %}
+                    <label for="q_pass-{{ c.form_id }}">{{ c.labels.password }}{% if c.pass_set %}{{ saved_hint('q_pass-' ~ c.form_id ~ '-saved', tag=true) }}{% endif %}</label>
+                    <span class="secret"><input id="q_pass-{{ c.form_id }}" name="password" type="password" class="w-m" autocomplete="section-{{ c.form_id }} current-password"{% if c.pass_set %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="q_pass-{{ c.form_id }}-saved client-keep-{{ c.form_id }}"{% endif %}>{{ reveal('q_pass-' ~ c.form_id, c.labels.password) }}</span>
                   </div>
                 </div>
+                {% if c.pass_set %}{{ keep_note('client-keep-' ~ c.form_id) }}{% endif %}
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">{{ t('settings.common.save') }}</button>
@@ -111,7 +112,7 @@
             <form id="default-{{ c.form_id }}" method="post" action="/settings/client/default" data-return-target="client-{{ c.id }}">
               <input type="hidden" name="client_id" value="{{ c.id }}">
             </form>
-            <form id="remove-{{ c.form_id }}" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="{{ t('settings.clients.remove_confirm', title=c.title) }}">
+            <form id="remove-{{ c.form_id }}" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="{{ t('settings.clients.remove_confirm', title=c.title) }}" data-confirm-label="{{ t('settings.common.remove') }}" data-confirm-danger>
               <input type="hidden" name="client_id" value="{{ c.id }}">
             </form>
             {% endif %}
@@ -127,17 +128,22 @@
           <div class="settings-empty">{{ t('settings.clients.empty') }}</div>
           {% endfor %}
         </div>
-        <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
-          <div class="field">
-            <label for="client-add-kind">{{ t('settings.clients.add_label') }}</label>
-            <div class="client-add-row">
-              <select id="client-add-kind" name="kind" class="w-m">
-                {% for t in client_types %}<option value="{{ t.kind }}">{{ t.title }}</option>{% endfor %}
-              </select>
-              <button type="submit">{{ t('settings.clients.add') }}</button>
+        {#- CL1: folded to one line - also while the first client has no address yet (another type
+            may be what the owner needs); open while there is none at all. -#}
+        <details class="technical-details client-add-toggle"{% if not clients %} open{% endif %}>
+          <summary>{{ t('settings.clients.add_open') }}</summary>
+          <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
+            <div class="field">
+              <label for="client-add-kind">{{ t('settings.clients.add_label') }}</label>
+              <div class="client-add-row">
+                <select id="client-add-kind" name="kind" class="w-m">
+                  {% for t in client_types %}<option value="{{ t.kind }}">{{ t.title }}</option>{% endfor %}
+                </select>
+                <button type="submit">{{ t('settings.clients.add') }}</button>
+              </div>
             </div>
-          </div>
-        </form>
+          </form>
+        </details>
       </div>
     </details>
 
@@ -151,7 +157,6 @@
         <span class="pill {{ 'bad' if failing else ('ok' if connected and connected | selectattr('ok') | list | length == connected | length else 'mut') }}">{% if failing %}{{ t('settings.notify.pill_down', names=failing | map(attribute='name') | join(', ')) }}{% elif connected %}{{ connected | map(attribute='name') | join(', ') }}{% else %}{{ t('settings.notify.pill_none') }}{% endif %}</span>
       </summary>
       <div class="settings-panel">
-        <p class="support-note">{{ t('settings.notify.intro') }}</p>
         <div class="integration-list cards-2">
           {% for n in notifiers %}
           <details class="integration-card notifier-card" id="notifier-{{ n.kind }}"{% if n.connected or open_card == n.kind or spot == 'notifier-' ~ n.kind %} open{% endif %}>
@@ -186,35 +191,37 @@
             <form id="notifier-form-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
                 <legend class="sr-only">{{ t('settings.common.connection_legend', name=n.title) }}</legend>
+                {% set keep_id = 'notifier-keep-' ~ n.kind %}
                 <div class="field-row">
                 {% for f in n.fields %}
                 <div class="field">
                   {% set field_id = 'nf-' ~ n.kind ~ '-' ~ f.name %}
-                  <label for="{{ field_id }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %}</label>
+                  {#- PH1: a format is an example ("e.g. …"), never read as a saved value. -#}
+                  {% set example = t('settings.common.example', value=f.placeholder) if f.placeholder else '' %}
+                  <label for="{{ field_id }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %}{% if f.kind == 'secret' and f.saved %}{{ saved_hint(field_id ~ '-saved', tag=true) }}{% endif %}</label>
                   {% if f.kind == 'secret' %}
                   {#- A token, a webhook or a key: not a password to remember or to generate. #}
-                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.suggestion }}"{% if f.saved %} aria-describedby="{{ field_id }}-saved"{% else %} placeholder="{{ f.placeholder }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off">{{ reveal(field_id, f.label) }}</span>
-                  {% if f.saved %}{{ saved_hint(field_id ~ '-saved') }}{% endif %}
+                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.suggestion }}"{% if f.saved %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="{{ field_id }}-saved {{ keep_id }}"{% elif example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">{{ reveal(field_id, f.label) }}</span>
                   {% else %}
-                  <input id="{{ field_id }}" name="{{ f.name }}"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.value or f.suggestion }}" placeholder="{{ f.placeholder }}" autocomplete="off" spellcheck="false" autocapitalize="off">
+                  <input id="{{ field_id }}" name="{{ f.name }}"{% if f.width %} class="w-{{ f.width }}"{% endif %} value="{{ f.value or f.suggestion }}"{% if example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
                   {% endif %}
                 </div>
                 {% endfor %}
                 </div>
+                {% if n.fields | selectattr('saved') | list %}{{ keep_note(keep_id) }}{% endif %}
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">{{ t('settings.common.save') }}</button>
                 {% if n.connected %}
-                <button class="ghost" type="submit" form="notifier-test-{{ n.kind }}" data-keep data-check-saved data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
+                <button class="ghost" type="submit" form="notifier-test-{{ n.kind }}" data-keep data-check-saved data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.notify.send_test') }}</button>
                 <button class="ghost danger" type="submit" form="notifier-remove-{{ n.kind }}">{{ t('settings.notify.disconnect') }}</button>
                 {% endif %}
               </div>
-              {% if n.connected %}<p class="action-hint">{{ t('settings.notify.check_hint_connected') }}</p>{% endif %}
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved_save_first') }}</p>
             </form>
             {% if n.connected %}
             <form id="notifier-test-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/test" data-return-target="acc-bots"></form>
-            <form id="notifier-remove-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/remove" data-return-target="acc-bots" data-confirm="{{ t('settings.notify.remove_confirm', name=n.title) }}"></form>
+            <form id="notifier-remove-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}/remove" data-return-target="acc-bots" data-confirm="{{ t('settings.notify.remove_confirm', name=n.title) }}" data-confirm-label="{{ t('settings.notify.disconnect') }}" data-confirm-danger></form>
             {% endif %}
           </details>
           {% endfor %}
@@ -252,87 +259,88 @@
         <span class="pill {{ 'mut' if not allow_lan else ('ok' if lan_password_set else 'warn') }}">{% if not allow_lan %}{{ t('settings.access.pill_local') }}{% elif lan_password_set %}{{ t('settings.access.pill_password') }}{% else %}{{ t('settings.access.pill_no_password') }}{% endif %}</span>
       </summary>
       <div class="settings-panel">
-        <p class="action-hint">{{ t('settings.access.intro') }}</p>
         {% if allow_lan and not lan_password_set %}
         {{ note(tm('settings.access.no_password')) }}
         {% endif %}
-        <div class="integration-list">
-          {% if access_local or lan_password_set %}
-          <article class="integration-card access-card" id="password-card">
-            <div class="integration-head">
-              <h2>{{ t('settings.access.password_title') }}</h2>
-              <span class="integration-pills"><span class="pill {{ 'warn' if allow_lan and not lan_password_set else 'mut' }}">{{ t('settings.access.password_set') if lan_password_set else t('settings.access.password_unset') }}</span></span>
+        {#- F1 (1.32.1): one card, no headings of its own (the section names it). The box first; with
+            a password set it saves alone and the password is one folded line, "Password set ·
+            Change". Without one, ticking the box shows the password and its reminder, and "Save and
+            enable" saves the three together - the box alone opens nothing. -#}
+        <div class="integration-card access-card" id="access-card">
+          {% if not access_local %}
+          {{ note(t('settings.access.local_only')) }}
+          {% elif lan_password_set or allow_lan %}
+          <form method="post" action="/settings/access" class="compact-form immediate-form" data-return-target="acc-access" data-auto-submit>
+            <div class="check-field">
+              <input id="allow-lan" name="allow_lan" value="1" type="checkbox"{% if allow_lan %} checked{% endif %} aria-describedby="allow-lan-hint" data-auto-submit-control>
+              <label for="allow-lan">{{ t('settings.access.allow') }}</label>
+              <p id="allow-lan-hint" data-auto-submit-status>{{ t('settings.access.allow_hint') }}</p>
             </div>
+            <noscript><button type="submit">{{ t('settings.common.save') }}</button></noscript>
+          </form>
+          {% else %}
+          {#- The password fields count only with the box ticked (data-enabled-by: disabled, so neither
+              sent nor checked, while it is clear); setup-form hides them then, as on the first start. -#}
+          <form method="post" action="/settings/access" class="settings-form form-grid setup-form" data-return-target="acc-access">
+            <div class="check-field">
+              <input id="allow-lan" name="allow_lan" value="1" type="checkbox" aria-describedby="allow-lan-hint">
+              <label for="allow-lan">{{ t('settings.access.allow') }}</label>
+              <p id="allow-lan-hint">{{ t('settings.access.allow_hint') }}</p>
+            </div>
+            <div class="form-grid lan-password" data-enabled-by="allow-lan">
+              <div class="field-row">
+                <div class="field">
+                  <label for="lan-password">{{ t('settings.access.password') }}</label>
+                  <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" required aria-describedby="lan-password-hint">{{ reveal('lan-password', t('settings.access.password')) }}</span>
+                </div>
+                <div class="field">
+                  <label for="lan-hint">{{ t('settings.access.hint_label') }}</label>
+                  <input id="lan-hint" name="hint" type="text" class="w-m" maxlength="{{ hint_max }}" autocomplete="off" aria-describedby="lan-hint-help">
+                </div>
+              </div>
+              <p class="field-hint"><span id="lan-password-hint">{{ t('settings.access.password_hint') }}</span> <span id="lan-hint-help">{{ t('settings.access.hint_help') }}</span></p>
+              <div class="settings-actions"><button type="submit">{{ t('settings.access.save_enable') }}</button></div>
+            </div>
+          </form>
+          {% endif %}
+          {% if lan_password_set or (access_local and allow_lan) %}
+          {#- Folded at rest; open after a refused change (?card=password) and while none is set. -#}
+          <details class="technical-details access-password" id="password-change"{% if open_card == 'password' or not lan_password_set %} open{% endif %}>
+            <summary>{% if lan_password_set %}{{ t('settings.access.password_set') }} · {{ t('settings.access.change') }}{% else %}{{ t('settings.access.password_unset') }} · {{ t('settings.access.set') }}{% endif %}</summary>
             <form method="post" action="/settings/password" class="settings-form form-grid" data-return-target="acc-access">
               <fieldset>
                 <legend class="sr-only">{{ t('settings.access.password_title') }}</legend>
+                {#- The current password only from another device (§2): this computer resets a
+                    forgotten one without it. -#}
                 {% if not access_local %}
                 <div class="field">
                   <label for="current-password">{{ t('settings.access.current_password') }}</label>
                   <span class="secret"><input id="current-password" name="current_password" type="password" class="w-m" autocomplete="current-password" required>{{ reveal('current-password', t('settings.access.current_password')) }}</span>
                 </div>
-                {% elif lan_password_set %}
-                <div class="field">
-                  <label for="current-password">{{ t('settings.access.current_password') }}</label>
-                  <span class="secret"><input id="current-password" name="current_password" type="password" class="w-m" autocomplete="current-password" aria-describedby="current-password-hint">{{ reveal('current-password', t('settings.access.current_password')) }}</span>
-                  <p class="field-hint" id="current-password-hint">{{ t('settings.access.current_password_local') }}</p>
-                </div>
                 {% endif %}
                 <div class="field-row">
-                <div class="field">
-                  {% set new_label = t('settings.access.new_password') %}
-                  <label for="lan-password">{{ new_label }}</label>
-                  <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" aria-describedby="{% if lan_password_set %}lan-password-saved {% endif %}lan-password-hint">{{ reveal('lan-password', new_label) }}</span>
-                  {% if lan_password_set %}{{ saved_hint('lan-password-saved') }}{% endif %}
-                  <p class="field-hint" id="lan-password-hint">{{ t('settings.access.password_hint') }}</p>
+                  <div class="field">
+                    {% set new_label = t('settings.access.new_password') %}
+                    <label for="lan-password">{{ new_label }}</label>
+                    <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" aria-describedby="lan-password-hint">{{ reveal('lan-password', new_label) }}</span>
+                  </div>
+                  <div class="field">
+                    <label for="lan-hint">{{ t('settings.access.hint_label') }}</label>
+                    <input id="lan-hint" name="hint" type="text" class="w-m" maxlength="{{ hint_max }}" value="{{ lan_hint }}" autocomplete="off" aria-describedby="lan-hint-help">
+                  </div>
                 </div>
-                <div class="field">
-                  <label for="lan-password2">{{ t('settings.access.repeat_password') }}</label>
-                  <span class="secret"><input id="lan-password2" name="lan_password2" type="password" class="w-m" autocomplete="new-password" minlength="8">{{ reveal('lan-password2', t('settings.access.repeat_password')) }}</span>
-                </div>
-                </div>
-                <div class="field">
-                  <label for="lan-hint">{{ t('settings.access.hint_label') }}</label>
-                  <input id="lan-hint" name="hint" type="text" class="w-l" maxlength="{{ hint_max }}" value="{{ lan_hint }}" autocomplete="off" aria-describedby="lan-hint-help">
-                  <p class="field-hint" id="lan-hint-help">{{ t('settings.access.hint_help') }}</p>
-                </div>
+                <p class="field-hint"><span id="lan-password-hint">{{ t('settings.access.password_hint') }}</span> <span id="lan-hint-help">{{ t('settings.access.hint_help') }}</span></p>
               </fieldset>
               <p class="action-hint">{{ t('settings.access.reset_here') if access_local else t('settings.access.reset_elsewhere') }}</p>
-              <div class="settings-actions"><button type="submit">{{ t('settings.access.save_password') }}</button></div>
+              <div class="settings-actions">
+                <button type="submit">{{ t('settings.access.save_password') }}</button>
+                {% if lan_password_set %}<button type="submit" class="ghost" form="sign-out-everywhere" title="{{ t('settings.access.sign_out_hint') }}">{{ t('settings.access.sign_out_all') }}</button>{% endif %}
+              </div>
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
             </form>
-            {% if lan_password_set %}
-            <form method="post" action="/settings/sessions/sign-out" class="settings-form compact-form" data-return-target="acc-access">
-              <p class="action-hint">{{ t('settings.access.sign_out_hint') }}</p>
-              <div class="settings-actions"><button type="submit" class="ghost">{{ t('settings.access.sign_out_all') }}</button></div>
-            </form>
-            {% endif %}
-          </article>
+            {% if lan_password_set %}<form id="sign-out-everywhere" method="post" action="/settings/sessions/sign-out" data-return-target="acc-access"></form>{% endif %}
+          </details>
           {% endif %}
-          <article class="integration-card access-card" id="network-card">
-            <div class="integration-head">
-              <h2>{{ t('settings.access.legend') }}</h2>
-            </div>
-            {% if access_local %}
-            <form method="post" action="/settings/access" class="settings-form form-grid" data-return-target="acc-access">
-              <fieldset>
-                <legend class="sr-only">{{ t('settings.access.legend') }}</legend>
-                {# L7: without a password the network cannot be opened (the server refuses it too). #}
-                {% set lan_locked = not lan_password_set and not allow_lan %}
-                <div class="check-field">
-                  <input id="allow-lan" name="allow_lan" value="1" type="checkbox"{% if allow_lan %} checked{% endif %}{% if lan_locked %} disabled{% endif %} aria-describedby="allow-lan-hint{% if lan_locked %} allow-lan-locked{% endif %}">
-                  <label for="allow-lan">{{ t('settings.access.allow') }}</label>
-                  <p id="allow-lan-hint">{{ t('settings.access.allow_hint') }}</p>
-                  {% if lan_locked %}<p id="allow-lan-locked" class="locked-hint">{{ t('settings.access.need_password_first') }}</p>{% endif %}
-                </div>
-              </fieldset>
-              <div class="settings-actions"><button type="submit"{% if lan_locked %} disabled{% endif %}>{{ t('settings.common.save') }}</button></div>
-              <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
-            </form>
-            {% else %}
-            {{ note(t('settings.access.local_only')) }}
-            {% endif %}
-          </article>
         </div>
       </div>
     </details>
@@ -351,12 +359,14 @@
           <input type="hidden" name="kind" value="{{ f.kind }}">
           <div class="field">
             <label for="backup-path-{{ f.kind }}" class="sr-only">{{ t('settings.backups.folder', title=f.title) }}</label>
-            <input id="backup-path-{{ f.kind }}" name="path" value="{{ f.value }}" class="w-xl" placeholder="{{ f.default_path }}" autocomplete="off" spellcheck="false">
-            {% set shown_path = f.value and f.path != f.value %}
-            {% if shown_path or f.free or hint %}<p class="field-hint">{% if shown_path %}{{ t('settings.backups.now', path=f.path) }}{% endif %}{% if shown_path and f.free %} · {% endif %}{% if f.free %}{{ t('settings.backups.free', free=f.free) }}{% endif %}{% if hint %}{% if shown_path or f.free %} · {% endif %}{{ hint }}{% endif %}</p>{% endif %}
+            <input id="backup-path-{{ f.kind }}" name="path" value="{{ f.value }}" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-{{ f.kind }}-where{% if hint %} backup-path-{{ f.kind }}-hint{% endif %}">
+            {#- Where the copies go, always: an empty field is the default folder, not "no copies". -#}
+            {% set where = t('settings.backups.default_path', path=f.default_path) if not f.value else (t('settings.backups.now', path=f.path) if f.path != f.value else '') %}
+            <p class="field-hint" id="backup-path-{{ f.kind }}-where">{{ where }}{% if where and f.free %} · {% endif %}{% if f.free %}{{ t('settings.backups.free', free=f.free) }}{% endif %}</p>
+            {% if hint %}<p class="field-hint" id="backup-path-{{ f.kind }}-hint">{{ hint }}</p>{% endif %}
           </div>
           <div class="settings-actions">
-            <button type="submit" name="action" value="save">{{ t('settings.common.save') }}</button>
+            <button class="ghost" type="submit" name="action" value="save">{{ t('settings.common.save') }}</button>
             <button class="ghost" type="submit" name="action" value="check" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
             {% if not f.is_default %}<button class="ghost" type="submit" name="action" value="default">{{ t('settings.backups.use_default') }}</button>{% endif %}
           </div>
@@ -378,7 +388,7 @@
               <label class="check-field" for="backup-automatic">
                 <input id="backup-automatic" type="checkbox" name="enabled" value="1"{% if backups.automatic %} checked{% endif %} aria-describedby="backup-automatic-hint" data-auto-submit-control>
                 <span>{{ t('settings.backups.automatic') }}</span>
-                <p id="backup-automatic-hint" data-auto-submit-status>{{ t('settings.backups.automatic_hint') }}</p>
+                <p id="backup-automatic-hint" data-auto-submit-status></p>
               </label>
               <noscript><button type="submit">{{ t('settings.common.save') }}</button></noscript>
             </form>
@@ -387,7 +397,7 @@
                 <label for="backup-days">{{ t('settings.backups.retention_days_label') }}</label>
                 <div class="inline-save">
                   <input id="backup-days" type="number" name="days" value="{{ backups.retention.days }}" class="w-xs" min="1" max="3650" required aria-describedby="backup-days-hint">
-                  <button type="submit">{{ t('settings.common.save') }}</button>
+                  <button class="ghost" type="submit">{{ t('settings.common.save') }}</button>
                 </div>
                 <p class="field-hint" id="backup-days-hint">{{ t('settings.backups.retention_note') }}{% if backups.retention.mode == 'count' %} {{ t('settings.backups.retention_legacy', count=backups.retention.keep) }}{% endif %}</p>
               </div>
@@ -403,9 +413,9 @@
                   <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/check" data-return-target="acc-transfer">
                     <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
                   </form>
-                  <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }} {{ t('settings.backups.night_restore_access') }}">
+                  <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }} {{ t('settings.backups.night_restore_access') }}" data-confirm-label="{{ t('settings.common.restore') }}" data-confirm-danger>
                     {#- The newest copy: what "Needs attention" offers when the data folder was lost. -#}
-                    <button class="danger" type="submit" data-busy-label="{{ t('common.busy.restoring') }}"{% if loop.first %}{{ fix_attrs('restore_night') }}{% endif %}>{{ t('settings.common.restore') }}</button>
+                    <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.restoring') }}"{% if loop.first %}{{ fix_attrs('restore_night') }}{% endif %}>{{ t('settings.common.restore') }}</button>
                   </form>
                   <a class="btn ghost danger" href="/settings/backup/night/{{ snap.name|urlencode }}/delete">{{ t('settings.common.delete') }}</a>
                 </div>
@@ -443,8 +453,8 @@
                   <form method="post" action="/settings/restore-points/{{ point.id }}/check" data-return-target="acc-transfer">
                     <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.checking') }}"{% if not point.bytes %} disabled{% endif %}>{{ t('settings.common.check') }}</button>
                   </form>
-                  <form method="post" action="/settings/restore-points/{{ point.id }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.manual_restore_confirm') }}">
-                    <button class="danger" type="submit" data-busy-label="{{ t('common.busy.restoring') }}"{% if not point.bytes %} disabled{% endif %}>{{ t('settings.common.restore') }}</button>
+                  <form method="post" action="/settings/restore-points/{{ point.id }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.manual_restore_confirm') }} {{ t('settings.backups.night_restore_access') }}" data-confirm-label="{{ t('settings.common.restore') }}" data-confirm-danger>
+                    <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.restoring') }}"{% if not point.bytes %} disabled{% endif %}>{{ t('settings.common.restore') }}</button>
                   </form>
                   <a class="btn ghost danger" href="/settings/restore-points/{{ point.id }}/delete">{{ t('settings.common.delete') }}</a>
                 </div>
@@ -468,10 +478,10 @@
             </form>
             <form method="post" action="/settings/portable/import" enctype="multipart/form-data" data-return-target="acc-transfer" class="portable-import-form">
               <label for="portable-backup-file">{{ t('settings.backups.file_choose') }} <code>.towx</code></label>
-              <input id="portable-backup-file" name="backup_file" type="file" class="w-l" accept=".towx,application/octet-stream" required>
+              {{ file_input('portable-backup-file', 'backup_file', accept='.towx,application/octet-stream', required=true) }}
               <div class="settings-actions">
-                <button class="ghost" type="submit" name="operation" value="check" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
-                <button class="danger" type="submit" name="operation" value="restore" data-confirm="{{ t('settings.backups.file_restore_confirm') }}" data-busy-label="{{ t('common.busy.restoring') }}">{{ t('settings.common.restore') }}</button>
+                <button class="ghost" type="submit" name="operation" value="check" data-busy-label="{{ t('common.busy.checking') }}" data-needs-file>{{ t('settings.common.check') }}</button>
+                <button class="ghost" type="submit" name="operation" value="restore" data-confirm="{{ t('settings.backups.file_restore_confirm') }} {{ t('settings.backups.night_restore_access') }}" data-confirm-label="{{ t('settings.common.restore') }}" data-confirm-danger data-busy-label="{{ t('common.busy.restoring') }}" data-needs-file>{{ t('settings.common.restore') }}</button>
               </div>
             </form>
             <p class="section-note">{{ tm('settings.backups.file_note', more='/settings/help#export-import') }}</p>
@@ -514,7 +524,7 @@
             <p class="action-hint">{{ t('releases.rollback_policy') }}</p>
             <div class="field">
               <label for="rollback-version">{{ t('releases.target_label') }}</label>
-              <input id="rollback-version" class="w-s" data-update-version inputmode="text" placeholder="1.22.21" maxlength="32" autocomplete="off">
+              <input id="rollback-version" class="w-s" data-update-version inputmode="text" placeholder="{{ t('settings.common.example', value='1.22.21') }}" maxlength="32" autocomplete="off">
             </div>
             <div class="settings-actions"><button type="button" class="ghost" data-update-apply>{{ t('releases.apply_version') }}</button><button type="button" class="ghost" data-update-previous hidden></button></div>
           </details>
@@ -565,7 +575,7 @@
         </form>
         {% endif %}
         <div class="service-restart">
-          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="{{ t('settings.service.restart_confirm') }}">
+          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="{{ t('settings.service.restart_confirm') }}" data-confirm-label="{{ t('settings.service.restart') }}">
             <button type="submit"{{ fix_attrs('restart_service') }}>{{ t('settings.service.restart') }}</button>
           </form>
         </div>
@@ -606,21 +616,20 @@
         </span>
       </summary>
       <div class="settings-panel appearance">
-        <form method="post" action="/settings/language" class="settings-form" data-return-target="acc-language">
-          <div class="field">
-            <label for="language-choice">{{ t('settings.language.choose') }}</label>
-            <div class="inline-save">
-              <select id="language-choice" name="language" class="w-l" aria-describedby="language-note">
-                <option value="auto"{% if language_setting.auto %} selected{% endif %}>{{ t('settings.language.auto', name=language_setting.current_name) }}</option>
-                {% for l in languages() %}<option value="{{ l.code }}"{% if not language_setting.auto and language_setting.chosen == l.code %} selected{% endif %}>{{ l.native }}{% if l.native != l.name %} — {{ l.name }}{% endif %}</option>{% endfor %}
-              </select>
-              <button type="submit">{{ t('common.save') }}</button>
+        <form method="post" action="/settings/language" class="settings-form language-form" data-return-target="acc-language">
+          <fieldset class="theme-field" aria-describedby="language-note">
+            <legend>{{ t('settings.language.choose') }}</legend>
+            <div class="settings-actions language-choice">
+              {%- set chosen = 'auto' if language_setting.auto else language_setting.chosen %}
+              {%- macro choice(value, label) %}<button type="submit" name="language" value="{{ value }}"{% if value != chosen %} class="ghost"{% endif %} aria-pressed="{{ 'true' if value == chosen else 'false' }}"{% if value == chosen and open_section == 'language' %} autofocus{% endif %}>{{ label }}</button>{% endmacro %}
+              {{ choice('auto', t('settings.language.auto', name=language_setting.current_name)) }}
+              {% for l in languages() %}{{ choice(l.code, l.native) }}{% endfor %}
             </div>
-            <p id="language-note" class="field-hint">{% if language_setting.auto %}{{ t('settings.language.messages_note_auto') }}{% else %}{{ t('settings.language.messages_note') }}{% endif %}</p>
-          </div>
+          </fieldset>
+          <p id="language-note" class="field-hint">{% if language_setting.auto %}{{ t('settings.language.messages_note_auto') }}{% else %}{{ t('settings.language.messages_note') }}{% endif %}</p>
         </form>
         <form method="post" action="/settings/theme" class="theme-form" id="acc-theme" data-return-target="acc-theme" data-theme-form>
-          <fieldset class="theme-field" aria-describedby="theme-hint">
+          <fieldset class="theme-field">
             <legend>{{ t('settings.theme.title') }}</legend>
             <div class="theme-choice">
               {% for value, picture, label in themes %}
@@ -631,7 +640,6 @@
               {% endfor %}
             </div>
           </fieldset>
-          <p id="theme-hint" class="field-hint">{{ t('settings.theme.hint') }}</p>
           {#- app.js saves a choice in the background and says so as a message (A6); without scripts, Save. #}
           <noscript><div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div></noscript>
         </form>

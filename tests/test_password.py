@@ -2,6 +2,7 @@
 
 import os
 import re
+import socket
 import sys
 
 import pytest
@@ -56,7 +57,7 @@ def test_first_start_offers_the_password_and_this_pc_sets_it():
     assert first.headers["location"] == "/setup"
     page = local.get("/setup").text
     assert "Добро пожаловать в TOW" in page
-    assert 'name="lan_password2"' in page
+    assert 'name="lan_password2"' not in page  # 1.32.1: one field and its eye
     assert 'name="hint"' in page
     # 1.32: one "Start" - with the box clear and no password it does what "Later" did.
     assert 'name="action" value="save"' in page
@@ -159,7 +160,10 @@ def test_the_reminder_never_reveals_the_password():
             data={"current_password": current, "hint": "battery horse, old"},
             follow_redirects=False,
         )
-        expected = "подсказка не должна содержать пароль" if current else "введите текущий пароль"
+        # On this computer a new reminder comes with a new password; an older page's current one still counts.
+        expected = (
+            "подсказка не должна содержать пароль" if current else "чтобы изменить подсказку, задайте и новый пароль"
+        )
         assert expected in _flash(only_hint)
         assert password_hint(load_secrets()["lan_auth"]) == ""
     wrong = local.post(
@@ -194,7 +198,8 @@ def test_only_the_reminder_changes_and_sessions_stay():
     session = issue_session(lan_password_session_key(old))
 
     local = TestClient(app, headers=ORIGIN)
-    assert 'name="current_password"' in local.get("/settings").text  # optional here: for the reminder alone
+    assert 'name="current_password"' not in local.get("/settings").text  # 1.32.1: never asked on this PC
+    # An older page still sends it to change the reminder alone: compared, then the reminder is kept.
     local.post("/settings/password", data={"current_password": "old-horse-battery", "hint": "new reminder"})
 
     record = load_secrets()["lan_auth"]
@@ -254,7 +259,9 @@ def test_sign_in_page_shows_the_reminder_and_how_to_reset():
     assert "Забыли пароль?" in page
     assert "<b>лошадь</b>" in page
     assert "старый там не нужен" in page
-    assert "http://127.0.0.1:8787" in page
+    # AU2: before sign-in nothing names the computer or its local address.
+    assert "http://127.0.0.1:8787" not in page
+    assert socket.gethostname() not in page
     assert ("scripts\\tow.cmd password" if sys.platform == "win32" else "scripts/tow password") in page
 
 
@@ -353,3 +360,209 @@ def test_in_a_runtime_install_the_reset_command_names_the_app_folder(monkeypatch
         assert launcher() == "app\\scripts\\tow.cmd"
     with platform.use(PosixBackend("linux")):
         assert launcher() == "app/scripts/tow"
+
+
+# --------------------------------------------------------------------------- 1.32.1: one field on the web
+
+
+def test_this_pc_sets_a_new_password_with_one_field_and_no_current_one():
+    old = _with_password("old-horse-battery", hint="old")
+    other_device = issue_session(lan_password_session_key(old))
+    local = TestClient(app, headers=ORIGIN)
+
+    response = local.post(
+        "/settings/password", data={"lan_password": "new-cat-garden", "hint": "кот"}, follow_redirects=False
+    )
+
+    assert "пароль сохранён" in _flash(response)
+    record = load_secrets()["lan_auth"]
+    assert lan_password_matches("new-cat-garden", record)
+    assert password_hint(record) == "кот"
+    assert not session_is_valid(other_device, lan_password_session_key(record))
+
+
+@pytest.mark.parametrize("repeat", ["other-cat-garden", ""])
+def test_an_older_page_that_sends_a_repeat_must_still_match_it(repeat):
+    _with_password("old-horse-battery")
+    local = TestClient(app, headers=ORIGIN)
+
+    response = local.post(
+        "/settings/password",
+        data={"lan_password": "new-cat-garden", "lan_password2": repeat},
+        follow_redirects=False,
+    )
+
+    assert "пароли не совпадают" in _flash(response)
+    assert lan_password_matches("old-horse-battery", load_secrets()["lan_auth"])
+
+
+@pytest.mark.parametrize("repeat", ["other-pass-99", ""])
+def test_first_start_from_an_older_page_still_compares_the_repeat(repeat):
+    _fresh_install()
+    local = TestClient(app, headers=ORIGIN)
+
+    response = local.post("/setup", data={"lan_password": "pony-river-lamp", "lan_password2": repeat, "allow_lan": "1"})
+
+    assert response.status_code == 400
+    assert "пароли не совпадают" in response.text.lower()
+    assert "lan_auth" not in load_secrets()
+
+
+def test_first_start_sets_the_password_with_one_field():
+    _fresh_install()
+    local = TestClient(app, headers=ORIGIN)
+    page = local.get("/setup").text
+    assert 'name="lan_password2"' not in page
+
+    saved = local.post("/setup", data={"lan_password": "pony-river-lamp", "allow_lan": "1"}, follow_redirects=False)
+
+    assert saved.status_code == 303
+    assert lan_password_matches("pony-river-lamp", load_secrets()["lan_auth"])
+    assert load_config()["allow_lan"] is True
+
+
+def test_this_pc_keeps_or_clears_the_reminder_without_a_password():
+    old = _with_password("old-horse-battery", hint="old")
+    session = issue_session(lan_password_session_key(old))
+    local = TestClient(app, headers=ORIGIN)
+
+    kept = local.post("/settings/password", data={"hint": "old"}, follow_redirects=False)
+    assert "без изменений" in _flash(kept).lower()
+
+    cleared = local.post("/settings/password", data={"hint": ""}, follow_redirects=False)
+    assert "подсказка сохранена" in _flash(cleared)
+    record = load_secrets()["lan_auth"]
+    assert password_hint(record) == ""
+    assert lan_password_matches("old-horse-battery", record)
+    assert session_is_valid(session, lan_password_session_key(record))
+
+
+def test_this_pc_changes_the_reminder_only_with_a_new_password():
+    _with_password("old-horse-battery", hint="old")
+    local = TestClient(app, headers=ORIGIN)
+
+    alone = local.post("/settings/password", data={"hint": "a new reminder"}, follow_redirects=False)
+
+    assert "чтобы изменить подсказку, задайте и новый пароль" in _flash(alone)
+    assert password_hint(load_secrets()["lan_auth"]) == "old"
+    with_password = local.post(
+        "/settings/password", data={"lan_password": "new-cat-garden", "hint": "a new reminder"}, follow_redirects=False
+    )
+    assert "пароль сохранён" in _flash(with_password)
+    assert password_hint(load_secrets()["lan_auth"]) == "a new reminder"
+    revealing = local.post(
+        "/settings/password", data={"lan_password": "cat-garden-new", "hint": "garden cat"}, follow_redirects=False
+    )
+    assert "подсказка не должна содержать пароль" in _flash(revealing)  # clean_hint still runs locally
+
+
+def test_another_device_changes_the_password_with_one_field_and_the_current_one():
+    record = _with_password("old-horse-battery")
+    lan = _lan_client(record)
+
+    missing = lan.post("/settings/password", data={"lan_password": "new-cat-garden"}, follow_redirects=False)
+    assert "текущий пароль неверный" in _flash(missing)
+    right = lan.post(
+        "/settings/password",
+        data={"current_password": "old-horse-battery", "lan_password": "new-cat-garden"},
+        follow_redirects=False,
+    )
+
+    new_record = load_secrets()["lan_auth"]
+    assert lan_password_matches("new-cat-garden", new_record)
+    assert session_is_valid(right.cookies.get("tow_session"), lan_password_session_key(new_record))
+
+
+def test_the_command_line_still_asks_for_the_password_twice(monkeypatch):
+    from tow import cli
+
+    prompts = []
+    answers = iter(["cli-pass-word", "cli-pass-word"])
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": prompts.append(prompt) or next(answers))
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+
+    assert cli.main(["password"]) == 0
+    assert len(prompts) == 2
+
+
+# --------------------------------------------------------------------------- 1.32.1: first enable
+
+
+def test_first_enable_saves_the_password_and_opens_the_network_together():
+    local = TestClient(app, headers=ORIGIN)
+
+    response = local.post(
+        "/settings/access",
+        data={"allow_lan": "1", "lan_password": "pony-river-lamp", "hint": "пони"},
+        follow_redirects=False,
+    )
+
+    assert "пароль сохранён, доступ включён" in _flash(response)
+    record = load_secrets()["lan_auth"]
+    assert lan_password_matches("pony-river-lamp", record)
+    assert password_hint(record) == "пони"
+    cfg = load_config()
+    assert (cfg["allow_lan"], cfg["bind"], cfg["setup_done"]) == (True, "0.0.0.0", True)
+
+    local.post("/undo")  # one Undo takes both back
+
+    assert "lan_auth" not in load_secrets()
+    cfg = load_config()
+    assert (cfg["allow_lan"], cfg["bind"]) == (False, "127.0.0.1")
+
+
+@pytest.mark.parametrize(
+    ("data", "said"),
+    [
+        ({"allow_lan": "1"}, "сначала задайте пароль"),
+        ({"allow_lan": "1", "lan_password": "short"}, "не короче 8"),
+        ({"allow_lan": "1", "lan_password": "pony-river-lamp", "hint": "river lamp"}, "не должна содержать пароль"),
+        ({"allow_lan": "1", "lan_password": "pony-river-lamp", "lan_password2": ""}, "пароли не совпадают"),
+    ],
+)
+def test_a_refused_first_enable_opens_nothing(data, said):
+    local = TestClient(app, headers=ORIGIN)
+
+    response = local.post("/settings/access", data=data, follow_redirects=False)
+
+    assert said in _flash(response)
+    assert "lan_auth" not in load_secrets()
+    assert not load_config().get("allow_lan")
+
+
+def test_a_first_enable_that_cannot_be_saved_leaves_the_network_closed(monkeypatch):
+    def disk_full(_state):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("tow.store.save_state", disk_full)
+    local = TestClient(app, headers=ORIGIN)
+
+    local.post("/settings/access", data={"allow_lan": "1", "lan_password": "pony-river-lamp"}, follow_redirects=False)
+
+    assert "lan_auth" not in load_secrets()
+    cfg = load_config()
+    assert (bool(cfg.get("allow_lan")), cfg.get("bind", "127.0.0.1")) == (False, "127.0.0.1")
+
+
+def test_a_stale_first_enable_form_never_replaces_a_password():
+    _with_password("old-horse-battery", allow_lan=False)
+    local = TestClient(app, headers=ORIGIN)
+
+    response = local.post(
+        "/settings/access", data={"allow_lan": "1", "lan_password": "other-pass-99"}, follow_redirects=False
+    )
+
+    assert "пароль уже задан" in _flash(response)
+    assert lan_password_matches("old-horse-battery", load_secrets()["lan_auth"])
+    assert load_config()["allow_lan"] is False
+
+
+def test_with_a_password_set_the_network_box_saves_alone():
+    _with_password("old-horse-battery", allow_lan=False)
+    local = TestClient(app, headers=ORIGIN)
+
+    local.post("/settings/access", data={"allow_lan": "1"}, follow_redirects=False)
+    assert load_config()["allow_lan"] is True
+    local.post("/settings/access", data={}, follow_redirects=False)  # the box cleared sends nothing
+    assert load_config()["allow_lan"] is False
+    assert lan_password_matches("old-horse-battery", load_secrets()["lan_auth"])

@@ -60,6 +60,15 @@ def flash_ttl_sec() -> int:
     return flash_ttl(n)
 
 
+async def repeated_password(request: Request) -> str | None:
+    """The second password field of an older page, or None when the form has none (1.32.1 asks
+    once). FastAPI reads an empty optional field as missing, and an empty repeat beside a typed
+    password must still be refused as different."""
+    form = await request.form()
+    value = form.get("lan_password2")
+    return value if isinstance(value, str) else None
+
+
 def first_run(cfg: dict[str, Any]) -> bool:
     """No password yet and the owner has not put it off: Home opens the first-start page."""
     if as_bool(cfg.get("setup_done")):

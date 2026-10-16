@@ -19,9 +19,12 @@ from tow.web.text import t
 router = APIRouter()
 
 
-def _login_response(request: Request, error: str = "", status_code: int = 200, **response: Any) -> Response:
+def _login_response(
+    request: Request, error: str = "", status_code: int = 200, *, field_error: bool = False, **response: Any
+) -> Response:
     """The sign-in page: what the network signs in with, or why nobody can (a damaged password
-    or unreadable secrets say so; nothing set up at all says where to set the password)."""
+    or unreadable secrets say so; nothing set up at all says where to set the password).
+    ``field_error``: the error is about what was typed (a wrong password), said below the field."""
     enabled = access.network_open(_context.config())
     configured, kind, problem = False, "password", ""
     if enabled:
@@ -39,6 +42,7 @@ def _login_response(request: Request, error: str = "", status_code: int = 200, *
             "credential_kind": kind,
             "problem": problem,
             "error": "" if problem else error,  # the reason is already the page's alert
+            "field_error": field_error,
             # The device's session ended (expired, signed out elsewhere): tow.web.middleware.
             "again": configured and not error and request.query_params.get("again") == "1",
             "version": __version__,
@@ -72,7 +76,7 @@ def login(request: Request, password: str = Form(""), token: str = Form("")) -> 
         valid = credential.matches(password or token)
     if not valid:
         wrong = t("web.login.wrong_password") if credential.kind == "password" else t("web.login.wrong_key")
-        return _login_response(request, wrong, status_code=401)
+        return _login_response(request, wrong, status_code=401, field_error=True)
     services.login_throttle.success(peer)
     response = RedirectResponse("/", status_code=303)
     try:

@@ -53,13 +53,6 @@
   <nav aria-label="Sections">
     <a href="/" class="ico"  title="Home" aria-label="Home"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-home"/></svg></a>
     <a href="/sites" class="ico"  title="Sites" aria-label="Sites"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-globe"/></svg></a>
-    <details class="hdr-search">
-      <summary title="Search" aria-label="Search"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"/></svg></summary>
-      <label class="sr-only" for="q">Search</label>
-      <input id="q" type="search" placeholder="search…" autocomplete="off">
-      <span id="search-status" class="sr-only" aria-live="polite"></span>
-    </details>
-
     <button type="button" class="ico" id="log-open" title="Log" aria-label="Log" aria-haspopup="dialog"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-log"/></svg></button>
     <details class="attention-menu" id="current-problems" data-attention data-fingerprint="" hidden>
       <summary class="ico" data-attention-toggle aria-label="Current problems: 0" title="Current problems: 0"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg><span class="attention-count" data-attention-count aria-hidden="true">0</span></summary>
@@ -91,7 +84,7 @@
 
       <a class="trk trk-ico ok" href="/settings?open=bots" title="Notifications: Telegram ✓" aria-label="Notifications: Telegram ✓"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-bell"/></svg></a>
     </div>
-    <span class="hdr-clock" id="next-check" data-last="0" data-interval="3600" data-check-ok="1" data-error="" data-error-text="" title="Global check timer" hidden><span class="sr-only" data-clock-words>Global check timer </span><span class="clock-v" data-clock-value>—</span></span>
+    <span class="hdr-clock" id="next-check" data-last="0" data-interval="3600" data-check-ok="1" data-error="" data-error-text="" title="Global check timer"><span class="sr-only" data-clock-words>Global check timer </span><span class="clock-v" data-clock-value>—</span></span>
     <div class="hdr-controls">
 
 
@@ -142,10 +135,10 @@
               <input type="hidden" name="kind" value="qbittorrent">
               <fieldset>
                 <legend class="sr-only">Living room connection</legend>
-                <div class="field-row keep">
+                <div class="field-row">
                   <div class="field">
                     <label for="q_host-client-0">Address</label>
-                    <input id="q_host-client-0" name="host" value="192.0.2.10" class="w-l" autocomplete="off" placeholder="127.0.0.1">
+                    <input id="q_host-client-0" name="host" value="192.0.2.10" class="w-m" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="e.g. 127.0.0.1">
                   </div>
                   <div class="field">
                     <label for="q_port-client-0">Port</label>
@@ -160,11 +153,11 @@
                   </div>
 
                   <div class="field">
-                    <label for="q_pass-client-0">Password</label>
-                    <span class="secret"><input id="q_pass-client-0" name="password" type="password" class="w-m" autocomplete="section-client-0 current-password" aria-describedby="q_pass-client-0-saved"><button type="button" class="ico reveal" data-reveal="q_pass-client-0" data-reveal-name="Password" aria-controls="q_pass-client-0" aria-pressed="false" aria-label="Show “Password”" title="Show “Password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
-                    <p class="field-hint" id="q_pass-client-0-saved">Saved · leave empty to keep</p>
+                    <label for="q_pass-client-0">Password <span class="saved-tag" id="q_pass-client-0-saved">saved</span></label>
+                    <span class="secret"><input id="q_pass-client-0" name="password" type="password" class="w-m" autocomplete="section-client-0 current-password" placeholder="Leave empty to keep" aria-describedby="q_pass-client-0-saved client-keep-client-0"><button type="button" class="ico reveal" data-reveal="q_pass-client-0" data-reveal-name="Password" aria-controls="q_pass-client-0" aria-pressed="false" aria-label="Show “Password”" title="Show “Password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
                   </div>
                 </div>
+                <p class="field-hint keep-note" id="client-keep-client-0">Leave passwords and keys empty to keep them.</p>
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
@@ -210,10 +203,10 @@
               <input type="hidden" name="kind" value="transmission">
               <fieldset>
                 <legend class="sr-only">Transmission connection</legend>
-                <div class="field-row keep">
+                <div class="field-row">
                   <div class="field">
                     <label for="q_host-client-1">Address</label>
-                    <input id="q_host-client-1" name="host" value="http://nas.example:9091/transmission" class="w-l" autocomplete="off" placeholder="127.0.0.1">
+                    <input id="q_host-client-1" name="host" value="http://nas.example:9091/transmission" class="w-m" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="e.g. 127.0.0.1">
                   </div>
                   <div class="field">
                     <label for="q_port-client-1">Port</label>
@@ -230,9 +223,9 @@
                   <div class="field">
                     <label for="q_pass-client-1">Password</label>
                     <span class="secret"><input id="q_pass-client-1" name="password" type="password" class="w-m" autocomplete="section-client-1 current-password"><button type="button" class="ico reveal" data-reveal="q_pass-client-1" data-reveal-name="Password" aria-controls="q_pass-client-1" aria-pressed="false" aria-label="Show “Password”" title="Show “Password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
-
                   </div>
                 </div>
+
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
@@ -252,7 +245,7 @@
             <form id="default-client-1" method="post" action="/settings/client/default" data-return-target="client-nas">
               <input type="hidden" name="client_id" value="nas">
             </form>
-            <form id="remove-client-1" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="Remove the client “Transmission” from TOW? The client itself and its torrents stay as they are (you can bring it back with “Undo”).">
+            <form id="remove-client-1" method="post" action="/settings/client/remove" data-return-target="acc-clients" data-confirm="Remove the client “Transmission” from TOW? The client itself and its torrents stay as they are (you can bring it back with “Undo”)." data-confirm-label="Remove" data-confirm-danger>
               <input type="hidden" name="client_id" value="nas">
             </form>
 
@@ -265,18 +258,20 @@
             </details>
           </details>
 
-        </div>
-        <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
-          <div class="field">
-            <label for="client-add-kind">Add a client</label>
-            <div class="client-add-row">
-              <select id="client-add-kind" name="kind" class="w-m">
-                <option value="qbittorrent">qBittorrent</option><option value="transmission">Transmission</option><option value="deluge">Deluge</option>
-              </select>
-              <button type="submit">Add</button>
+        </div><details class="technical-details client-add-toggle">
+          <summary>Add client</summary>
+          <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
+            <div class="field">
+              <label for="client-add-kind">Add a client</label>
+              <div class="client-add-row">
+                <select id="client-add-kind" name="kind" class="w-m">
+                  <option value="qbittorrent">qBittorrent</option><option value="transmission">Transmission</option><option value="deluge">Deluge</option>
+                </select>
+                <button type="submit">Add</button>
+              </div>
             </div>
-          </div>
-        </form>
+          </form>
+        </details>
       </div>
     </details>
 
@@ -287,7 +282,6 @@
         <span class="pill mut">Telegram</span>
       </summary>
       <div class="settings-panel">
-        <p class="support-note">Messages go to every connected messenger; if one is down, they are sent later.</p>
         <div class="integration-list cards-2">
 
           <details class="integration-card notifier-card" id="notifier-telegram" open>
@@ -310,14 +304,14 @@
             <form id="notifier-form-telegram" method="post" action="/settings/notifier/telegram" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
                 <legend class="sr-only">Telegram connection</legend>
+
                 <div class="field-row">
 
                 <div class="field">
 
-                  <label for="nf-telegram-token">Bot token</label>
+                  <label for="nf-telegram-token">Bot token <span class="saved-tag" id="nf-telegram-token-saved">saved</span></label>
 
-                  <span class="secret"><input id="nf-telegram-token" name="token" type="password" class="w-l" value="" aria-describedby="nf-telegram-token-saved" autocomplete="off" spellcheck="false" autocapitalize="off"><button type="button" class="ico reveal" data-reveal="nf-telegram-token" data-reveal-name="Bot token" aria-controls="nf-telegram-token" aria-pressed="false" aria-label="Show “Bot token”" title="Show “Bot token”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
-                  <p class="field-hint" id="nf-telegram-token-saved">Saved · leave empty to keep</p>
+                  <span class="secret"><input id="nf-telegram-token" name="token" type="password" class="w-l" value="" placeholder="Leave empty to keep" aria-describedby="nf-telegram-token-saved notifier-keep-telegram" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"><button type="button" class="ico reveal" data-reveal="nf-telegram-token" data-reveal-name="Bot token" aria-controls="nf-telegram-token" aria-pressed="false" aria-label="Show “Bot token”" title="Show “Bot token”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
 
                 </div>
 
@@ -325,25 +319,25 @@
 
                   <label for="nf-telegram-chat_ids">Recipient IDs</label>
 
-                  <input id="nf-telegram-chat_ids" name="chat_ids" class="w-m" value="1001" placeholder="123456789" autocomplete="off" spellcheck="false" autocapitalize="off">
+                  <input id="nf-telegram-chat_ids" name="chat_ids" class="w-m" value="1001" placeholder="e.g. 123456789" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
 
                 </div>
 
                 </div>
+                <p class="field-hint keep-note" id="notifier-keep-telegram">Leave passwords and keys empty to keep them.</p>
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
 
-                <button class="ghost" type="submit" form="notifier-test-telegram" data-keep data-check-saved data-busy-label="Checking…">Check</button>
+                <button class="ghost" type="submit" form="notifier-test-telegram" data-keep data-check-saved data-busy-label="Checking…">Send a test</button>
                 <button class="ghost danger" type="submit" form="notifier-remove-telegram">Disconnect</button>
 
               </div>
-              <p class="action-hint">“Check” sends a test message.</p>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
 
             <form id="notifier-test-telegram" method="post" action="/settings/notifier/telegram/test" data-return-target="acc-bots"></form>
-            <form id="notifier-remove-telegram" method="post" action="/settings/notifier/telegram/remove" data-return-target="acc-bots" data-confirm="Disconnect Telegram? Its settings will be removed (you can bring them back with “Undo”)."></form>
+            <form id="notifier-remove-telegram" method="post" action="/settings/notifier/telegram/remove" data-return-target="acc-bots" data-confirm="Disconnect Telegram? Its settings will be removed (you can bring them back with “Undo”)." data-confirm-label="Disconnect" data-confirm-danger></form>
 
           </details>
 
@@ -367,24 +361,24 @@
             <form id="notifier-form-discord" method="post" action="/settings/notifier/discord" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
                 <legend class="sr-only">Discord connection</legend>
+
                 <div class="field-row">
 
                 <div class="field">
 
                   <label for="nf-discord-webhook_url">Webhook URL</label>
 
-                  <span class="secret"><input id="nf-discord-webhook_url" name="webhook_url" type="password" class="w-xl" value="" placeholder="https://discord.com/api/webhooks/…" autocomplete="off" spellcheck="false" autocapitalize="off"><button type="button" class="ico reveal" data-reveal="nf-discord-webhook_url" data-reveal-name="Webhook URL" aria-controls="nf-discord-webhook_url" aria-pressed="false" aria-label="Show “Webhook URL”" title="Show “Webhook URL”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+                  <span class="secret"><input id="nf-discord-webhook_url" name="webhook_url" type="password" class="w-xl" value="" placeholder="e.g. https://discord.com/api/webhooks/…" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"><button type="button" class="ico reveal" data-reveal="nf-discord-webhook_url" data-reveal-name="Webhook URL" aria-controls="nf-discord-webhook_url" aria-pressed="false" aria-label="Show “Webhook URL”" title="Show “Webhook URL”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
 
+                </div>
 
                 </div>
 
-                </div>
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
 
               </div>
-
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
 
@@ -410,13 +404,14 @@
             <form id="notifier-form-whatsapp" method="post" action="/settings/notifier/whatsapp" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
                 <legend class="sr-only">WhatsApp connection</legend>
+
                 <div class="field-row">
 
                 <div class="field">
 
                   <label for="nf-whatsapp-phone">Your WhatsApp number</label>
 
-                  <input id="nf-whatsapp-phone" name="phone" class="w-s" value="" placeholder="+15551234567" autocomplete="off" spellcheck="false" autocapitalize="off">
+                  <input id="nf-whatsapp-phone" name="phone" class="w-s" value="" placeholder="e.g. +15551234567" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
 
                 </div>
 
@@ -424,18 +419,17 @@
 
                   <label for="nf-whatsapp-apikey">apikey from CallMeBot</label>
 
-                  <span class="secret"><input id="nf-whatsapp-apikey" name="apikey" type="password" class="w-s" value="" placeholder="123456" autocomplete="off" spellcheck="false" autocapitalize="off"><button type="button" class="ico reveal" data-reveal="nf-whatsapp-apikey" data-reveal-name="apikey from CallMeBot" aria-controls="nf-whatsapp-apikey" aria-pressed="false" aria-label="Show “apikey from CallMeBot”" title="Show “apikey from CallMeBot”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
+                  <span class="secret"><input id="nf-whatsapp-apikey" name="apikey" type="password" class="w-s" value="" placeholder="e.g. 123456" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"><button type="button" class="ico reveal" data-reveal="nf-whatsapp-apikey" data-reveal-name="apikey from CallMeBot" aria-controls="nf-whatsapp-apikey" aria-pressed="false" aria-label="Show “apikey from CallMeBot”" title="Show “apikey from CallMeBot”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
 
+                </div>
 
                 </div>
 
-                </div>
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
 
               </div>
-
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
 
@@ -461,13 +455,14 @@
             <form id="notifier-form-ntfy" method="post" action="/settings/notifier/ntfy" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
                 <legend class="sr-only">ntfy (phone notifications) connection</legend>
+
                 <div class="field-row">
 
                 <div class="field">
 
                   <label for="nf-ntfy-topic">ntfy topic name</label>
 
-                  <input id="nf-ntfy-topic" name="topic" class="w-m" value="tow-<random>" placeholder="tow-…" autocomplete="off" spellcheck="false" autocapitalize="off">
+                  <input id="nf-ntfy-topic" name="topic" class="w-m" value="tow-<random>" placeholder="e.g. tow-…" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
 
                 </div>
 
@@ -475,17 +470,17 @@
 
                   <label for="nf-ntfy-server">Server (optional)</label>
 
-                  <input id="nf-ntfy-server" name="server" class="w-l" value="https://ntfy.sh" placeholder="https://ntfy.sh" autocomplete="off" spellcheck="false" autocapitalize="off">
+                  <input id="nf-ntfy-server" name="server" class="w-l" value="https://ntfy.sh" placeholder="e.g. https://ntfy.sh" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
 
                 </div>
 
                 </div>
+
               </fieldset>
               <div class="settings-actions">
                 <button type="submit">Save</button>
 
               </div>
-
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
             </form>
 
@@ -504,7 +499,7 @@
         <form method="post" action="/settings/interval" class="settings-form form-grid" data-return-target="acc-intervals"><div class="field">
             <label for="interval_min">Check topics every</label>
             <div class="input-unit"><input id="interval_min" name="interval_min" value="60" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>min</span></div>
-            <p class="field-hint" id="interval-hint">Topics with a personal timer keep it. A new value applies within a minute.</p>
+            <p class="field-hint" id="interval-hint">Topics with their own interval keep using it.</p>
           </div>
           <div class="field">
             <label for="flash_ttl_min">Show “Undo” for</label>
@@ -522,67 +517,30 @@
         <span class="pill mut">This computer only</span>
       </summary>
       <div class="settings-panel">
-        <p class="action-hint">Other devices (phone, laptop, Tailscale) sign in with a password and stay signed in for 90 days.</p>
-
-        <div class="integration-list">
-
-          <article class="integration-card access-card" id="password-card">
-            <div class="integration-head">
-              <h2>Password</h2>
-              <span class="integration-pills"><span class="pill mut">Not set</span></span>
+        <div class="integration-card access-card" id="access-card">
+          <form method="post" action="/settings/access" class="settings-form form-grid setup-form" data-return-target="acc-access">
+            <div class="check-field">
+              <input id="allow-lan" name="allow_lan" value="1" type="checkbox" aria-describedby="allow-lan-hint">
+              <label for="allow-lan">Open TOW from other devices</label>
+              <p id="allow-lan-hint">On after restarting TOW; off immediately.</p>
             </div>
-            <form method="post" action="/settings/password" class="settings-form form-grid" data-return-target="acc-access">
-              <fieldset>
-                <legend class="sr-only">Password</legend>
-
-                <div class="field-row">
+            <div class="form-grid lan-password" data-enabled-by="allow-lan">
+              <div class="field-row">
                 <div class="field">
-
-                  <label for="lan-password">New password</label>
-                  <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" aria-describedby="lan-password-hint"><button type="button" class="ico reveal" data-reveal="lan-password" data-reveal-name="New password" aria-controls="lan-password" aria-pressed="false" aria-label="Show “New password”" title="Show “New password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
-
-                  <p class="field-hint" id="lan-password-hint">8+ characters; three or four words with hyphens are easy to remember.</p>
-                </div>
-                <div class="field">
-                  <label for="lan-password2">Repeat the password</label>
-                  <span class="secret"><input id="lan-password2" name="lan_password2" type="password" class="w-m" autocomplete="new-password" minlength="8"><button type="button" class="ico reveal" data-reveal="lan-password2" data-reveal-name="Repeat the password" aria-controls="lan-password2" aria-pressed="false" aria-label="Show “Repeat the password”" title="Show “Repeat the password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
-                </div>
+                  <label for="lan-password">Password</label>
+                  <span class="secret"><input id="lan-password" name="lan_password" type="password" class="w-m" autocomplete="new-password" minlength="8" required aria-describedby="lan-password-hint"><button type="button" class="ico reveal" data-reveal="lan-password" data-reveal-name="Password" aria-controls="lan-password" aria-pressed="false" aria-label="Show “Password”" title="Show “Password”"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-eye"/></svg></button></span>
                 </div>
                 <div class="field">
                   <label for="lan-hint">Reminder (optional)</label>
-                  <input id="lan-hint" name="hint" type="text" class="w-l" maxlength="120" value="" autocomplete="off" aria-describedby="lan-hint-help">
-                  <p class="field-hint" id="lan-hint-help">Anyone who opens the sign-in page can read it — never include the password.</p>
+                  <input id="lan-hint" name="hint" type="text" class="w-m" maxlength="120" autocomplete="off" aria-describedby="lan-hint-help">
                 </div>
-              </fieldset>
-              <p class="action-hint">Forgot it? Set a new one here — the old one is not needed; other devices then sign in again.</p>
-              <div class="settings-actions"><button type="submit">Save password</button></div>
-              <p class="unsaved-state" role="status" hidden>There are unsaved changes.</p>
-            </form>
-
-          </article>
-
-          <article class="integration-card access-card" id="network-card">
-            <div class="integration-head">
-              <h2>Access from other devices</h2>
+              </div>
+              <p class="field-hint"><span id="lan-password-hint">At least 8 characters.</span> <span id="lan-hint-help">Public on the sign-in page. Do not include the password.</span></p>
+              <div class="settings-actions"><button type="submit">Save and enable</button></div>
             </div>
-
-            <form method="post" action="/settings/access" class="settings-form form-grid" data-return-target="acc-access">
-              <fieldset>
-                <legend class="sr-only">Access from other devices</legend>
+          </form>
 
 
-                <div class="check-field">
-                  <input id="allow-lan" name="allow_lan" value="1" type="checkbox" disabled aria-describedby="allow-lan-hint allow-lan-locked">
-                  <label for="allow-lan">Open TOW from other devices</label>
-                  <p id="allow-lan-hint">Turning it on takes effect after TOW restarts; turning it off works at once.</p>
-                  <p id="allow-lan-locked" class="locked-hint">Set a password above first: without it no other device can sign in.</p>
-                </div>
-              </fieldset>
-              <div class="settings-actions"><button type="submit" disabled>Save</button></div>
-              <p class="unsaved-state" role="status" hidden>There are unsaved changes.</p>
-            </form>
-
-          </article>
         </div>
       </div>
     </details>
@@ -613,7 +571,7 @@
               <label class="check-field" for="backup-automatic">
                 <input id="backup-automatic" type="checkbox" name="enabled" value="1" checked aria-describedby="backup-automatic-hint" data-auto-submit-control>
                 <span>Automatic nightly backups</span>
-                <p id="backup-automatic-hint" data-auto-submit-status>Turning it off keeps existing copies; “Back up now” still works.</p>
+                <p id="backup-automatic-hint" data-auto-submit-status></p>
               </label>
               <noscript><button type="submit">Save</button></noscript>
             </form>
@@ -622,9 +580,9 @@
                 <label for="backup-days">Keep nightly backups, days</label>
                 <div class="inline-save">
                   <input id="backup-days" type="number" name="days" value="7" class="w-xs" min="1" max="3650" required aria-describedby="backup-days-hint">
-                  <button type="submit">Save</button>
+                  <button class="ghost" type="submit">Save</button>
                 </div>
-                <p class="field-hint" id="backup-days-hint">Older copies are deleted only after a new one is verified; the 3 newest always stay.</p>
+                <p class="field-hint" id="backup-days-hint">Older backups are removed after a verified new backup; at least 3 remain.</p>
               </div>
             </form>
 
@@ -635,12 +593,12 @@
           <input type="hidden" name="kind" value="night">
           <div class="field">
             <label for="backup-path-night" class="sr-only">Folder for nightly backups</label>
-            <input id="backup-path-night" name="path" value="" class="w-xl" placeholder="<root>/backup/night" autocomplete="off" spellcheck="false">
-
-            <p class="field-hint"><size> free · You can choose another drive or a network folder (\\server\folder — then it is reachable at night too). “Check” tries to write a file.</p>
+            <input id="backup-path-night" name="path" value="" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-night-where backup-path-night-hint">
+            <p class="field-hint" id="backup-path-night-where">Default: <root>/backup/night · <size> free</p>
+            <p class="field-hint" id="backup-path-night-hint">Use a local path or \\server\share. “Check” tests writing.</p>
           </div>
           <div class="settings-actions">
-            <button type="submit" name="action" value="save">Save</button>
+            <button class="ghost" type="submit" name="action" value="save">Save</button>
             <button class="ghost" type="submit" name="action" value="check" data-busy-label="Checking…">Check</button>
 
           </div>
@@ -651,7 +609,7 @@
 
           <article class="integration-card backup-card" id="backup-manual" aria-labelledby="backup-manual-title">
             <div class="integration-head">
-              <div><h2 id="backup-manual-title">Backups made by hand</h2><p>The last 10 are kept. Restoring keeps the network settings as they are.</p></div>
+              <div><h2 id="backup-manual-title">Backups made by hand</h2><p>The last 10 backups are kept.</p></div>
 
             </div>
 
@@ -670,8 +628,8 @@
                   <form method="post" action="/settings/restore-points/rp-1/check" data-return-target="acc-transfer">
                     <button class="ghost" type="submit" data-busy-label="Checking…">Check</button>
                   </form>
-                  <form method="post" action="/settings/restore-points/rp-1/restore" data-return-target="acc-transfer" data-confirm="Restore the settings and history from this backup? TOW saves its current data before replacing it.">
-                    <button class="danger" type="submit" data-busy-label="Restoring…">Restore</button>
+                  <form method="post" action="/settings/restore-points/rp-1/restore" data-return-target="acc-transfer" data-confirm="Restore the settings and history from this backup? TOW saves its current data before replacing it. Network access and its password stay unchanged." data-confirm-label="Restore" data-confirm-danger>
+                    <button class="ghost" type="submit" data-busy-label="Restoring…">Restore</button>
                   </form>
                   <a class="btn ghost danger" href="/settings/restore-points/rp-1/delete">Delete</a>
                 </div>
@@ -687,12 +645,12 @@
           <input type="hidden" name="kind" value="manual">
           <div class="field">
             <label for="backup-path-manual" class="sr-only">Folder for backups made with “Create a backup”</label>
-            <input id="backup-path-manual" name="path" value="" class="w-xl" placeholder="<root>/restore-points" autocomplete="off" spellcheck="false">
+            <input id="backup-path-manual" name="path" value="" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-manual-where">
+            <p class="field-hint" id="backup-path-manual-where">Default: <root>/restore-points · <size> free</p>
 
-            <p class="field-hint"><size> free</p>
           </div>
           <div class="settings-actions">
-            <button type="submit" name="action" value="save">Save</button>
+            <button class="ghost" type="submit" name="action" value="save">Save</button>
             <button class="ghost" type="submit" name="action" value="check" data-busy-label="Checking…">Check</button>
 
           </div>
@@ -710,10 +668,12 @@
             </form>
             <form method="post" action="/settings/portable/import" enctype="multipart/form-data" data-return-target="acc-transfer" class="portable-import-form">
               <label for="portable-backup-file">File <code>.towx</code></label>
-              <input id="portable-backup-file" name="backup_file" type="file" class="w-l" accept=".towx,application/octet-stream" required>
+              <span class="file-pick" data-file-pick><input type="file" id="portable-backup-file" class="file-native" name="backup_file" accept=".towx,application/octet-stream" required>
+<label for="portable-backup-file" class="btn ghost file-button" aria-hidden="true">Choose a file</label>
+<span class="file-name" data-file-name>No file chosen</span></span>
               <div class="settings-actions">
-                <button class="ghost" type="submit" name="operation" value="check" data-busy-label="Checking…">Check</button>
-                <button class="danger" type="submit" name="operation" value="restore" data-confirm="Restore TOW from this file? The current data is saved before it is replaced." data-busy-label="Restoring…">Restore</button>
+                <button class="ghost" type="submit" name="operation" value="check" data-busy-label="Checking…" data-needs-file>Check</button>
+                <button class="ghost" type="submit" name="operation" value="restore" data-confirm="Restore TOW from this file? The current data is saved before it is replaced. Network access and its password stay unchanged." data-confirm-label="Restore" data-confirm-danger data-busy-label="Restoring…" data-needs-file>Restore</button>
               </div>
             </form>
             <p class="section-note">Restoring needs the original <code>keys/master.key</code> — keep it separately. <a href="/settings/help#export-import">More</a>.</p>
@@ -756,7 +716,7 @@
             <p class="action-hint">Web updates support published stable versions from 1.22.21. Data is kept; an incompatible data schema refuses the change. Older releases require the terminal and may not understand current data.</p>
             <div class="field">
               <label for="rollback-version">Release version</label>
-              <input id="rollback-version" class="w-s" data-update-version inputmode="text" placeholder="1.22.21" maxlength="32" autocomplete="off">
+              <input id="rollback-version" class="w-s" data-update-version inputmode="text" placeholder="e.g. 1.22.21" maxlength="32" autocomplete="off">
             </div>
             <div class="settings-actions"><button type="button" class="ghost" data-update-apply>Install version</button><button type="button" class="ghost" data-update-previous hidden></button></div>
           </details>
@@ -796,7 +756,7 @@
 
 
         <div class="service-restart">
-          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="Restart TOW? The page may be unavailable for a few seconds.">
+          <form method="post" action="/settings/service/restart" data-return-target="acc-service" data-confirm="Restart TOW? The page may be unavailable for a few seconds." data-confirm-label="Restart">
             <button type="submit" data-fix="restart_service">Restart</button>
           </form>
         </div>
@@ -828,22 +788,19 @@
         </span>
       </summary>
       <div class="settings-panel appearance">
-        <form method="post" action="/settings/language" class="settings-form" data-return-target="acc-language">
-          <div class="field">
-            <label for="language-choice">Language</label>
-            <div class="inline-save">
-              <select id="language-choice" name="language" class="w-l" aria-describedby="language-note">
-                <option value="auto">Browser&#39;s language (English)</option>
-                <option value="en" selected>English</option><option value="ru">Русский — Russian</option>
-              </select>
-              <button type="submit">Save</button>
+        <form method="post" action="/settings/language" class="settings-form language-form" data-return-target="acc-language">
+          <fieldset class="theme-field" aria-describedby="language-note">
+            <legend>Language</legend>
+            <div class="settings-actions language-choice">
+              <button type="submit" name="language" value="auto" class="ghost" aria-pressed="false">Auto (English)</button>
+              <button type="submit" name="language" value="en" aria-pressed="true">English</button><button type="submit" name="language" value="ru" class="ghost" aria-pressed="false">Русский</button>
             </div>
-            <p id="language-note" class="field-hint">Messenger messages use it too.</p>
-          </div>
+          </fieldset>
+          <p id="language-note" class="field-hint">Messenger messages use this language too.</p>
         </form>
         <form method="post" action="/settings/theme" class="theme-form" id="acc-theme" data-return-target="acc-theme" data-theme-form>
-          <fieldset class="theme-field" aria-describedby="theme-hint">
-            <legend>Theme</legend>
+          <fieldset class="theme-field">
+            <legend>Theme (all devices)</legend>
             <div class="theme-choice">
 
               <label class="theme-option">
@@ -863,7 +820,6 @@
 
             </div>
           </fieldset>
-          <p id="theme-hint" class="field-hint">Applies on every device.</p>
           <noscript><div class="settings-actions"><button type="submit">Save</button></div></noscript>
         </form>
       </div>
@@ -886,8 +842,7 @@
     <form method="post" action="/settings/protection" class="settings-form form-grid protection-form" data-return-target="acc-protection">
       <fieldset>
         <legend class="sr-only">Site access</legend>
-        <label class="check-field"><input type="checkbox" name="enabled" value="1" aria-describedby="protection-enabled-hint"><span>Use challenge recovery</span></label>
-        <p class="field-hint" id="protection-enabled-hint">Mirrors and browser sign-in work without it.</p>
+        <label class="check-field"><input type="checkbox" name="enabled" value="1"><span>Use challenge recovery</span></label>
         <div class="integration-list">
 
           <details class="integration-card protection-card">
@@ -903,11 +858,10 @@
 
 
             <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-1"><span>Use this connection</span></label>
-            <div class="field-row keep">
-              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" class="w-l" placeholder="http://127.0.0.1:8191" maxlength="256" autocomplete="off" spellcheck="false" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">127.0.0.1 is this computer; /v1 is optional.</p></div>
-              <div class="field"><label for="protection-order-new-connection-1">Order (1 = first)</label><input id="protection-order-new-connection-1" name="provider_order" value="1" class="w-xs" type="number" min="1" max="16" inputmode="numeric"></div>
+            <div class="field-row">
+              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" class="w-l" placeholder="e.g. http://127.0.0.1:8191" maxlength="256" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">127.0.0.1 is this computer; /v1 is optional.</p></div>
+              <input type="hidden" name="provider_order" value="1">
             </div>
-
           </details>
 
         </div>
@@ -915,14 +869,15 @@
         <details class="technical-details protection-limits">
           <summary>Attempt limits</summary>
           <div class="field-row">
-            <div class="field"><label for="protection-timeout">Time limit, s</label><input id="protection-timeout" name="timeout_sec" value="30" class="w-xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">5–90, for the whole recovery.</p></div>
+            <div class="field"><label for="protection-timeout">Time limit, s</label><input id="protection-timeout" name="timeout_sec" value="30" class="w-2xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">5–90, for the whole recovery.</p></div>
             <div class="field"><label for="protection-interval">Retry after, s</label><input id="protection-interval" name="min_interval_sec" value="1800" class="w-xs" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">60–86400 per site; 1800 = 30 min.</p></div>
-            <div class="field"><label for="protection-attempts">Calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" class="w-xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">From 1 to 4.</p></div>
+            <div class="field"><label for="protection-attempts">Calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" class="w-2xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">From 1 to 4.</p></div>
           </div>
         </details>
         <div class="settings-actions"><button type="submit">Save</button></div>
       </fieldset>
     </form>
+
     <details class="technical-details">
       <summary>If access is still blocked</summary>
       <p>Expand the topic&#39;s warning for each mirror&#39;s reason and retry time. The log identifies the failed stage: module startup, service response or topic access. A connection failure needs its type and address checked; a sign-in error needs the account checked on Sites.</p>
@@ -933,7 +888,7 @@
     <details class="technical-details">
       <summary>Reset saved access</summary>
       <p class="action-hint" id="protection-reset-hint">Clears Cloudflare clearance, retry records and cooldowns. Sign-ins, connections and torrents stay. Not available during a check.</p>
-      <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset saved site clearance, retry reservations and service cooldowns? Service settings and site sign-ins remain unchanged.">
+      <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset saved site clearance, retry reservations and service cooldowns? Service settings and site sign-ins remain unchanged." data-confirm-label="Reset saved access" data-confirm-danger>
         <button type="submit" class="ghost" aria-describedby="protection-reset-hint">Reset saved access</button>
       </form>
     </details>
@@ -978,11 +933,10 @@
   <div class="log-pop-head">
     <span id="log-title">Log</span>
     <a href="/history" class="log-history-link">History of downloads and changes</a>
-    <button type="button" class="ghost sm log-full-times" data-full-times="log-body" aria-controls="log-body" aria-pressed="false">Full timestamps</button>
     <button type="button" class="flash-x" id="log-close" aria-label="Close"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div><div class="log-box" id="log-body" role="region" aria-labelledby="log-title" tabindex="0"><div class="mut">…</div></div>
 </dialog>
-<script type="application/json" id="tow-i18n">{"_datetime": "%Y-%m-%d %H:%M:%S", "_tz_name": "Asia/Jerusalem", "_tz_now": "<offset>", "js.browser_auth.start": "Sign in", "js.browser_auth.starting": "Starting\u2026", "js.checks.history": "History", "js.checks.sent": "check sent; its answer was lost, TOW looks up its result", "js.checks.sign_in": "Sign in", "js.checks.signed_out": "you were signed out: the results of the checks you started here are not shown; sign in and see the topics", "js.checks.unconfirmed": "The check result is unavailable: TOW restarted or the record expired. Review the topic status and run the check again if needed.", "js.clock.last_attempt": "Last attempt: {error}", "js.clock.last_attempt_failed": "The last attempt failed", "js.clock.never_checked": "No check has run yet", "js.clock.overdue_title": "The last check is overdue", "js.clock.until_next": "Until the next check", "js.confirm.cancel": "Cancel", "js.confirm.ok": "Continue", "js.downloads.file": "file", "js.downloads.history": "History", "js.downloads.last_event": "Latest event: {event}", "js.downloads.load_failed": "could not load", "js.downloads.loading": "Loading\u2026", "js.downloads.more": "Show more", "js.downloads.no_events": "No events yet.", "js.downloads.open_failed": "could not open the history", "js.downloads.verifying": "Checking files", "js.edit.load_failed": "The edit form did not open: {error}", "js.guess.can_save_login": "you can save the sign-in", "js.guess.exists": "already added: {name}", "js.guess.failed": "could not fill it in automatically", "js.guess.filled": "filled in: {name}", "js.guess.kept_typed": "Fields you had filled in yourself were kept.", "js.guess.need_login": "a sign-in is needed", "js.guess.not_understood": "could not read this link", "js.log.details": "Details", "js.log.empty": "Empty.", "js.log.failed": "could not open", "js.messages.cancel": "Cancel waiting", "js.messages.clear": "Clear history", "js.messages.collapse": "Collapse into recent messages", "js.messages.details": "Details", "js.messages.empty": "No messages yet", "js.messages.kind_err": "Error", "js.messages.kind_info": "Note", "js.messages.kind_ok": "Done", "js.messages.kind_warn": "Warning", "js.messages.label_unread": "Recent messages: {count} unread", "js.messages.mark_read": "Mark all read", "js.messages.open_page": "Open as a page", "js.messages.reload": "Reload the page", "js.messages.title": "Recent messages", "js.messages.unconfirmed": "could not confirm the result: the answer did not arrive, and it may have been done. Reload the page to see before you try again", "js.messages.undo": "Undo", "js.messages.undo_available": "You can undo {what}", "js.messages.undo_title": "Undo this change", "js.releases.available": "TOW {version} is available", "js.releases.backup": "Saving and verifying the update snapshot\u2026", "js.releases.backup_cleanup_pending": "The restore point is verified; cleanup of old restore points is incomplete.", "js.releases.badge": "New {version}", "js.releases.checked": "Checked: {when}", "js.releases.checking": "Checking for updates\u2026", "js.releases.confirm": "Install TOW {version}? TOW first saves and verifies a restore point, then restarts. If the new version fails its health check, the updater tries to restore the previous version and data.", "js.releases.confirm_older": "Go back to the older TOW {version} (installed: {current})? First TOW saves and checks a restore point, then restarts. The older version may not know settings made since; if it does not pass the health check, the updater tries to return the current version and its data.", "js.releases.confirming": "The response was lost. Checking whether this installation started; it will not be sent again automatically. Reload the page to check the current state before retrying.", "js.releases.current": "You have the latest version", "js.releases.disabled": "Automatic update checks are off", "js.releases.failed": "The update or its rollback did not complete. Read the Update log below; do not repeat the installation blindly.", "js.releases.finished": "Finished: {when}", "js.releases.installing": "Installing the selected version\u2026", "js.releases.interrupted": "The updater was interrupted. Update from the terminal: see How to update below.", "js.releases.invalid_version": "Enter a stable release version, for example 1.22.21.", "js.releases.log_empty": "No log entries for this operation.", "js.releases.log_pending": "Waiting for the new operation\u0027s log\u2026", "js.releases.log_unavailable": "Could not read the update log.", "js.releases.ok": "TOW {version} installed and verified. Reload the page to open the new interface.", "js.releases.ok_current": "TOW {version} installed and verified.", "js.releases.operation_changed": "Showing a newer installation started in another tab or window.", "js.releases.phase_checking": "Starting TOW and checking its version and data\u2026", "js.releases.preparing": "Checking and preparing the selected release\u2026", "js.releases.previous": "Back to {version}", "js.releases.queued": "Restore point saved; starting the updater\u2026", "js.releases.reconnecting": "TOW is restarting. Waiting for the update result\u2026", "js.releases.recovered": "A later terminal update recovered TOW and checked its startup. Web updates are available again.", "js.releases.refused": "The updater refused the change before installation. The reason is in the Update log below.", "js.releases.reload": "Reload page", "js.releases.rolled_back": "The update failed; the previous version and data were restored and verified.", "js.releases.rolling_back": "The update failed; restoring the previous version and data\u2026", "js.releases.stale": "could not refresh; showing the last successful check", "js.releases.started": "Started: {when}", "js.releases.status_unavailable": "Could not read the installation status. Retrying; installation controls are temporarily disabled.", "js.releases.stopping": "Waiting for checks to finish and stopping TOW\u2026", "js.releases.superseded": "A previous update installed {version}; the installed version has changed since then.", "js.releases.supported": "Before installation: a verified restore point and an update snapshot. Nothing installs without confirmation.", "js.releases.unavailable": "Could not check for updates. TOW keeps working; try again later", "js.releases.unknown_build": "A stable release was found, but this build\u0027s version cannot be compared", "js.releases.unsupported": "Web installation is not available in this installation. Update from the terminal: see How to update below.", "js.search.nothing": "Nothing found", "js.search.shown": "Showing {shown}", "js.search.shown_of": "Showing {shown} of {total}", "js.settings.applying": "Applying\u2026", "js.settings.copied": "Command copied.", "js.settings.copy_failed": "Could not copy \u2014 select the command by hand.", "js.settings.save_address_first": "Enter the address and press Save first", "js.settings.save_first": "Save the changes first", "js.settings.theme_saved": "Theme saved: {theme}", "js.submit.failed": "Could not do this: {error}", "js.submit.no_next_page": "the server did not say which page comes next", "js.submit.unknown_error": "unknown error", "js.timer.done": "One-time topic done", "js.timer.paused": "Timer paused", "js.timer.queued": "Waiting for a check; another job or a site limit may delay it", "js.timer.running": "Personal-timer check in progress", "js.timer.scheduled": "Next automatic check", "js.timer.stopped": "The TOW service is not running, or its state is unavailable", "js.timer.title": "Personal timer: every {minutes} min", "js.timer.waiting": "Waiting for the updated schedule", "time.month_short.1": "Jan", "time.month_short.10": "Oct", "time.month_short.11": "Nov", "time.month_short.12": "Dec", "time.month_short.2": "Feb", "time.month_short.3": "Mar", "time.month_short.4": "Apr", "time.month_short.5": "May", "time.month_short.6": "Jun", "time.month_short.7": "Jul", "time.month_short.8": "Aug", "time.month_short.9": "Sep", "time.other_year": "{day} {month} {year}, {time}", "time.this_year": "{day} {month}, {time}", "web.secret.hide": "Hide \u201c{field}\u201d", "web.secret.keep_note": "Leave passwords and keys empty to keep them.", "web.secret.keep_placeholder": "Leave empty to keep", "web.secret.saved_keep": "Saved \u00b7 leave empty to keep", "web.secret.saved_tag": "saved", "web.secret.show": "Show \u201c{field}\u201d"}</script>
+<script type="application/json" id="tow-i18n">{"_datetime": "%Y-%m-%d %H:%M:%S", "_tz_name": "<zone>", "_tz_now": "<offset>", "js.browser_auth.start": "Sign in", "js.browser_auth.starting": "Starting\u2026", "js.checks.history": "History", "js.checks.sent": "check sent; its answer was lost, TOW looks up its result", "js.checks.sign_in": "Sign in", "js.checks.signed_out": "you were signed out: the results of the checks you started here are not shown; sign in and see the topics", "js.checks.unconfirmed": "The check result is unavailable: TOW restarted or the record expired. Review the topic status and run the check again if needed.", "js.clock.last_attempt": "Last attempt: {error}", "js.clock.last_attempt_failed": "The last attempt failed", "js.clock.never_checked": "No check has run yet", "js.clock.overdue_title": "The last check is overdue", "js.clock.until_next": "Until the next check", "js.downloads.file": "file", "js.downloads.history": "History", "js.downloads.last_event": "Latest event: {event}", "js.downloads.load_failed": "could not load", "js.downloads.loading": "Loading\u2026", "js.downloads.more": "Show more", "js.downloads.no_events": "No events yet.", "js.downloads.open_failed": "could not open the history", "js.downloads.verifying": "Checking files", "js.edit.load_failed": "The edit form did not open: {error}", "js.guess.can_save_login": "you can save the sign-in", "js.guess.exists": "already added: {name}", "js.guess.failed": "could not fill it in automatically", "js.guess.filled": "filled in: {name}", "js.guess.kept_typed": "Fields you had filled in yourself were kept.", "js.guess.need_login": "a sign-in is needed", "js.guess.not_understood": "could not read this link", "js.log.details": "Details", "js.log.empty": "Empty.", "js.log.failed": "could not open", "js.messages.cancel": "Cancel waiting", "js.messages.clear": "Clear history", "js.messages.collapse": "Collapse into recent messages", "js.messages.details": "Details", "js.messages.empty": "No messages yet", "js.messages.kind_err": "Error", "js.messages.kind_info": "Note", "js.messages.kind_ok": "Done", "js.messages.kind_warn": "Warning", "js.messages.label_unread": "Recent messages: {count} unread", "js.messages.mark_read": "Mark all read", "js.messages.open_page": "Open as a page", "js.messages.reload": "Reload the page", "js.messages.title": "Recent messages", "js.messages.unconfirmed": "could not confirm the result: the answer did not arrive, and it may have been done. Reload the page to see before you try again", "js.messages.undo": "Undo", "js.messages.undo_available": "You can undo {what}", "js.messages.undo_title": "Undo this change", "js.releases.available": "TOW {version} is available", "js.releases.backup": "Saving and verifying the update snapshot\u2026", "js.releases.backup_cleanup_pending": "The restore point is verified; cleanup of old restore points is incomplete.", "js.releases.badge": "New {version}", "js.releases.checked": "Checked: {when}", "js.releases.checking": "Checking for updates\u2026", "js.releases.confirm": "Install TOW {version}? TOW first saves and verifies a restore point, then restarts. If the new version fails its health check, the updater tries to restore the previous version and data.", "js.releases.confirm_older": "Go back to the older TOW {version} (installed: {current})? First TOW saves and checks a restore point, then restarts. The older version may not know settings made since; if it does not pass the health check, the updater tries to return the current version and its data.", "js.releases.confirming": "The response was lost. Checking whether this installation started; it will not be sent again automatically. Reload the page to check the current state before retrying.", "js.releases.current": "You have the latest version", "js.releases.failed": "The update or its rollback did not complete. Read the Update log below; do not repeat the installation blindly.", "js.releases.finished": "Finished: {when}", "js.releases.installing": "Installing the selected version\u2026", "js.releases.interrupted": "The updater was interrupted. Update from the terminal: see How to update below.", "js.releases.invalid_version": "Enter a stable release version, for example 1.22.21.", "js.releases.log_empty": "No log entries for this operation.", "js.releases.log_pending": "Waiting for the new operation\u0027s log\u2026", "js.releases.log_unavailable": "Could not read the update log.", "js.releases.ok": "TOW {version} installed and verified. Reload the page to open the new interface.", "js.releases.ok_current": "TOW {version} installed and verified.", "js.releases.operation_changed": "Showing a newer installation started in another tab or window.", "js.releases.phase_checking": "Starting TOW and checking its version and data\u2026", "js.releases.preparing": "Checking and preparing the selected release\u2026", "js.releases.previous": "Back to {version}", "js.releases.queued": "Restore point saved; starting the updater\u2026", "js.releases.reconnecting": "TOW is restarting. Waiting for the update result\u2026", "js.releases.recovered": "A later terminal update recovered TOW and checked its startup. Web updates are available again.", "js.releases.refused": "The updater refused the change before installation. The reason is in the Update log below.", "js.releases.reload": "Reload page", "js.releases.rolled_back": "The update failed; the previous version and data were restored and verified.", "js.releases.rolling_back": "The update failed; restoring the previous version and data\u2026", "js.releases.stale": "could not refresh; showing the last successful check", "js.releases.started": "Started: {when}", "js.releases.status_unavailable": "Could not read the installation status. Retrying; installation controls are temporarily disabled.", "js.releases.stopping": "Waiting for checks to finish and stopping TOW\u2026", "js.releases.superseded": "A previous update installed {version}; the installed version has changed since then.", "js.releases.supported": "Before installation: a verified restore point and an update snapshot. Nothing installs without confirmation.", "js.releases.unavailable": "Could not check for updates. TOW keeps working; try again later", "js.releases.unknown_build": "A stable release was found, but this build\u0027s version cannot be compared", "js.releases.unsupported": "Web installation is not available in this installation. Update from the terminal: see How to update below.", "js.search.nothing": "Nothing found", "js.search.shown": "Showing {shown}", "js.search.shown_of": "Showing {shown} of {total}", "js.settings.applying": "Applying\u2026", "js.settings.copied": "Command copied.", "js.settings.copy_failed": "Could not copy \u2014 select the command by hand.", "js.settings.save_address_first": "Enter the address and press Save first", "js.settings.save_first": "Save the changes first", "js.settings.theme_saved": "Theme saved: {theme}", "js.submit.failed": "Could not do this: {error}", "js.submit.no_next_page": "the server did not say which page comes next", "js.submit.unknown_error": "unknown error", "js.timer.done": "One-time topic done", "js.timer.paused": "Timer paused", "js.timer.queued": "Waiting for a check; another job or a site limit may delay it", "js.timer.running": "Personal-timer check in progress", "js.timer.scheduled": "Next automatic check", "js.timer.stopped": "The TOW service is not running, or its state is unavailable", "js.timer.title": "Personal timer: every {minutes} min", "js.timer.waiting": "Waiting for the updated schedule", "time.month_short.1": "Jan", "time.month_short.10": "Oct", "time.month_short.11": "Nov", "time.month_short.12": "Dec", "time.month_short.2": "Feb", "time.month_short.3": "Mar", "time.month_short.4": "Apr", "time.month_short.5": "May", "time.month_short.6": "Jun", "time.month_short.7": "Jul", "time.month_short.8": "Aug", "time.month_short.9": "Sep", "time.other_year": "{day} {month} {year}, {time}", "time.this_year": "{day} {month}, {time}", "web.secret.hide": "Hide \u201c{field}\u201d", "web.secret.keep_note": "Leave passwords and keys empty to keep them.", "web.secret.keep_placeholder": "Leave empty to keep", "web.secret.saved_keep": "Saved \u00b7 leave empty to keep", "web.secret.saved_tag": "saved", "web.secret.show": "Show \u201c{field}\u201d"}</script>
 <script type="application/json" id="tow-content-i18n">{"content.cache_failed": "Contents loaded, but the copy could not be saved for reuse. Check access to TOW\u0027s data folder.", "content.cached_hint": "Saved copy \u2014 no download limit used.", "content.js.choose": "Get the contents and choose at least one file before saving.", "content.js.count": "Files selected: {count} \u00b7 {size}", "content.js.empty": "No files match the search.", "content.js.expand": "Expand or collapse {name}", "content.js.failed": "Could not get the contents. Try again or choose a .torrent file.", "content.js.folder": "Select all files in {name}", "content.js.loading": "Getting the file list; nothing is downloaded\u2026", "content.js.magnet_loading": "Getting the file list through the torrent client; nothing is downloaded\u2026", "content.js.page": "Page {page} of {pages}", "content.js.rule": "Files matched: {count} \u00b7 {size}", "content.js.rule_loading": "Checking the rule\u2026", "content.js.session": "Your sign-in has expired. Reload the page to sign in again.", "content.js.space_fits": "Chosen {size}, free {free}: it fits", "content.js.space_free": "Free on this disk: {free}", "content.js.space_short": "Not enough room: chosen {size}, free {free}. TOW adds the topic stopped and starts it by itself when there is room.", "content.js.stale": "The link or client changed. Get the contents again.", "content.js.too_large": "The .torrent file is larger than TOW accepts.", "content.limited_confirm": "Request a .torrent from the site? This uses its download limit. Showing saved contents does not use the limit.", "web.bytes.b": "{size} B", "web.bytes.gb": "{size} GB", "web.bytes.kb": "{size} KB", "web.bytes.mb": "{size} MB", "web.bytes.tb": "{size} TB"}</script>
 <script src="/static/messages.js?v=<static>" defer></script>
 <script src="/static/checks.js?v=<static>" defer></script>

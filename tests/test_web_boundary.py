@@ -30,10 +30,10 @@ PURE: dict[str, set[str]] = {
         "RECORD_KEY",
         "is_local",
         "network_open",
-        "new_record",
         "password_is_set",
         "password_record",
         "require_local",
+        "web_record",
     },
     "tow.auth": {
         "AuthConfigurationError",
@@ -173,7 +173,6 @@ HELPER_ALLOWED: dict[str, set[str]] = {
     "site_store": {"tow.store_transaction.transaction", "tow.undo.cleanup_needed"},
     "templating": {
         "tow.auth.SESSION_COOKIE",
-        "tow.config.port_of",
         "tow.i18n.texts_with_prefix",
         "tow.notifiers.summary",
         "tow.paths.launcher",
