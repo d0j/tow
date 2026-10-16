@@ -191,6 +191,8 @@
   раньше каждая загрузка заканчивалась ошибкой «has no SHA256SUMS» или «could not find the latest release».
 - `install.ps1` в Windows PowerShell 5.1 устанавливает TOW в папку, в пути которой есть `[` или `]` (например,
   `D:\[x] TOW`): раньше загрузка останавливалась с ошибкой «Unable to find the specified file».
+- `install.ps1`, запущенный в Windows PowerShell 5.1 из окна PowerShell 7, снова устанавливает TOW: раньше он
+  останавливался с ошибкой «Get-FileHash is not recognized», потому что 5.1 брал модули PowerShell 7.
 
 ## [1.32.0] — 2026-10-16
 

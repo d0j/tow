@@ -314,6 +314,15 @@ function Install-Tow {
     Write-Host "  Remove:    & ([scriptblock]::Create((irm https://github.com/$repo/releases/latest/download/install.ps1))) -Uninstall -Dir `"$Dir`""
 }
 
+# Windows PowerShell 5.1 started from a PowerShell 7 window inherits 7's module folders, and its
+# own commands (Get-FileHash, Get-Acl...) then fail to load from there: it uses only its own
+# folders while it installs, and the caller's session gets its value back afterwards.
+$towModulePath = $env:PSModulePath
+if ($PSVersionTable.PSEdition -eq 'Desktop' -and $towModulePath) {
+    $env:PSModulePath = (($towModulePath -split ';') | Where-Object {
+            $_ -and ($_ -match '\\WindowsPowerShell\\' -or ($_ -notmatch '\\PowerShell\\' -and $_ -notmatch 'microsoft\.powershell_'))
+        }) -join ';'
+}
 try {
     Install-Tow -Dir $Dir -Version $Version -Port $Port -Autostart $Autostart.IsPresent -Uninstall $Uninstall.IsPresent -Yes $Yes.IsPresent -Purge $Purge.IsPresent -AdoptData $AdoptData.IsPresent
 }
@@ -322,4 +331,7 @@ catch {
     $host.UI.WriteErrorLine($_.Exception.Message)
     # Run as a file its exit code says so; under `irm | iex` an exit would close the window.
     if ($PSCommandPath) { exit 1 }
+}
+finally {
+    $env:PSModulePath = $towModulePath
 }

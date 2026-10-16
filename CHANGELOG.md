@@ -183,6 +183,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   anything: before, every download failed as "has no SHA256SUMS" or "could not find the latest release".
 - `install.ps1` in Windows PowerShell 5.1 installs into a folder whose path has `[` or `]` (for example
   `D:\[x] TOW`): its download stopped with "Unable to find the specified file".
+- `install.ps1` run with Windows PowerShell 5.1 from a PowerShell 7 window installs again: it stopped with
+  "Get-FileHash is not recognized", because 5.1 took PowerShell 7's own modules.
 
 ## [1.32.0] — 2026-10-16
 

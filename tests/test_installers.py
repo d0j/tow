@@ -593,6 +593,46 @@ def test_install_ps1_unpacks_each_file_into_its_place_and_keeps_what_is_there(tm
     assert not (folder / "TOW").exists()
 
 
+@pytest.mark.allow_system  # install.ps1 on a local stub zip in a temp folder; its start file only ends
+@pytest.mark.skipif(os.name != "nt", reason="install.ps1 installs on Windows")
+def test_install_ps1_in_windows_powershell_started_from_powershell_7(tmp_path):
+    # QA 16.10.2026: Windows PowerShell 5.1 started from a PowerShell 7 window inherits 7's module
+    # folders; Get-FileHash and Get-Acl then failed to load and the install stopped.
+    powershell, pwsh = shutil.which("powershell"), shutil.which("pwsh")
+    if powershell is None or pwsh is None:
+        pytest.skip("needs both Windows PowerShell and PowerShell 7")
+    seven = subprocess.run(
+        [pwsh, "-NoProfile", "-NonInteractive", "-Command", "$env:PSModulePath"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    ).stdout.strip()
+    zip_path = tmp_path / "TOW-windows-x64.zip"
+    sums = tmp_path / "SHA256SUMS"
+    sums.write_text(_stub_zip(zip_path), encoding="utf-8")
+    folder = tmp_path / "TOW"
+    env = {
+        **os.environ,
+        "PSModulePath": seven,
+        "TOW_INSTALL_SOURCE": str(zip_path),
+        "TOW_INSTALL_SUMS": str(sums),
+        "TOW_NO_BROWSER": "1",
+    }
+    script = f"& '{PS1}' -Dir '{folder}' -Yes; 'module path kept: ' + ($env:PSModulePath -eq '{seven}')"
+    done = subprocess.run(
+        [powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=180,
+        check=False,
+    )
+    assert "the download matches the release's SHA256SUMS" in done.stdout, done.stdout + done.stderr
+    assert (folder / "app" / "scripts" / "tow.cmd").is_file()
+    assert "module path kept: True" in done.stdout  # the caller's session gets its own value back
+
+
 @pytest.mark.allow_system  # install.ps1 on a local stub zip in a temp folder; refused before the start
 @pytest.mark.skipif(os.name != "nt", reason="install.ps1 installs on Windows")
 def test_install_ps1_refuses_a_zip_entry_outside_its_tow_folder(tmp_path):
