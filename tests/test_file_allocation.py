@@ -6,6 +6,7 @@ The Windows answer for a sparse or compressed file comes from the backend
 
 from __future__ import annotations
 
+import os
 import stat
 from pathlib import Path
 from types import SimpleNamespace
@@ -163,7 +164,7 @@ def test_a_partly_written_sparse_file_on_windows_counts_what_it_holds(monkeypatc
         ),
     )
     with platform.use(AllocatingWindows(6 * GIB)):
-        assert space._on_disk([path], 10 * GIB) == 6 * GIB
+        assert space._on_disk([path], 10 * GIB, space._save_folder(str(tmp_path))) == 6 * GIB
 
 
 def test_a_long_windows_path_is_probed_in_its_extended_form(monkeypatch):
@@ -183,12 +184,35 @@ def test_a_long_windows_path_is_probed_in_its_extended_form(monkeypatch):
     assert [str(path) for path in backend.asked] == looked  # the sparse-file call too
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows paths resolved by this system's own resolve")
+def test_a_long_path_is_resolved_in_its_extended_form_and_still_counts(monkeypatch, tmp_path):
+    # Containment under the save folder resolves each file's path first: past 260 characters only
+    # the extended form reaches the file, and the file found there still counts as already there.
+    dest = tmp_path / "TV"
+    deep = dest.joinpath(*(f"folder {n:02d} of a long season" for n in range(10)), "e01.mkv")
+    assert len(str(deep)) >= 260
+    real_resolve = Path.resolve
+    resolved: list[str] = []
+
+    def resolve(entry, *args, **kwargs):
+        resolved.append(str(entry))
+        return real_resolve(entry, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", resolve)
+    monkeypatch.setattr(Path, "lstat", lambda _entry, *_a, **_kw: _windows_file(4096, 0))
+    with platform.use(AllocatingWindows(0)):
+        folder = space._save_folder(str(dest))
+        assert space._on_disk([deep], 4096, folder) == 4096
+        assert space._on_disk([tmp_path / "elsewhere.mkv"], 4096, folder) == 0
+    assert "\\\\?\\" + str(deep) in resolved
+
+
 def test_a_failed_allocation_probe_never_credits_logical_size(monkeypatch, tmp_path):
     def refused(_path):
         raise PermissionError("synthetic refusal")
 
     monkeypatch.setattr(Path, "lstat", refused)
-    assert space._on_disk([tmp_path / "synthetic.mkv"], 10 * GIB) == 0
+    assert space._on_disk([tmp_path / "synthetic.mkv"], 10 * GIB, space._save_folder(str(tmp_path))) == 0
 
 
 def test_a_fully_allocated_alternative_is_reusable(monkeypatch, tmp_path):
@@ -198,4 +222,5 @@ def test_a_fully_allocated_alternative_is_reusable(monkeypatch, tmp_path):
 
     monkeypatch.setattr(Path, "lstat", lstat)
     with platform.use(platform.backend_for("linux")):
-        assert space._on_disk([tmp_path / "sparse.mkv", tmp_path / "complete.mkv"], 4096) == 4096
+        folder = space._save_folder(str(tmp_path))
+        assert space._on_disk([tmp_path / "sparse.mkv", tmp_path / "complete.mkv"], 4096, folder) == 4096

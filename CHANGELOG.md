@@ -121,7 +121,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   events. Under a Windows folder a colon is still refused in any part of a file's path, since Windows reads it as
   a drive or a hidden stream.
 - Waiting for disk space no longer counts a file the torrent client names outside its save folder (`../x`, a
-  drive) as already downloaded, and no longer looks at such a file at all.
+  drive) as already downloaded, and no longer looks at such a file at all. The same holds for a file reached through
+  a folder link or junction in the save folder that leads to another place (another drive); a link that stays inside
+  the folder still counts.
 - `tow import --path-map` now maps Windows folders to Linux or macOS ones and back: `D:\Media=/srv/media` turns
   `D:\Media\Show` into `/srv/media/Show` (it kept the backslashes, one odd folder name there), a Windows folder
   matches whatever its letters' case (`d:\media\Film` was reported as unmapped), and a POSIX folder moved to
