@@ -1,16 +1,14 @@
 {% extends "base.html" %}
 {% block body %}
-<div class="backup-delete-page">
-  <h1 id="page-title">{{ t('settings.backups.delete_title') }}</h1>
-  <section class="card backup-delete-confirm" aria-labelledby="copy-title">
-    {#- B3: the copy's time by the one rule (short, the full time on request), the action first. -#}
-    <h2 id="copy-title">{{ copy_title }} · {{ created_at | short_time }}</h2>
-    <p>{{ t('settings.backups.delete_warning') }}</p>
-    <form method="post" action="{{ action }}" class="settings-actions">
-      <input type="hidden" name="revision" value="{{ revision }}">
-      <button type="submit" class="ghost danger">{{ t('settings.common.delete') }}</button>
-      <a class="btn ghost" href="/settings?open=transfer#acc-transfer">{{ t('settings.common.cancel') }}</a>
-    </form>
-  </section>
-</div>
+<h1 id="page-title">{{ t('settings.backups.delete_title') }}</h1>
+<section class="card backup-delete-confirm" aria-labelledby="copy-title">
+  {#- B3: the copy's time by the one rule (short, the full time on request), the action first. -#}
+  <h2 id="copy-title">{{ copy_title }} · {{ created_at | short_time }}</h2>
+  <p>{{ t('settings.backups.delete_warning') }}</p>
+  <form method="post" action="{{ action }}" class="settings-actions">
+    <input type="hidden" name="revision" value="{{ revision }}">
+    <button type="submit" class="ghost danger">{{ t('settings.common.delete') }}</button>
+    <a class="btn ghost" href="/settings?open=transfer#acc-transfer">{{ t('settings.common.cancel') }}</a>
+  </form>
+</section>
 {% endblock %}

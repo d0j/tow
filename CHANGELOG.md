@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Changed
+
+- Settings spans the whole page on a computer again, as before 1.32.1 (its forms keep their own width), and
+  so does the page that deletes a backup copy.
+
 ## [1.32.1] — 2026-10-16
 
 ### Security

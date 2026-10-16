@@ -333,13 +333,15 @@ def test_the_language_segments_are_as_wide_as_their_buttons():
 
 
 def test_the_help_question_mark_is_a_28_px_target_and_the_copy_delete_page_a_settings_width():
-    """QA Q10: the Sites "?" help summary was the one disclosure under 28 px (A1: 24 px); the page
-    that deletes a backup copy spanned 1400 px while Settings, where it comes from, is 64rem."""
+    """QA Q10: the Sites "?" help summary was the one disclosure under 28 px (A1: 24 px). The page
+    that deletes a backup copy is as wide as Settings, where it comes from: 1.32.1 capped both at
+    64 rem; 1.32.2 gives Settings the page's width back, and this page with it (no cap of its own)."""
     sizes = [body for selector, body in _rules(CSS) if selector == "details.help > summary"]
     assert "width: 1.75rem; height: 1.75rem" in sizes[-1]  # the last one wins
-    assert _first(".backup-delete-page").strip() == "max-width: 64rem; margin-inline: auto;"
+    assert ".backup-delete-page" not in CSS
     template = (ROOT / "src" / "tow" / "templates" / "backup_delete.html").read_text(encoding="utf-8")
-    assert '<div class="backup-delete-page">' in template
+    assert "backup-delete-page" not in template
+    assert '{% block body %}\n<h1 id="page-title">' in template  # straight in <main>, as Settings' column
 
 
 def test_the_history_search_fills_its_line_on_a_phone():
