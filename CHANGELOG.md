@@ -129,6 +129,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On Linux, finding which program holds TOW's port asks `ss` first and no longer stops at a tool that gives no
   answer: an installed `lsof` or `ss` that fails or cannot name the process passes the question on to the next
   way, and `lsof`, which can hang on a lost network mount, is asked last and only while something does listen.
+- The daily clean-up of `data/tmp` removes only what TOW itself left there, never the files of a program TOW
+  started (such as uv's lock files), which may still be in use after a day.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -258,12 +259,22 @@ def runtime_dir() -> Path:
     return root() / "runtime"
 
 
+# What TOW itself leaves in its temp folder (a browser backup or restore, a Windows task file,
+# a protection reset, the content picker's cache, Python's tempfile names).
+_OWN_TEMP = re.compile(
+    r"tow-browser-(?:export|import)-.+|task-.+\.xml|protection-reset-[0-9a-f]+\.enc|content|tmp[a-z0-9_]{8}"
+)
+
+
 def _sweep(folder: Path, *, older_than: float) -> None:
-    """Remove what a crashed process left in the temp folder; anything in use is skipped."""
+    """Remove what a crashed TOW process left in the temp folder: only TOW's own temporary
+    entries, unchanged for ``older_than``. Age proves nothing is in use (Linux and macOS
+    delete an open file), so another program's files there - uv's lock files, its folders,
+    anything unknown - are never touched."""
     with contextlib.suppress(OSError):
         for entry in folder.iterdir():
             try:
-                if entry.lstat().st_mtime >= older_than:
+                if not _OWN_TEMP.fullmatch(entry.name) or entry.lstat().st_mtime >= older_than:
                     continue
                 if entry.is_dir() and not entry.is_symlink():
                     shutil.rmtree(entry, ignore_errors=True)

@@ -214,19 +214,35 @@ def test_private_temp_moves_tempfile_and_child_processes_into_the_data_folder(mo
     assert created.parent == folder
 
 
-def test_private_temp_sweeps_what_crashed_processes_left(tmp_path):
+def test_private_temp_sweeps_what_crashed_tow_processes_left_and_nothing_else(tmp_path):
+    # Age proves no inactivity (Linux and macOS delete an open file): only TOW's own temporary
+    # entries are removed. What other programs keep there (uv's lock files, its .tmp folders,
+    # anything unknown) is never touched.
     folder = tmp_path / "tmp"
-    (folder / "old-dir").mkdir(parents=True)
-    (folder / "old-dir" / "x.bin").write_bytes(b"x")
-    (folder / "old.tmp").write_bytes(b"x")
-    (folder / "fresh.tmp").write_bytes(b"x")
+    ours = [
+        "tow-browser-export-ab12cd",
+        "tow-browser-import-ef34gh",
+        "task-tow-1a2b3c4d.xml",
+        "protection-reset-0123456789abcdef.enc",
+        "content",
+        "tmpk2j3h4g5",
+    ]
+    theirs = ["uv-0123456789abcdef.lock", ".tmpAbC123", "old-dir", "old.tmp", "pip-build-env-x"]
+    folder.mkdir(parents=True)
+    for name in ours + theirs:
+        if name.endswith(("-ab12cd", "-ef34gh", "content", "-dir", "AbC123", "-env-x")):
+            (folder / name).mkdir()
+            (folder / name / "x.bin").write_bytes(b"x")
+        else:
+            (folder / name).write_bytes(b"x")
+    (folder / "tow-browser-export-fresh").mkdir()
     day_ago = time.time() - 2 * paths.TEMP_MAX_AGE_SEC
-    for name in ("old-dir", "old.tmp"):
+    for name in ours + theirs:
         os.utime(folder / name, (day_ago, day_ago))
 
     paths.use_private_temp()
 
-    assert sorted(entry.name for entry in folder.iterdir()) == ["fresh.tmp"]
+    assert sorted(entry.name for entry in folder.iterdir()) == sorted([*theirs, "tow-browser-export-fresh"])
 
 
 def test_private_temp_without_a_data_folder_changes_nothing(bare, monkeypatch, tmp_path):
