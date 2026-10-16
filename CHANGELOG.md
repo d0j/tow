@@ -104,6 +104,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   `D:\Media\Show` into `/srv/media/Show` (it kept the backslashes, one odd folder name there), a Windows folder
   matches whatever its letters' case (`d:\media\Film` was reported as unmapped), and a POSIX folder moved to
   Windows gets backslashes.
+- A file mask with a letter like “й” or “é” pasted from macOS (where it is stored as two characters) now matches
+  the torrent's files; before, “Files by pattern” said that the selection matches no file.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

@@ -3,6 +3,7 @@ from __future__ import annotations
 import fnmatch
 import functools
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -277,7 +278,14 @@ def _safe_globs(value: str) -> list[str]:
             raise SelectionError("selection.unsafe_mask", mask=pattern)
         if any(part in {"", ".", ".."} for part in normalized.split("/")):
             raise SelectionError("selection.unsafe_mask", mask=pattern)
-    return [pattern.replace("\\", "/").casefold() for pattern in globs]
+    return [_mask_text(pattern.replace("\\", "/")) for pattern in globs]
+
+
+def _mask_text(text: str) -> str:
+    """A mask and a file name compared alike: one Unicode form and no case. A mask pasted on
+    macOS is NFD ("и" + combining breve for "й"), torrent names are NFC; folding can leave a
+    decomposed letter, so the form is set again after it."""
+    return unicodedata.normalize("NFC", unicodedata.normalize("NFC", text).casefold())
 
 
 # One glob token as fnmatch scans it: a wildcard, a closed bracket class or one character.
@@ -437,7 +445,7 @@ def resolve_selection(
         matches = _file_mask_matcher(_safe_globs(expression))
         selected = []
         for row in selectable:
-            path = row.path.casefold()
+            path = _mask_text(row.path)
             base = PurePosixPath(path).name
             if matches(path) or (base != path and matches(base)):
                 selected.append(row)
