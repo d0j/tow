@@ -1,5 +1,5 @@
 {%- from "_note.html" import note -%}
-<details class="settings-section settings-accordion acc" id="acc-protection"{% if open_section == 'protection' %} open{% endif %} data-q="{{ ([t('protection_ui.title'), t('protection_ui.add')] + (protection.cards | map(attribute='title') | select | list) + [t('protection_ui.search')]) | join(' ') }}">
+<details class="settings-section settings-accordion acc" id="acc-protection"{% if open_section == 'protection' %} open{% endif %} data-q="{{ ([t('protection_ui.title')] + ([t('protection_ui.add')] if protection.cards | selectattr('new') | list else []) + (protection.cards | rejectattr('new') | map(attribute='title') | unique | list) + [t('protection_ui.search')]) | join(' ') }}">
   <summary>
     <span class="settings-summary-title">{{ t('protection_ui.title') }}</span>
     <span class="pill mut">{{ t('protection_ui.configured') if protection.enabled else t('protection_ui.off') }}</span>

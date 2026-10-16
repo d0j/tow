@@ -22,7 +22,7 @@
   {# The owner's order: what TOW needs first (clients, messengers, checks), then access, copies and
      updates, then the rarely changed (the service, language and theme, optional site access). #}
   <div class="settings-content" id="settings-acc">
-    <details class="settings-section settings-accordion acc" id="acc-clients"{% if open_section == 'clients' %} open{% endif %} data-q="{{ t('settings.clients.title') }} {{ clients | map(attribute='title') | join(' ') }} {{ search_words.clients }}">
+    <details class="settings-section settings-accordion acc" id="acc-clients"{% if open_section == 'clients' %} open{% endif %} data-q="{{ t('settings.clients.title') }} {{ clients | map(attribute='title') | unique | join(' ') }} {{ search_words.clients }}">
       <summary>
         <span id="settings-clients-title" class="settings-summary-title">{{ t('settings.clients.title') }}</span>
         {#- What is set up, not how many cards there are: "1 client" read as working when it was not. -#}
@@ -147,7 +147,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-bots"{% if open_section == 'bots' %} open{% endif %} data-q="{{ t('settings.notify.title') }} {{ notifiers | map(attribute='title') | join(' ') }} {{ search_words.notify }}">
+    <details class="settings-section settings-accordion acc" id="acc-bots"{% if open_section == 'bots' %} open{% endif %} data-q="{{ t('settings.notify.title') }} {{ notifiers | map(attribute='title') | unique | join(' ') }} {{ search_words.notify }}">
       <summary>
         <span id="settings-bots-title" class="settings-summary-title">{{ t('settings.notify.title') }}</span>
         {#- The connected messengers by name: green once each has delivered, red while one fails,
