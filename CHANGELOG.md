@@ -5,6 +5,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- A title like “73-176 серии из 176” now counts episodes 73–176, as “Серии 13-24 из 24” already did, and so does
+  “2x13-24 из 24” (it counted 1–24). A topic is complete when the whole range is there; when its files number each
+  season from episode 1 again, TOW counts that many episodes (104 for 73–176) instead of waiting for numbers the
+  files never have.
+
 ## [1.32.0] — 2026-10-16
 
 ### Security

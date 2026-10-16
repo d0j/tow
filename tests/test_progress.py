@@ -621,6 +621,66 @@ def test_season_relative_files_complete_absolute_title_window(tmp_path: Path):
     assert history["topics"]["cour"]["expected"]["numbering"] == "season-relative"
 
 
+def _range_progress(tmp_path: Path, title: str, names: list[str]) -> dict:
+    class PackClient(FakeClient):
+        def inspect_torrent(self, infohash):
+            return {
+                "hash": infohash,
+                "files": [{"name": f"Show/{name}", "size": 1, "progress": 1.0, "priority": 1} for name in names],
+            }
+
+    (tmp_path / "Show").mkdir()
+    for name in names:
+        (tmp_path / "Show" / name).write_bytes(b"x")
+    topic = {"id": "pack", "title": title, "hash": "ABC", "save_path": str(tmp_path)}
+    history: dict = {"topics": {}}
+    summary = reconcile_topic(topic, PackClient(), history, "2026-10-16T21:00:00+03:00")["summary"]
+    return {key: summary[key] for key in ("completed", "expected", "is_complete")}
+
+
+# 104 episodes, numbered per season: S02E01-26, S03E01-26, S04E01-26, S05E01-26.
+_RESTARTED_104 = [f"Show.S{season:02d}E{episode:02d}.mkv" for season in range(2, 6) for episode in range(1, 27)]
+
+
+@pytest.mark.parametrize("title", ["Show (73-176 серии из 176)", "Show (Серии 73-176 из 176)"])
+def test_cumulative_files_complete_a_title_range_in_both_word_orders(tmp_path: Path, title: str):
+    names = [f"Show - {episode:03d}.mkv" for episode in range(73, 177)]
+    assert _range_progress(tmp_path, title, names) == {"completed": 104, "expected": 104, "is_complete": True}
+
+
+@pytest.mark.parametrize("title", ["Show (73-176 серии из 176)", "Show (Серии 73-176 из 176)"])
+def test_cumulative_range_ignores_a_stray_low_episode(tmp_path: Path, title: str):
+    # E176 is missing; a recap numbered E01 must not stand in for it.
+    names = ["Show - 001.mkv", *(f"Show - {episode:03d}.mkv" for episode in range(73, 176))]
+    assert _range_progress(tmp_path, title, names) == {"completed": 103, "expected": 104, "is_complete": False}
+
+
+@pytest.mark.parametrize("title", ["Show (73-176 серии из 176)", "Show (Серии 73-176 из 176)"])
+def test_files_restarting_each_season_count_the_range_length(tmp_path: Path, title: str):
+    assert _range_progress(tmp_path, title, _RESTARTED_104) == {"completed": 104, "expected": 104, "is_complete": True}
+
+
+@pytest.mark.parametrize("title", ["Show (73-176 серии из 176)", "Show (Серии 73-176 из 176)"])
+def test_restarted_numbering_missing_one_episode_is_not_complete(tmp_path: Path, title: str):
+    names = _RESTARTED_104[:-1]
+    assert _range_progress(tmp_path, title, names) == {"completed": 103, "expected": 104, "is_complete": False}
+
+
+@pytest.mark.parametrize("title", ["Show [13-24 серии из 24]", "Show [Серии 13-24 из 24]", "Show [13-24 из 24]"])
+def test_second_cour_split_over_two_seasons_counts_its_twelve_episodes(tmp_path: Path, title: str):
+    names = [f"Show.S{season:02d}E{episode:02d}.mkv" for season in (1, 2) for episode in range(1, 7)]
+    assert _range_progress(tmp_path, title, names) == {"completed": 12, "expected": 12, "is_complete": True}
+
+
+def test_season_x_range_title_counts_its_own_episodes(tmp_path: Path):
+    names = [f"Show 2x{episode:02d}.mkv" for episode in range(13, 25)]
+    assert _range_progress(tmp_path, "Show [2x13-24 из 24]", names) == {
+        "completed": 12,
+        "expected": 12,
+        "is_complete": True,
+    }
+
+
 def test_unknown_tracker_total_keeps_original_season_and_repairs_old_event(tmp_path: Path):
     class GrowingSeasonClient(FakeClient):
         def inspect_torrent(self, infohash):
