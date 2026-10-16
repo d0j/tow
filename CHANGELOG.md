@@ -96,8 +96,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   knew its zone's name, which is never the case on Windows.
 - A site password typed on Home while another check ran is no longer left saved unchecked when its check never
   runs (you cancel it, the queue is full, or it waits past the time limit): the password saved before it comes
-  back, and the message says so. A password typed while the previous one's check was already running now puts back
-  the last password that worked, not one the site had just refused.
+  back, and the message says so. A password typed while the previous one's check was already running, or while a
+  refused one was being put back, now puts back the last password that worked, not one the site had just refused.
 - A torrent you removed in the client in the same second as you clicked a topic's Check, while the check waited
   for another one, is no longer added back by it.
 - First start in a browser without JavaScript is no longer stopped by a short password typed and then hidden by

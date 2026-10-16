@@ -1105,6 +1105,47 @@ def test_a_sign_in_typed_while_the_last_ones_check_runs_puts_back_the_password_b
     assert not check_jobs.UNCHECKED
 
 
+def test_a_sign_in_typed_while_a_refused_one_is_put_back_waits_for_it(monkeypatch):
+    """A works; B is refused, and C is typed while B's password is being put back. B had left
+    its generation before it put A back: C started a new one with the refused B as its baseline,
+    B found C saved and put nothing back, and a refused C brought back B. Now C waits for B's
+    restore (the stores' lock): its baseline is A."""
+    import threading
+    from types import SimpleNamespace
+
+    from tow.web import routes_topic_login, services
+    from tow.web.routes_topic_login import _SignIn
+    from tow.web.site_store import save_tracker_login
+
+    secrets = _sign_in_site(monkeypatch)
+    site = SimpleNamespace(name="nnmclub", spec={"title": "NNM-Club"})
+
+    def sign_in(password: str) -> _SignIn:  # what the sign-in route does under the stores' lock
+        with services.persistence_lock():
+            old = copy.deepcopy(services.load_secrets())
+            save_tracker_login("nnmclub", "user", password, base=old)
+            return _SignIn("t1", site, copy.deepcopy(old["trackers"]["nnmclub"]), "user", password)
+
+    b = sign_in("pass-b")
+    typed: dict = {}
+    real_restore = routes_topic_login.restore_unverified_password
+
+    def restore(*args):
+        if not typed:  # B's restore: C is typed now, from another request
+            typed["thread"] = threading.Thread(target=lambda: typed.setdefault("c", sign_in("pass-c")))
+            typed["thread"].start()
+            typed["thread"].join(timeout=1)  # saved at once, unless it waits for this restore
+        return real_restore(*args)
+
+    monkeypatch.setattr(routes_topic_login, "restore_unverified_password", restore)
+    assert b.restore() is True  # A back
+    typed["thread"].join(timeout=10)
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-c"
+    assert typed["c"].restore() is True  # C refused too
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-a"
+    assert not check_jobs.UNCHECKED
+
+
 @pytest.mark.parametrize("ends", ["added", "crash"])
 def test_a_new_topics_first_check_from_the_queue_says_what_a_check_at_once_says(client, monkeypatch, consumers, ends):
     # Queued behind another check, a new topic's first check lost "topic added; ..." and a crash of

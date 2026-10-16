@@ -149,16 +149,23 @@ class _SignIn:
     def restore(self) -> bool | None:
         """Its baseline back, only while the saved login is still this one (False: not, it changed
         meanwhile; None: the store refused, logged). Never under ``check_jobs.LOCK``: the stores
-        are written here."""
-        previous = self.baseline()
-        self.settle()
-        try:
-            return bool(restore_unverified_password(self.tracker.name, previous, self.username, self.password))
-        except SecretStoreError:
+        are written here. The baseline, the restore and leaving the generation all happen under
+        the stores' lock, which a new sign-in saves under: one typed meanwhile waits, and its
+        baseline is what this one put back, never this refused login."""
+        restored: bool | None
+        with services.persistence_lock():
+            previous = self.baseline()
+            try:
+                restored = bool(restore_unverified_password(self.tracker.name, previous, self.username, self.password))
+            except SecretStoreError:
+                restored = None
+            finally:
+                self.settle()
+        if restored is None:
             services.log_event(
                 "site_login_restore_failed", tracker=self.tracker.name, topic=self.tid, status="failed", how="manual"
             )
-            return None
+        return restored
 
     def checked(self, out: dict[str, Any]) -> tuple[str, str, bool]:
         """(message, its kind, ask for the login again) after the check ran."""
