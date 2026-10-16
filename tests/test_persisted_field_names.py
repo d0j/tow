@@ -33,6 +33,9 @@ ALLOWED = {
     ("web/routes_password.py", "auth.hint_reveals_password"): "a refusal's catalog key -> its first-start field",
     ("web/site_actions.py", "password"): "a site login in secrets.enc",
     ("web/site_store.py", "password"): "a site login in secrets.enc",
+    ("web/settings_merge.py", "password"): "an opaque comparison token in a client card's base (the page only)",
+    ("web/site_merge.py", "password"): "an opaque comparison token in a site card's base (the page only)",
+    ("web/topic_merge.py", "content_token"): "a prepared torrent's id in a refused edit's draft (memory only)",
     ("web/services.py", "api_key"): "the catalog key of a protection provider's status on the page",
     ("undo/kinds.py", "password"): "an undo's log event; the export keeps only EXPORT_EVENT_KEYS",
 }

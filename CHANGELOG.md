@@ -5,6 +5,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- Two devices editing the same topic, site or setting no longer undo each other's changes (a rename was put back
+  by another device's timer-only save, which said "saved"): a save changes only what you changed in that form. A
+  field changed on both devices comes back with both values and what you typed (never a password) until you
+  choose; a form opened before the update asks to be opened again.
+
 ## [1.32.3] — 2026-10-16
 
 ### Changed

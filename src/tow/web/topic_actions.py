@@ -8,8 +8,10 @@ The record comes from ``tow.topic_form``; every store, client, site and check is
 from __future__ import annotations
 
 import copy
+import threading
 from collections.abc import Callable
 from typing import Any, NamedTuple
+from urllib.parse import quote
 
 from fastapi.responses import RedirectResponse
 
@@ -37,7 +39,7 @@ from tow.topic_form import (
 from tow.topic_timers import parse_interval, set_interval
 from tow.torrent import TorrentMetadata, parse_torrent_metadata
 from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
-from tow.web import check_jobs, services
+from tow.web import check_jobs, edit_base, services, topic_merge
 from tow.web.check_actions import enqueue_check
 from tow.web.messages import flash_redirect, topic_subject, use_subject
 from tow.web.text import t
@@ -272,51 +274,170 @@ def _find(state: dict[str, Any], tid: str) -> dict[str, Any] | None:
     return next((item for item in state.get("topics") or [] if str(item.get("id")) == tid), None)
 
 
-def edit_topic(tid: str, form: TopicForm) -> RedirectResponse:
-    """The topic as the edit form says; a changed folder of a topic with a revision is moved in
-    its client too. The persistence lock is held to read and to save, never while the client
-    moves the folder (up to ``RELOCATION_WAIT_SEC``): the save then reads the topic again and
+class _Edit(NamedTuple):
+    """What an edit decided under the first lock: the topic before it, the edited copy, the
+    folder, and the form it applied (the owner's changes on the topic as it was then)."""
+
+    before: dict[str, Any]
+    candidate: dict[str, Any]
+    dest: str
+    form: TopicForm
+
+
+# The topics whose folder a save is moving in the client now: a second move of the same topic
+# waits for the first to end (it is refused, never run beside it).
+_RELOCATING: set[str] = set()
+_RELOCATING_LOCK = threading.Lock()
+
+
+def _reserve_move(tid: str) -> bool:
+    with _RELOCATING_LOCK:
+        if tid in _RELOCATING:
+            return False
+        _RELOCATING.add(tid)
+        return True
+
+
+def _release_move(tid: str) -> None:
+    with _RELOCATING_LOCK:
+        _RELOCATING.discard(tid)
+
+
+def _default_client() -> str:
+    try:
+        return str(client_configuration(services.load_config(), None)["id"])
+    except RuntimeError, ValueError, KeyError:
+        return ""
+
+
+def _reload_form(tid: str) -> RedirectResponse:
+    """A save without a valid base: nothing is saved; the form opens again as saved now."""
+    return flash_redirect(f"/topics/{quote(tid, safe='')}/edit", "web.edit.reload", "err")
+
+
+def _conflict(
+    tid: str, topic: dict[str, Any], form: TopicForm, merged: edit_base.Merge, *, said: str = "", kind: str = "warn"
+) -> RedirectResponse:
+    """A save refused for a conflict: the form opens again with the owner's draft, both values of
+    each conflicting group and a new base (saved now, those groups waiting for a choice)."""
+    default = _default_client()
+    now = topic_merge.current(topic, default)
+    base = edit_base.encode(topic_merge.TOPIC, tid, now, merged.conflicts)
+    token = edit_base.keep_conflict(
+        topic_merge.TOPIC,
+        tid,
+        base=base,
+        draft=topic_merge.draft(form, merged.changed | set(merged.conflicts)),
+        rows=topic_merge.rows(merged.conflicts, topic, form, services.load_config()),
+    )
+    message = t("web.edit.conflict") + said
+    return flash_redirect(f"/topics/{quote(tid, safe='')}/edit?conflict={quote(token)}", message, kind)
+
+
+def edit_base_of(topic: dict[str, Any]) -> str:
+    """The hidden ``base`` of ``topic``'s edit form, as it is saved now."""
+    tid = str(topic.get("id") or "")
+    return edit_base.encode(topic_merge.TOPIC, tid, topic_merge.current(topic, _default_client()))
+
+
+def edit_topic(
+    tid: str, form: TopicForm, base_raw: str = "", resolutions: dict[str, str] | None = None
+) -> RedirectResponse:
+    """The topic as the edit form says, merged with the topic as it is now: only what the owner
+    changed since the form was rendered (``base_raw``) is saved, on the current topic; a field
+    another device changed to something else meanwhile is a conflict, and nothing is saved. A
+    changed folder of a topic with a revision is moved in its client too. The persistence lock is
+    held to read and to save, never while the client moves the folder (up to
+    ``RELOCATION_WAIT_SEC``): the save then reads the topic again, checks the merge again and
     applies only what the form changed, so a check that finished meanwhile is kept."""
     with services.persistence_lock():
         state = services.load_state()
         topic = _find(state, tid)
         if topic is None:  # deleted meanwhile (another tab, undo): nothing to save, never "Saved"
             return flash_redirect("/", "web.topics.not_found", "err")
+        default = _default_client()
+        now = topic_merge.current(topic, default)
+        base = edit_base.read(topic_merge.TOPIC, tid, base_raw, now)
+        if base is None:
+            return _reload_form(tid)
+        wanted = topic_merge.submitted(form, base.values, state, default)
+        merged = edit_base.merge(topic_merge.TOPIC, base, now, wanted, resolutions)
+        if merged.conflicts:
+            return _conflict(tid, topic, form, merged)
+        applied = topic_merge.effective_form(form, topic, merged)
         try:
-            candidate, policy, selection_changed = _edited(topic, form)
-            dest = resolve_save_path(form.save_path, state)
-            if not dest:
-                raise Refused("web.topics.need_folder_short")
-            if problem := _folder_refusal(dest, current=str(topic.get("save_path") or "")):
-                raise Refused(problem)
+            edit = _decide(state, topic, applied)
         except Refused as refusal:
             return refusal.response(form)
-        before = copy.deepcopy(topic)
-        services.log_event(
-            "topic_edit",
-            topic=tid,
-            title=candidate.get("title"),
-            url=candidate.get("url"),
-            path=dest,
-            client_id=candidate["client_id"],
-            selection_mode=policy["mode"],
-            selection_value=policy["value"],
-            tracking_mode=policy["tracking_mode"],
-            selection_changed=selection_changed,
-            check_interval_min=candidate.get("check_interval_min"),
-            how="manual",
-        )
         old_dest = str(topic.get("save_path") or "")
         old_hash = str(topic.get("hash") or "")
-        if not old_hash or paths_equal(old_dest, dest):
-            return _save_edit(state, topic, before, candidate, dest, None)
-    moved = _move_in_client(candidate, tid, old_hash, dest)
+        if not old_hash or paths_equal(old_dest, edit.dest):
+            return _save_edit(state, topic, edit.before, edit.candidate, edit.dest, None)
+        if not _reserve_move(tid):  # another save moves this topic's folder now
+            return flash_redirect("/", "web.edit.move_busy", "warn")
+    try:
+        moved = _move_in_client(edit.candidate, tid, old_hash, edit.dest)
+        return _after_move(tid, edit, moved, old_dest, old_hash, base, wanted, resolutions)
+    finally:
+        _release_move(tid)
+
+
+def _decide(state: dict[str, Any], topic: dict[str, Any], form: TopicForm) -> _Edit:
+    """The edit of ``topic`` the form asks for (``Refused``: it cannot be saved), logged."""
+    candidate, policy, selection_changed = _edited(topic, form)
+    dest = resolve_save_path(form.save_path, state)
+    if not dest:
+        raise Refused("web.topics.need_folder_short")
+    if problem := _folder_refusal(dest, current=str(topic.get("save_path") or "")):
+        raise Refused(problem)
+    services.log_event(
+        "topic_edit",
+        topic=str(topic.get("id") or ""),
+        title=candidate.get("title"),
+        url=candidate.get("url"),
+        path=dest,
+        client_id=candidate["client_id"],
+        selection_mode=policy["mode"],
+        selection_value=policy["value"],
+        tracking_mode=policy["tracking_mode"],
+        selection_changed=selection_changed,
+        check_interval_min=candidate.get("check_interval_min"),
+        how="manual",
+    )
+    return _Edit(copy.deepcopy(topic), candidate, dest, form)
+
+
+def _after_move(
+    tid: str,
+    edit: _Edit,
+    moved: _Moved,
+    old_dest: str,
+    old_hash: str,
+    base: edit_base.Base,
+    wanted: dict[str, Any],
+    resolutions: dict[str, str] | None,
+) -> RedirectResponse:
+    """The second check after the client moved the folder (without the lock): the topic is read
+    again and the merge checked again. The move happened whatever comes now, so its folder is
+    recorded while the topic still has the torrent that moved; a field another device changed
+    meanwhile is a conflict, kept as saved now and shown with the owner's value."""
     with services.persistence_lock():
         state = services.load_state()
         topic = _find(state, tid)
         if topic is None:  # deleted while its folder moved: the History has the move
             return flash_redirect("/", "web.topics.not_found", "err")
-        return _save_edit(state, topic, before, candidate, dest, moved, old_dest=old_dest)
+        if str(topic.get("hash") or "") != old_hash or not paths_equal(str(topic.get("save_path") or ""), old_dest):
+            # A check bound another torrent, or the folder changed meanwhile: what moved is not
+            # what the topic follows now, and the topic is left as it is.
+            return flash_redirect("/", t("web.edit.changed_while_moving") + moved.suffix, "warn")
+        now = topic_merge.current(topic, _default_client())
+        again = edit_base.merge(topic_merge.TOPIC, base, now, wanted, resolutions)
+        if again.conflicts:
+            if moved.outcome != "error":  # the folder the client moved the torrent to
+                folder_only = {**copy.deepcopy(topic), "save_path": edit.dest}
+                _save_edit(state, topic, copy.deepcopy(topic), folder_only, edit.dest, moved, old_dest=old_dest)
+            return _conflict(tid, topic, edit.form, again, said=moved.suffix)
+        return _save_edit(state, topic, edit.before, edit.candidate, edit.dest, moved, old_dest=old_dest)
 
 
 def _save_edit(

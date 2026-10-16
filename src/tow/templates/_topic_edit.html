@@ -1,6 +1,7 @@
 {# One topic's edit panel (M2): fetched by app.js when a Home row opens, or shown on
    /topics/<id>/edit without scripts. `standalone` is set on that page. #}
 {% from "_note.html" import note %}
+{% from "_conflict.html" import base_field, conflict_box %}
 <div class="edit-panel" data-edit-loaded>
   {#- The panel's top line: the last event with its full time (the row shows it short, inside its
       <summary>, where no tooltip reaches a phone or a keyboard), when it last worked, and the
@@ -35,31 +36,36 @@
   {#- The fields below say the selection and the mode; only what they cannot say is said here. -#}
   {% if topic.selection_dirty %}<p class="sub">{{ t('home.topic.sel_dirty') }}</p>{% elif topic.selection_verified is sameas false %}<p class="sub">{{ t('home.topic.sel_unverified') }}</p>{% endif %}
   {% if topic.once_done %}<p class="sub">{{ t('home.topic.once_done') }}</p>{% endif %}
-  {% set mode = topic.selection.mode if topic.selection else 'all' %}
+  {#- A save refused for a conflict comes back with what the owner changed (``d``): it wins over
+      what is saved; every other field shows the topic as saved now. -#}
+  {% set d = conflict.draft if conflict else {} %}
+  {% set mode = d.get('selection_mode') or (topic.selection.mode if topic.selection else 'all') %}
   <form id="ed-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/edit" class="form-grid edit-form">
+    {{ base_field(edit_base) }}
+    {{ conflict_box(conflict, 'ed-' ~ topic.id) }}
     {#- The add form's order (1.32.1): link, name, folder, client, what; the long title and path
         each on a row of their own. -#}
-    <div class="field"><label for="edit-url-{{ topic.id }}">{{ t('home.add.url') }}</label><input id="edit-url-{{ topic.id }}" class="w-xl" name="url" value="{{ topic.url }}" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
-    <div class="field"><label for="edit-title-{{ topic.id }}">{{ t('home.add.name') }}</label><input id="edit-title-{{ topic.id }}" class="w-xl" name="title" value="{{ topic.name }}"></div>
-    <div class="field"><label for="edit-path-{{ topic.id }}">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="edit-path-{{ topic.id }}" class="w-xl" name="save_path" list="save-roots" value="{{ topic.save_path or '' }}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div><p class="field-hint space-hint" data-space-hint aria-live="polite" hidden></p>
+    <div class="field"><label for="edit-url-{{ topic.id }}">{{ t('home.add.url') }}</label><input id="edit-url-{{ topic.id }}" class="w-xl" name="url" value="{{ d.get('url', topic.url) }}" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+    <div class="field"><label for="edit-title-{{ topic.id }}">{{ t('home.add.name') }}</label><input id="edit-title-{{ topic.id }}" class="w-xl" name="title" value="{{ d.get('title', topic.name) }}"></div>
+    <div class="field"><label for="edit-path-{{ topic.id }}">{{ t('home.add.folder') }}</label><div class="folder-input"><input id="edit-path-{{ topic.id }}" class="w-xl" name="save_path" list="save-roots" value="{{ d.get('save_path', topic.save_path or '') }}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"><button type="button" class="ghost ico folder-toggle" data-save-folders aria-label="{{ t('home.add.recent_folders') }}" tabindex="-1" hidden><span aria-hidden="true">▾</span></button></div><p class="field-hint space-hint" data-space-hint aria-live="polite" hidden></p>
       {#- Said once the folder changes (content.js); without a script, always. -#}
       <p class="field-hint" data-move-note hidden>{{ t('home.topic.path_note') }}</p><noscript><p class="field-hint">{{ t('home.topic.path_note') }}</p></noscript></div>
     <div class="field-row">
       {% if client_options|length > 1 %}
-      <div class="field"><label for="edit-client-{{ topic.id }}">{{ t('home.add.client') }}</label><select id="edit-client-{{ topic.id }}" class="w-m" name="client_id">{% for client in client_options %}<option value="{{ client.id }}"{% if client.id == (topic.client_id or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="edit-client-{{ topic.id }}">{{ t('home.add.client') }}</label><select id="edit-client-{{ topic.id }}" class="w-m" name="client_id">{% for client in client_options %}<option value="{{ client.id }}"{% if client.id == d.get('client_id', topic.client_id or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>{% endfor %}</select></div>
       {% else %}
       {#- One client: the one the select offered, sent as it was. -#}
       <input type="hidden" id="edit-client-{{ topic.id }}" name="client_id" value="{{ client_options[0].id if client_options else (topic.client_id or default_client_id) }}">
       {% endif %}
       <div class="field"><label for="edit-selection-mode-{{ topic.id }}">{{ t('home.add.what') }}</label><select id="edit-selection-mode-{{ topic.id }}" class="w-m" name="selection_mode" data-exact-option="{{ t('content.manual') }}"><option value="all"{% if mode == 'all' %} selected{% endif %}>{{ t('home.add.mode_all') }}</option>{% if mode == 'exact' %}<option value="exact" selected>{{ t('content.manual') }}</option>{% endif %}<option value="episodes"{% if mode == 'episodes' %} selected{% endif %}>{{ t('home.add.mode_episodes') }}</option><option value="files"{% if mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option></select></div>
     </div>
-    <div class="field" data-content-expression><label for="edit-selection-value-{{ topic.id }}">{{ t('home.add.selection') }}</label><textarea id="edit-selection-value-{{ topic.id }}" class="w-xl" name="selection_value" rows="1" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{ t('home.add.selection_placeholder') }}">{{ topic.selection.value if topic.selection else '' }}</textarea></div>
-    {% set draft = none %}{% include '_content_picker.html' %}
+    <div class="field" data-content-expression><label for="edit-selection-value-{{ topic.id }}">{{ t('home.add.selection') }}</label><textarea id="edit-selection-value-{{ topic.id }}" class="w-xl" name="selection_value" rows="1" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{ t('home.add.selection_placeholder') }}">{{ d.get('selection_value', topic.selection.value if topic.selection else '') }}</textarea></div>
+    {% set draft = d if d.get('selection_mode') else none %}{% include '_content_picker.html' %}
     {#- The add form's order: following and the timer after what to download and its rule. -#}
     <div class="field-row follow-row">
       <input type="hidden" name="tracking_unchecked" value="once">
-      <label class="check-label" for="edit-tracking-mode-{{ topic.id }}"><input id="edit-tracking-mode-{{ topic.id }}" name="tracking_mode" value="watch" type="checkbox"{% if topic.tracking_mode != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
-      <div class="field interval-field"><label for="edit-check-interval-{{ topic.id }}">{{ t('timer.field') }}</label><input id="edit-check-interval-{{ topic.id }}" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ topic.check_interval_min or '' }}" aria-describedby="edit-check-interval-hint-{{ topic.id }}"><p class="field-hint" id="edit-check-interval-hint-{{ topic.id }}">{{ t('timer.hint', minutes=global_interval_min) }}</p></div>
+      <label class="check-label" for="edit-tracking-mode-{{ topic.id }}"><input id="edit-tracking-mode-{{ topic.id }}" name="tracking_mode" value="watch" type="checkbox"{% if d.get('tracking_mode', topic.tracking_mode) != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
+      <div class="field interval-field"><label for="edit-check-interval-{{ topic.id }}">{{ t('timer.field') }}</label><input id="edit-check-interval-{{ topic.id }}" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ d.get('check_interval_min', topic.check_interval_min or '') }}" aria-describedby="edit-check-interval-hint-{{ topic.id }}"><p class="field-hint" id="edit-check-interval-hint-{{ topic.id }}">{{ t('timer.hint', minutes=global_interval_min) }}</p></div>
     </div>
   </form>
   {% if (topic.download_summary or {}).is_complete and not topic.paused %}

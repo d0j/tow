@@ -143,6 +143,8 @@
             <form id="client-form-client-0" method="post" action="/settings/client" class="settings-form form-grid" data-return-target="client-main">
               <input type="hidden" name="client_id" value="main">
               <input type="hidden" name="kind" value="qbittorrent">
+              <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;client&#34;,&#34;id&#34;:&#34;main&#34;,&#34;f&#34;:{&#34;host&#34;:&#34;192.0.2.10&#34;,&#34;port&#34;:8080,&#34;username&#34;:&#34;admin&#34;,&#34;password&#34;:&#34;<secret-token>&#34;},&#34;p&#34;:[]}">
+
               <fieldset>
                 <legend class="sr-only">Living room connection</legend>
                 <div class="field-row">
@@ -219,6 +221,8 @@
             <form id="client-form-client-1" method="post" action="/settings/client" class="settings-form form-grid" data-return-target="client-nas">
               <input type="hidden" name="client_id" value="nas">
               <input type="hidden" name="kind" value="transmission">
+              <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;client&#34;,&#34;id&#34;:&#34;nas&#34;,&#34;f&#34;:{&#34;host&#34;:&#34;http://nas.example:9091/transmission&#34;,&#34;port&#34;:9091,&#34;username&#34;:&#34;&#34;,&#34;password&#34;:&#34;<secret-token>&#34;},&#34;p&#34;:[]}">
+
               <fieldset>
                 <legend class="sr-only">Transmission connection</legend>
                 <div class="field-row">
@@ -330,6 +334,8 @@
               </div>
             </details>
             <form id="notifier-form-telegram" method="post" action="/settings/notifier/telegram" class="settings-form form-grid" data-return-target="acc-bots">
+              <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;notifier-telegram&#34;,&#34;id&#34;:&#34;telegram&#34;,&#34;f&#34;:{&#34;token&#34;:&#34;<secret-token>&#34;,&#34;chat_ids&#34;:&#34;1001&#34;},&#34;p&#34;:[]}">
+
               <fieldset>
                 <legend class="sr-only">Telegram connection</legend>
 
@@ -395,6 +401,8 @@
               </div>
             </details>
             <form id="notifier-form-discord" method="post" action="/settings/notifier/discord" class="settings-form form-grid" data-return-target="acc-bots">
+              <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;notifier-discord&#34;,&#34;id&#34;:&#34;discord&#34;,&#34;f&#34;:{&#34;webhook_url&#34;:&#34;<secret-token>&#34;},&#34;p&#34;:[]}">
+
               <fieldset>
                 <legend class="sr-only">Discord connection</legend>
 
@@ -446,6 +454,8 @@
               </div>
             </details>
             <form id="notifier-form-whatsapp" method="post" action="/settings/notifier/whatsapp" class="settings-form form-grid" data-return-target="acc-bots">
+              <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;notifier-whatsapp&#34;,&#34;id&#34;:&#34;whatsapp&#34;,&#34;f&#34;:{&#34;phone&#34;:&#34;&#34;,&#34;apikey&#34;:&#34;<secret-token>&#34;},&#34;p&#34;:[]}">
+
               <fieldset>
                 <legend class="sr-only">WhatsApp connection</legend>
 
@@ -505,6 +515,8 @@
               </div>
             </details>
             <form id="notifier-form-ntfy" method="post" action="/settings/notifier/ntfy" class="settings-form form-grid" data-return-target="acc-bots">
+              <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;notifier-ntfy&#34;,&#34;id&#34;:&#34;ntfy&#34;,&#34;f&#34;:{&#34;topic&#34;:&#34;&#34;,&#34;server&#34;:&#34;https://ntfy.sh&#34;},&#34;p&#34;:[]}">
+
               <fieldset>
                 <legend class="sr-only">ntfy (phone notifications) connection</legend>
 
@@ -553,7 +565,9 @@
         <span class="pill mut">1 h</span>
       </summary>
       <div class="settings-panel">
-        <form method="post" action="/settings/interval" class="settings-form form-grid" data-return-target="acc-intervals"><div class="field">
+        <form method="post" action="/settings/interval" class="settings-form form-grid" data-return-target="acc-intervals">
+          <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;intervals&#34;,&#34;id&#34;:&#34;intervals&#34;,&#34;f&#34;:{&#34;interval_min&#34;:60,&#34;flash_ttl_min&#34;:1},&#34;p&#34;:[]}">
+          <div class="field">
             <label for="interval_min">Check topics every</label>
             <div class="input-unit"><input id="interval_min" name="interval_min" value="60" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>min</span></div>
             <p class="field-hint" id="interval-hint">Topics with their own interval keep using it.</p>
@@ -761,6 +775,7 @@
       <div class="settings-panel">
         <section id="updates" class="release-panel" aria-labelledby="settings-updates-title">
           <form method="post" action="/settings/updates" class="compact-form immediate-form" data-return-target="acc-updates" data-auto-submit>
+            <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;updates&#34;,&#34;id&#34;:&#34;updates&#34;,&#34;f&#34;:{&#34;check_updates&#34;:true},&#34;p&#34;:[]}">
             <input type="hidden" name="enabled" value="0">
             <div class="check-field">
               <input id="check-updates" name="enabled" value="1" type="checkbox" checked aria-describedby="check-updates-hint" data-auto-submit-control>
@@ -866,6 +881,8 @@
       </summary>
       <div class="settings-panel appearance">
         <form method="post" action="/settings/language" class="settings-form language-form" data-return-target="acc-language">
+          <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;language&#34;,&#34;id&#34;:&#34;language&#34;,&#34;f&#34;:{&#34;language&#34;:&#34;en&#34;},&#34;p&#34;:[]}">
+
           <fieldset class="theme-field" aria-describedby="language-note">
             <legend>Language</legend>
             <div class="theme-choice">

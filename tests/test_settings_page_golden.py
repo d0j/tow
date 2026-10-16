@@ -72,6 +72,8 @@ def _normalised(page: str) -> str:
     page = re.sub(r'"_tz_name": "[^"]*"', '"_tz_name": "<zone>"', page)  # the computer's own zone
     page = re.sub(r"[\d.,]+ (B|KB|MB|GB|TB) free", "<size> free", page)
     page = re.sub(r'value="tow-[0-9a-f]{12}"', 'value="tow-<random>"', page)
+    # A saved password's comparison token in a form's base: keyed by the server process.
+    page = re.sub(r"&#34;[0-9a-f]{8}\.[0-9a-f]{32}&#34;", "&#34;<secret-token>&#34;", page)
     # Where the tab keeps its recent messages: a hash of this install's folders.
     page = re.sub(r'data-namespace="[0-9a-f]{16}"', 'data-namespace="<install>"', page)
     page = re.sub(r"<root>[^\"<]*", lambda m: m.group(0).replace("\\", "/"), page)

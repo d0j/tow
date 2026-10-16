@@ -2282,6 +2282,28 @@
       "already_exists": "already there",
       "rollback_incomplete": "the change was undone only in part: check the result and correct it by hand if needed"
     },
+    "edit": {
+      "reload": "nothing saved: this form is out of date (opened before an update of TOW, or damaged) — it now shows what is saved; make your change again",
+      "conflict": "not saved: changed on another device meanwhile — choose which value to keep",
+      "conflict_note": "Changed on another device after you opened this form. Choose which value to keep for each field below, then save again.",
+      "now_saved": "Saved now: {value}",
+      "yours": "Yours: {value}",
+      "keep_saved": "Keep the saved value",
+      "use_mine": "Use mine",
+      "retype_secret": "Type the password or token again: a form never keeps it.",
+      "move_busy": "not saved: another save is moving this topic's folder now; try again when it ends",
+      "changed_while_moving": "the topic changed while the torrent client moved its folder: nothing else was saved, check the topic",
+      "value": {
+        "watch": "follow the topic",
+        "once": "download once",
+        "minutes": "{count} min",
+        "global_timer": "the global timer",
+        "empty": "(empty)",
+        "secret_set": "a saved password or token",
+        "on": "on",
+        "off": "off"
+      }
+    },
     "title": {
       "home": "Home",
       "history": "History",

@@ -21,7 +21,7 @@ from tow.jsonish import as_dict
 from tow.log import error_class
 from tow.store_transaction import StoreTransaction
 from tow.undo.snapshots import site_snapshot
-from tow.web import services
+from tow.web import edit_base, services, site_merge
 from tow.web.messages import flash_location, flash_redirect, use_subject
 from tow.web.site_form import (
     FieldRefused,
@@ -132,25 +132,76 @@ def _guessed(from_url: str) -> dict[str, Any]:
         raise FieldRefused(t(e.key), "from_url") from e
 
 
-def _edit_refused(name: str, form: SiteEdit, reason: object, kind: str = "err", *, field: str = "") -> RedirectResponse:
+def _edit_refused(
+    name: str, form: SiteEdit, reason: object, kind: str = "err", *, field: str = "", base_raw: str = ""
+) -> RedirectResponse:
     """A refused save of site ``name``'s card: its row opens again at the refused field
     (``?open=&field=``; the page marks and focuses it, and opens Advanced when it is there) with
     what was typed in it (``&edit=``, never the password: ``site_edit_draft``)."""
     field = field or str(getattr(reason, "field", "") or "")
     draft = {key: value for key, value in dataclasses.asdict(form).items() if value is not None and key != "password"}
+    if base_raw:  # the card comes back on the base it was rendered with, never on a newer one
+        draft["base"] = base_raw
     query = urlencode({"open": name, **({"field": field} if field else {}), "edit": keep_site_edit(name, draft)})
     return flash_redirect(f"/sites?{query}", reason, kind)
 
 
-def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
+def _site_now(name: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """Site ``name``'s card as saved now, as its form shows it (the preset's defaults included)."""
+    login = as_dict(as_dict(services.load_secrets().get("trackers")).get(name))
+    return site_merge.current(name, {**services.tracker_site_defaults(name), **spec}, login)
+
+
+def site_edit_base(name: str, spec: dict[str, Any], login: dict[str, Any]) -> str:
+    """The hidden ``base`` of site ``name``'s card as the page shows it (``spec`` with its
+    preset's defaults, ``login`` from the secrets)."""
+    return edit_base.encode(site_merge.SITE, name, site_merge.current(name, spec, login))
+
+
+def _site_conflict(
+    name: str, typed: SiteEdit, now: dict[str, Any], wanted: dict[str, Any], merged: edit_base.Merge, retype: bool
+) -> RedirectResponse:
+    """A save refused for a conflict: the card opens again with the owner's draft (never the
+    password), both values of each conflicting group and a new base."""
+    groups = merged.changed | set(merged.conflicts)
+    token = edit_base.keep_conflict(
+        site_merge.SITE,
+        name,
+        base=edit_base.encode(site_merge.SITE, name, now, merged.conflicts),
+        draft=site_merge.draft(typed, groups),
+        rows=site_merge.rows(merged.conflicts, now, wanted),
+        retype=("password",) if retype else (),
+    )
+    return flash_redirect(f"/sites?{urlencode({'open': name, 'conflict': token})}", "web.edit.conflict", "warn")
+
+
+def edit_site(
+    name: str,
+    form: SiteEdit,
+    base_raw: str = "",
+    resolutions: dict[str, str] | None = None,
+    intent: tuple[str, str] = ("keep", ""),
+) -> RedirectResponse:
     """Site ``name``'s card as saved - renamed, its mirrors, sign-in mirrors, paths and login -
-    with an undo, as one transaction (the caller holds the persistence lock)."""
+    with an undo, as one transaction (the caller holds the persistence lock). Only what the
+    owner changed since the card was rendered (``base_raw``) is saved, on the site as it is now;
+    a group another device changed to something else meanwhile is a conflict, nothing is saved."""
     new_config = copy.deepcopy(services.load_config())
     trackers = new_config.setdefault("trackers", {})
     spec = trackers.get(name)
     if not isinstance(spec, dict):
         return flash_redirect("/sites", "web.sites.no_site", "err")
+    now = _site_now(name, spec)
+    base = edit_base.read(site_merge.SITE, name, base_raw, now)
+    if base is None:
+        return flash_redirect(f"/sites?{urlencode({'open': name})}", "web.edit.reload", "err")
+    wanted = site_merge.submitted(name, form, intent)
+    merged = edit_base.merge(site_merge.SITE, base, now, wanted, resolutions)
+    if merged.conflicts:
+        return _site_conflict(name, form, now, wanted, merged, intent[0] == "replace")
     typed = form
+    form = site_merge.effective_form(name, form, now, wanted, merged)
+    remove_password = "login" in merged.changed and intent[0] == "remove" and not form.browser_sign_in()
     if form.browser_sign_in():
         # The fields browser sign-in hides are never a new login: a typed or autofilled password
         # sent with them must not replace the saved one, which stays for a return to passwords.
@@ -159,22 +210,24 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
     try:
         key, added_login_hosts = edit_site_hosts(name, spec, form, trackers)
     except ValueError as exc:
-        return _edit_refused(name, typed, exc)
+        return _edit_refused(name, typed, exc, base_raw=base_raw)
     except SiteNameTaken:
-        return _edit_refused(name, typed, "web.sites.name_taken", field="new_name")
+        return _edit_refused(name, typed, "web.sites.name_taken", field="new_name", base_raw=base_raw)
     stored_password = ((services.load_secrets().get("trackers") or {}).get(name) or {}).get("password")
+    if remove_password:
+        stored_password = None
     forget_password = False
     if added_login_hosts and stored_password and not form.password.strip():
         # A stored tracker password must never be posted to a host it was not entered for. With
         # password sign-in the field is in view: typed again, or refused. Browser sign-in hides
         # it and does not use the password: it is forgotten instead (the user name stays).
         if not typed.browser_sign_in():
-            return _edit_refused(name, typed, "web.sites.password_again", "warn", field="password")
+            return _edit_refused(name, typed, "web.sites.password_again", "warn", field="password", base_raw=base_raw)
         forget_password = True
     try:
         edit_site_paths(spec, form)
     except ValueError as exc:
-        return _edit_refused(name, typed, exc)
+        return _edit_refused(name, typed, exc, base_raw=base_raw)
     old_state = services.load_state()
     new_state = copy.deepcopy(old_state)
     old_mirrors = as_dict(old_state.get("mirrors"))
@@ -194,7 +247,7 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
             limits[key] = limits.pop(name)
     old_secrets = services.load_secrets()
     new_secrets = _renamed_login(old_secrets, name, key, form)
-    if forget_password:
+    if forget_password or remove_password:
         entry = (new_secrets.get("trackers") or {}).get(key)
         if isinstance(entry, dict):
             entry.pop("password", None)

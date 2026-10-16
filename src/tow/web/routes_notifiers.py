@@ -11,7 +11,7 @@ from fastapi.responses import RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from tow.config import as_bool, interval_sec_of
-from tow.web import services
+from tow.web import edit_base, services, settings_merge
 from tow.web.messages import flash_redirect
 from tow.web.site_form import internal_host, unresolved_note
 from tow.web.site_store import save_secrets_with_undo
@@ -82,8 +82,31 @@ def _save_notifier(kind: str, form: dict[str, str]) -> RedirectResponse:
     if kind not in notifiers.kinds():
         return _unknown_notifier()
     s = services.load_secrets()
-    values, errors = notifiers.validate(kind, form, _raw_notifier(s, kind))
     title = notifiers.kinds()[kind].TITLE
+    # The card's fields are one group (a token belongs to its chat): changed here and on another
+    # device since the card was rendered is a conflict; unchanged here keeps what is saved now.
+    spec = settings_merge.notifier_spec(kind)
+    now = settings_merge.notifier_now(kind, s)
+    got = edit_base.read(spec, kind, form.get("base", ""), now)
+    if got is None:
+        return edit_base.reload_redirect(_notifier_target(kind))
+    wanted = settings_merge.notifier_wanted(kind, form)
+    resolutions = {key.removeprefix("resolve_"): value for key, value in form.items() if key.startswith("resolve_")}
+    merged = edit_base.merge(spec, got, now, wanted, resolutions)
+    if merged.conflicts:
+        return edit_base.conflict_redirect(
+            spec,
+            kind,
+            _notifier_target(kind),
+            now=now,
+            merged=merged,
+            draft=settings_merge.notifier_draft(kind, form),
+            rows=settings_merge.card_rows(spec, notifiers.title(notifiers.kinds()[kind]), now, wanted),
+            retype=tuple(name for name in spec.secret if str(form.get(name) or "").strip()),
+        )
+    if not merged.changed and _raw_notifier(s, kind) is not None:  # the card as saved now: nothing to write
+        return _notifier_redirect(t("web.common.no_changes"), kind)
+    values, errors = notifiers.validate(kind, form, _raw_notifier(s, kind))
     if not errors and (problem := _private_server_problem(kind, values)):
         errors.append(problem)
     if errors:
