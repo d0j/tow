@@ -52,7 +52,7 @@
       </form>
     </section>
   </main>
-  <script type="application/json" id="tow-i18n">{{ js_texts()|tojson }}</script>
+  <script type="application/json" id="tow-i18n">{{ js_texts(before_sign_in=True)|tojson }}</script>
   <script src="/static/app.js?v={{ static_version }}" defer></script>
 </body>
 </html>
