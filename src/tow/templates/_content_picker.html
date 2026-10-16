@@ -20,16 +20,17 @@
     </div>
   </details>
   <button type="button" class="ghost" data-content-limited hidden>{{ t('content.limited_load') }}</button>
-  <p class="field-hint" data-content-cached hidden>{{ t('content.cached_hint') }}</p>
+  {#- A saved copy is said on the status line (content.js); only a copy that could not be saved
+      stands here. -#}
+  <p class="field-hint" data-content-cached hidden>{{ t('content.cache_failed') }}</p>
   <input type="hidden" name="content_token" value="{{ draft.get('content_token', '') if draft else '' }}">
   <input type="hidden" name="selection_indices" value="{{ draft.get('selection_indices', '') if draft else '' }}">
   <p class="field-hint" data-content-status role="status" aria-live="polite"></p>
   <div data-content-results hidden>
     <label>{{ t('content.search') }}<input type="search" class="w-m" data-content-search></label>
-    <div class="actions" data-content-manual-actions>
-      <button type="button" class="ghost" data-content-all>{{ t('content.all') }}</button>
-      <button type="button" class="ghost" data-content-none>{{ t('content.none') }}</button>
-    </div>
+    {#- The tree's root: one box for every file of the torrent, ticked, mixed or clear (it also takes
+        what a search hides and the other pages). -#}
+    <div class="content-folder content-all" data-content-manual-actions><label><input type="checkbox" data-content-all> <span>{{ t('content.all') }}</span></label></div>
     <div class="content-tree" data-content-tree></div>
     <div class="actions" data-content-pages hidden>
       <button type="button" class="ghost" data-content-prev>{{ t('content.previous') }}</button>
