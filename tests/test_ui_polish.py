@@ -984,8 +984,13 @@ def test_the_update_card_gets_its_times_written_by_the_server(client, monkeypatc
     job = client.get("/updates/status").json()
     assert job["started_at_label"] == format_ui_timestamp(at)
     assert job["finished_at_label"] == format_ui_timestamp(datetime(2026, 10, 7, 9, 24, 6, tzinfo=UTC))
+    # 1.32: and as the one time rule writes them, for the card's <time>s (tests/js/update_times.mjs).
+    from tow.web.text import time_parts
+
+    assert client.get("/updates.json").json()["checked_at_time"] == time_parts(at.timestamp())
+    assert job["started_at_time"] == time_parts(at.timestamp())
     updates = (SRC / "static" / "updates.js").read_text(encoding="utf-8")
-    for field in ("data.checked_at_label", "job.started_at_label", "job.finished_at_label"):
+    for field in ("data.checked_at_time", "job.started_at_time", "job.finished_at_time", "data.checked_at_label"):
         assert field in updates
 
 
