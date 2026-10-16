@@ -329,10 +329,12 @@ button.ico, button.row-ico, button.flash-x { min-height: 0; }
 .folder-options [role="option"] { padding: .4rem .5rem; cursor: pointer; border-radius: 4px; overflow-wrap: anywhere; }
 .folder-options.above { top: auto; bottom: calc(100% + .2rem); }
 .folder-options [role="option"]:hover, .folder-options [aria-selected="true"] { background: var(--panel2); color: var(--acc); }
+/* Save, Cancel and Delete: on a 320 px phone they wrap as whole buttons, never a two-line one. */
 .edit-actions {
-  display: flex; align-items: center; gap: .5rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .5rem;
   margin-top: .55rem;
 }
+.edit-actions > button { white-space: nowrap; }
 .edit-actions .danger { margin-left: auto; }
 button.ghost.danger, .btn.ghost.danger { background: transparent; border-color: var(--line); color: var(--bad); }
 .notifier-steps { margin: .2rem 0 .6rem; }

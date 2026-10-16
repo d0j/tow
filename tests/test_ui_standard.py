@@ -228,3 +228,10 @@ def test_the_content_trees_folder_expander_is_a_24_px_icon():
     assert "height: 1.5rem" in body
     coarse = content.partition("@media (pointer: coarse) {")[2]
     assert "width: 2rem; height: 2rem" in coarse
+
+
+def test_the_edit_panels_buttons_wrap_whole_on_a_small_phone():
+    """1.32 QA L2: at 320 px "Убрать из TOW" wrapped inside its button (32 px high, the rule is 26)."""
+    actions = _first(".edit-actions")
+    assert "flex-wrap: wrap" in actions
+    assert "white-space: nowrap" in _first(".edit-actions > button")
