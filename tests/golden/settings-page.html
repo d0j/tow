@@ -131,10 +131,12 @@
 
             <details class="technical-details notifier-steps" >
               <summary>How to connect</summary>
-              <ol>
-                <li>In qBittorrent: Tools → Options → Web UI.</li><li>Turn on “Web User Interface (Remote control)”, set a user name and password; the port is usually 8080.</li><li>If qBittorrent runs on this computer, the address is 127.0.0.1.</li>
-              </ol>
-              <p class="action-hint">TOW marks its torrents with the tag tow and never touches others.</p>
+              <div class="details-body">
+                <ol>
+                  <li>In qBittorrent: Tools → Options → Web UI.</li><li>Turn on “Web User Interface (Remote control)”, set a user name and password; the port is usually 8080.</li><li>If qBittorrent runs on this computer, the address is 127.0.0.1.</li>
+                </ol>
+                <p class="action-hint">TOW marks its torrents with the tag tow and never touches others.</p>
+              </div>
             </details>
 
             <form id="client-form-client-0" method="post" action="/settings/client" class="settings-form form-grid" data-return-target="client-main">
@@ -180,7 +182,7 @@
 
             <details class="technical-details">
               <summary>Technical details</summary>
-              <dl>
+              <dl class="details-body">
                 <div><dt>Type</dt><dd><code>qbittorrent</code></dd></div>
                 <div><dt>ID</dt><dd><code>main</code></dd></div>
               </dl>
@@ -199,10 +201,12 @@
 
             <details class="technical-details notifier-steps" >
               <summary>How to connect</summary>
-              <ol>
-                <li>In Transmission: Edit → Preferences → Remote.</li><li>Turn on “Allow remote access”; the port is usually 9091. User name and password are optional.</li><li>If Transmission runs on another computer, add this computer&#39;s address to the allowed list.</li>
-              </ol>
-              <p class="action-hint">Transmission 3.0 or newer is needed: TOW marks its torrents with the label tow. Magnet links are not supported with Transmission — it starts downloading before TOW can choose the files.</p>
+              <div class="details-body">
+                <ol>
+                  <li>In Transmission: Edit → Preferences → Remote.</li><li>Turn on “Allow remote access”; the port is usually 9091. User name and password are optional.</li><li>If Transmission runs on another computer, add this computer&#39;s address to the allowed list.</li>
+                </ol>
+                <p class="action-hint">Transmission 3.0 or newer is needed: TOW marks its torrents with the label tow. Magnet links are not supported with Transmission — it starts downloading before TOW can choose the files.</p>
+              </div>
             </details>
 
             <form id="client-form-client-1" method="post" action="/settings/client" class="settings-form form-grid" data-return-target="client-nas">
@@ -258,7 +262,7 @@
 
             <details class="technical-details">
               <summary>Technical details</summary>
-              <dl>
+              <dl class="details-body">
                 <div><dt>Type</dt><dd><code>transmission</code></dd></div>
                 <div><dt>ID</dt><dd><code>nas</code></dd></div>
               </dl>
@@ -267,6 +271,7 @@
 
         </div><details class="technical-details client-add-toggle">
           <summary>Add client</summary>
+          <div class="details-body">
           <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
             <div class="field">
               <label for="client-add-kind">Client type</label>
@@ -278,6 +283,7 @@
               </div>
             </div>
           </form>
+          </div>
         </details>
       </div>
     </details>
@@ -303,10 +309,12 @@
 
             <details class="technical-details notifier-steps" >
               <summary>How to connect</summary>
-              <ol>
-                <li>Send @BotFather the command /newbot and choose a name — it will send you the bot token.</li><li>Open your bot and press “Start” (or send it anything).</li><li>Find out your ID: message @userinfobot — it replies with a number.</li>
-              </ol>
-              <p class="action-hint">Several: separate with commas; a group ID starts with “-”.</p>
+              <div class="details-body">
+                <ol>
+                  <li>Send @BotFather the command /newbot and choose a name — it will send you the bot token.</li><li>Open your bot and press “Start” (or send it anything).</li><li>Find out your ID: message @userinfobot — it replies with a number.</li>
+                </ol>
+                <p class="action-hint">Several: separate with commas; a group ID starts with “-”.</p>
+              </div>
             </details>
             <form id="notifier-form-telegram" method="post" action="/settings/notifier/telegram" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
@@ -360,10 +368,12 @@
 
             <details class="technical-details notifier-steps" open>
               <summary>How to connect</summary>
-              <ol>
-                <li>In Discord, open the channel → ⚙ “Edit Channel” → “Integrations” → “Webhooks”.</li><li>Press “New Webhook”; you may name it TOW.</li><li>Press “Copy Webhook URL”.</li>
-              </ol>
-              <p class="action-hint">The webhook is a key to the channel; TOW keeps it encrypted.</p>
+              <div class="details-body">
+                <ol>
+                  <li>In Discord, open the channel → ⚙ “Edit Channel” → “Integrations” → “Webhooks”.</li><li>Press “New Webhook”; you may name it TOW.</li><li>Press “Copy Webhook URL”.</li>
+                </ol>
+                <p class="action-hint">The webhook is a key to the channel; TOW keeps it encrypted.</p>
+              </div>
             </details>
             <form id="notifier-form-discord" method="post" action="/settings/notifier/discord" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
@@ -403,10 +413,12 @@
 
             <details class="technical-details notifier-steps" open>
               <summary>How to connect</summary>
-              <ol>
-                <li>Open callmebot.com → the WhatsApp section and add the number shown there to your phone&#39;s contacts.</li><li>Send it this phrase in WhatsApp: I allow callmebot to send me messages</li><li>It replies with an apikey — a number.</li>
-              </ol>
-              <p class="action-hint">Sent via the free CallMeBot service, not the official WhatsApp API.</p>
+              <div class="details-body">
+                <ol>
+                  <li>Open callmebot.com → the WhatsApp section and add the number shown there to your phone&#39;s contacts.</li><li>Send it this phrase in WhatsApp: I allow callmebot to send me messages</li><li>It replies with an apikey — a number.</li>
+                </ol>
+                <p class="action-hint">Sent via the free CallMeBot service, not the official WhatsApp API.</p>
+              </div>
             </details>
             <form id="notifier-form-whatsapp" method="post" action="/settings/notifier/whatsapp" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
@@ -454,10 +466,12 @@
 
             <details class="technical-details notifier-steps" open>
               <summary>How to connect</summary>
-              <ol>
-                <li>Install the ntfy app on your phone (Google Play, App Store or F-Droid).</li><li>Take the ntfy topic name below (already made up, long and hard to guess) or choose your own.</li><li>In the app, press “+” and subscribe to this ntfy topic.</li>
-              </ol>
-              <p class="action-hint">Anyone who knows the ntfy topic name can read its messages: do not make the name short and do not publish it.</p>
+              <div class="details-body">
+                <ol>
+                  <li>Install the ntfy app on your phone (Google Play, App Store or F-Droid).</li><li>Take the ntfy topic name below (already made up, long and hard to guess) or choose your own.</li><li>In the app, press “+” and subscribe to this ntfy topic.</li>
+                </ol>
+                <p class="action-hint">Anyone who knows the ntfy topic name can read its messages: do not make the name short and do not publish it.</p>
+              </div>
             </details>
             <form id="notifier-form-ntfy" method="post" action="/settings/notifier/ntfy" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
@@ -716,27 +730,33 @@
           <div class="settings-actions"><button type="button" class="ghost" data-update-reload hidden>Reload page</button></div>
           <details class="technical-details" data-update-details>
             <summary>More: history, rollback and log</summary>
-            <p class="action-hint" data-update-history hidden></p>
-            <p class="action-hint" data-update-support></p>
-          <details class="technical-details" data-update-rollback hidden>
-            <summary>Install another version or roll back</summary>
-            <p class="action-hint">Web updates support published stable versions from 1.22.21. Data is kept; an incompatible data schema refuses the change. Older releases require the terminal and may not understand current data.</p>
-            <div class="field">
-              <label for="rollback-version">Release version</label>
-              <input id="rollback-version" class="w-m" data-update-version inputmode="text" placeholder="e.g. 1.22.21" maxlength="32" autocomplete="off">
+            <div class="details-body">
+              <p class="action-hint" data-update-history hidden></p>
+              <p class="action-hint" data-update-support></p>
+              <details class="technical-details" data-update-rollback hidden>
+                <summary>Install another version or roll back</summary>
+                <div class="details-body"><div class="form-grid">
+                  <p class="action-hint">Web updates support published stable versions from 1.22.21. Data is kept; an incompatible data schema refuses the change. Older releases require the terminal and may not understand current data.</p>
+                  <div class="field">
+                    <label for="rollback-version">Release version</label>
+                    <input id="rollback-version" class="w-m" data-update-version inputmode="text" placeholder="e.g. 1.22.21" maxlength="32" autocomplete="off">
+                  </div>
+                  <div class="settings-actions"><button type="button" class="ghost" data-update-apply>Install version</button><button type="button" class="ghost" data-update-previous hidden></button></div>
+                </div></div>
+              </details>
+              <p class="action-hint">Stable releases only. Nothing is installed without you.</p>
+              <details class="technical-details">
+                <summary>How to update</summary>
+                <div class="details-body">
+                  <p>Press “Update” above, or run “Update TOW” in the TOW folder. For a specific version run:</p>
+                  <code data-release-command>scripts/tow update --ref v<version></code>
+                </div>
+              </details>
+              <details class="technical-details" data-update-log>
+                <summary>Update log</summary>
+                <pre class="details-body" data-update-log-text>Open this section to read the latest update log.</pre>
+              </details>
             </div>
-            <div class="settings-actions"><button type="button" class="ghost" data-update-apply>Install version</button><button type="button" class="ghost" data-update-previous hidden></button></div>
-          </details>
-          <p class="action-hint">Stable releases only. Nothing is installed without you.</p>
-          <details class="technical-details">
-            <summary>How to update</summary>
-            <p>Press “Update” above, or run “Update TOW” in the TOW folder. For a specific version run:</p>
-            <code data-release-command>scripts/tow update --ref v<version></code>
-          </details>
-          <details class="technical-details" data-update-log>
-            <summary>Update log</summary>
-            <pre data-update-log-text>Open this section to read the latest update log.</pre>
-          </details>
           </details>
           <noscript><p class="action-hint">Without JavaScript, use Release notes to check the latest version.</p></noscript>
         </section>
@@ -776,7 +796,7 @@
 
         <details class="technical-details">
           <summary>Technical details</summary>
-          <dl>
+          <dl class="details-body">
             <div><dt>Web page running since</dt><dd><short-time></dd></div>
             <div><dt>PID</dt><dd><code>4321</code></dd></div>
             <div><dt>Autostart</dt><dd><code>—</code></dd></div>
@@ -843,8 +863,10 @@
 
     <details class="technical-details notifier-steps" id="protection-guide" open>
       <summary>How to connect</summary>
+      <div class="details-body">
       <ol><li>Install and start the service yourself (FlareSolverr, Byparr…). An “On demand” module is already installed.</li><li>Choose its type and enter its address, e.g. http://127.0.0.1:8191.</li><li>Tick “Use this connection” and “Use challenge recovery”, then Save.</li><li>On Home, open the failed topic and press “Check access now”.</li></ol>
       <p class="action-hint"><a href="/settings/help#site-access">Read more in the guide</a></p>
+      </div>
     </details>
     <form method="post" action="/settings/protection" class="settings-form form-grid protection-form" data-return-target="acc-protection">
       <fieldset>
@@ -875,11 +897,11 @@
 
         <details class="technical-details protection-limits">
           <summary>Attempt limits</summary>
-          <div class="field-row">
+          <div class="details-body"><div class="field-row">
             <div class="field"><label for="protection-timeout">Time limit, s</label><input id="protection-timeout" name="timeout_sec" value="30" class="w-xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">5–90, for the whole recovery.</p></div>
             <div class="field"><label for="protection-interval">Retry after, s</label><input id="protection-interval" name="min_interval_sec" value="1800" class="w-xs" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">60–86400 per site; 1800 = 30 min.</p></div>
             <div class="field"><label for="protection-attempts">Calls per recovery</label><input id="protection-attempts" name="max_attempts" value="2" class="w-xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">From 1 to 4.</p></div>
-          </div>
+          </div></div>
         </details>
         <div class="settings-actions"><button type="submit">Save</button></div>
       </fieldset>
@@ -887,17 +909,21 @@
 
     <details class="technical-details">
       <summary>If access is still blocked</summary>
-      <p>Expand the topic&#39;s warning for each mirror&#39;s reason and retry time. The log identifies the failed stage: module startup, service response or topic access. A connection failure needs its type and address checked; a sign-in error needs the account checked on Sites.</p>
-      <p>Services do not remove bans, download quotas or request rate limits. Wait out a 429 pause. An interactive check may require supported browser sign-in; access through every future challenge is not guaranteed.</p>
-      <p>Use only services you trust and sandbox their browser&#39;s network access. They receive an audited public page, not your password, sign-in cookies or topic link. TOW keeps only verified clearance, encrypted and time-limited. Interactive challenges may still require your action; download limits remain enforced.</p>
+      <div class="details-body">
+        <p>Expand the topic&#39;s warning for each mirror&#39;s reason and retry time. The log identifies the failed stage: module startup, service response or topic access. A connection failure needs its type and address checked; a sign-in error needs the account checked on Sites.</p>
+        <p>Services do not remove bans, download quotas or request rate limits. Wait out a 429 pause. An interactive check may require supported browser sign-in; access through every future challenge is not guaranteed.</p>
+        <p>Use only services you trust and sandbox their browser&#39;s network access. They receive an audited public page, not your password, sign-in cookies or topic link. TOW keeps only verified clearance, encrypted and time-limited. Interactive challenges may still require your action; download limits remain enforced.</p>
+      </div>
     </details>
 
     <details class="technical-details">
       <summary>Reset saved access</summary>
-      <p class="action-hint" id="protection-reset-hint">Clears Cloudflare clearance, retry records and cooldowns. Sign-ins, connections and torrents stay. Not available during a check.</p>
-      <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset saved site clearance, retry reservations and service cooldowns? Service settings and site sign-ins remain unchanged." data-confirm-label="Reset saved access" data-confirm-danger>
-        <button type="submit" class="ghost" aria-describedby="protection-reset-hint">Reset saved access</button>
-      </form>
+      <div class="details-body"><div class="form-grid">
+        <p class="action-hint" id="protection-reset-hint">Clears Cloudflare clearance, retry records and cooldowns. Sign-ins, connections and torrents stay. Not available during a check.</p>
+        <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="Reset saved site clearance, retry reservations and service cooldowns? Service settings and site sign-ins remain unchanged." data-confirm-label="Reset saved access" data-confirm-danger>
+          <button type="submit" class="ghost" aria-describedby="protection-reset-hint">Reset saved access</button>
+        </form>
+      </div></div>
     </details>
 
   </div>

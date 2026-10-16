@@ -72,6 +72,7 @@
       {#- Filling the patterns in by hand: the walk-through beside the fields it is about. -#}
       <details class="technical-details by-hand">
         <summary>{{ t('sites.help.by_hand') }}</summary>
+        <div class="details-body">
         <p>{{ tm('sites.help.p2', field=t('sites.name')) }}</p>
         <p>{{ tm('sites.help.p3', field=t('sites.mirrors')) }}</p>
         <p>{{ tm('sites.help.p4', field=t('sites.url_regex'), number='(\\d+)', dot='\\.') }}</p>
@@ -86,6 +87,7 @@
           <li>kinozal: <code>/.dl./download.php?id={id}</code></li>
           <li>{{ tm('sites.help.forum', first='/forum/dl.php?t={id}', second='/download.php?id={id}') }}</li>
         </ul>
+        </div>
       </details>
       </div>
     </details>
@@ -131,6 +133,7 @@
         {% if (spec.fetch_hosts or [])|length > 1 %}
         <div class="mirror-choice" role="group" aria-labelledby="mirror-choice-{{ name }}">
           <p class="sub" id="mirror-choice-{{ name }}" title="{{ t('sites.choose_main_title') }}">{{ t('sites.choose_main') }}</p>
+          <div class="mirror-picks">
           {% for h in spec.fetch_hosts %}
           {% set matches = mine | selectattr('host', 'equalto', h) | list %}
           {% set p = matches[0] if matches else none %}
@@ -140,6 +143,7 @@
             <button type="submit" class="ghost sm" title="{{ t('sites.make_main') }}: {{ h }}{% if p %} — {{ p.reason }}{% endif %}" aria-pressed="{{ 'true' if is_main else 'false' }}">{% if p %}<span class="dot {{ 'ok' if p.ok else 'warn' }}" aria-hidden="true"></span><span class="sr-only">{{ p.reason }}</span>{% endif %}<span class="mirror-label">{{ h.replace('https://','').replace('http://','') }}</span>{% if is_main %} <span class="pill ok">{{ t('sites.main') }}</span>{% endif %}</button>
           </form>
           {% endfor %}
+          </div>
         </div>
         {% endif %}
         {#- The card (1.32): the sign-in first, then the mirrors; what a preset fills in waits under
@@ -216,7 +220,7 @@
   {% else %}
   <div class="empty-state">
     <p>{{ t('sites.empty') }}</p>
-    <p><a class="btn" href="#new" data-open-new>{{ t('sites.add_title') }}</a></p>
+    <div class="actions"><a class="btn" href="#new" data-open-new>{{ t('sites.add_title') }}</a></div>
   </div>
   {% endfor %}
 </div>

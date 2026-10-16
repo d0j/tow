@@ -12,15 +12,19 @@
   <p class="field-hint" id="content-help-{{ topic.id if topic else 'new' }}" data-content-help-text hidden>{{ t('content.help') }} {{ t('content.magnet_hint') }}</p>
   <noscript><p class="field-hint">{{ t('content.no_script') }}</p></noscript>
   {% if topic and topic.selection and topic.selection.mode == 'exact' %}<p class="field-hint">{{ t('content.pending') }}</p>{% endif %}
+  {% set upload_id = 'content-upload-' ~ (topic.id if topic else 'new') %}
   <details class="technical-details">
     <summary>{{ t('content.other_sources') }}</summary>
-    {% set upload_id = 'content-upload-' ~ (topic.id if topic else 'new') %}
-    <label for="{{ upload_id }}">{{ t('content.upload') }}</label>
-    {{ file_input(upload_id, accept='.torrent,application/x-bittorrent', data_content_upload=true) }}
+    <div class="details-body"><div class="form-grid">
+    <div class="field">
+      <label for="{{ upload_id }}">{{ t('content.upload') }}</label>
+      {{ file_input(upload_id, accept='.torrent,application/x-bittorrent', data_content_upload=true) }}
+    </div>
     <div class="actions">
       <button type="button" class="ghost" data-content-magnet title="{{ t('content.magnet_hint') }}">{{ t('content.magnet_load') }}</button>
       <button type="button" class="ghost" data-content-fresh hidden>{{ t('content.fresh_load') }}</button>
     </div>
+    </div></div>
   </details>
   <button type="button" class="ghost" data-content-limited hidden>{{ t('content.limited_load') }}</button>
   {#- A saved copy is said on the status line (content.js); only a copy that could not be saved

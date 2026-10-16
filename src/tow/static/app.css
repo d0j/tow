@@ -44,12 +44,45 @@
   /* Where a link's target lands: below the sticky header and the message strip, which messages.js
      measures (--msg-top, --msg-h, set on the root); without it, the header's usual height. */
   --land-top: calc(var(--msg-top, 2.55rem) + var(--msg-h, 0px) + .75rem);
+  /* One spacing scale (AGENTS.md, "UI standard"): every margin, padding and gap is 0, one of these
+     or a listed exception (tests/test_ui_standard.py). 3 attached (label → field, field → hint,
+     heading → its subtitle, item → item), 6 related (text parts, buttons of a group, summary → its
+     content, sections, icon ↔ text), 9 groups (field group → group, last field → buttons, a box's
+     block padding, a nested box's inline padding), 12 blocks (a top-level box's inline padding,
+     fields in a row, columns, a new heading), 18 the text after a chevron or a list marker. */
+  --sp-1: .1875rem;
+  --sp-2: .375rem;
+  --sp-3: .5625rem;
+  --sp-4: .75rem;
+  --sp-5: 1.125rem;
+  /* The page's side gutter, the header's too: 12 px on a phone, up to 20 px on a wide screen. */
+  --gutter: clamp(var(--sp-4), 1.5vw, 1.25rem);
 }
 :root[data-theme="light"] { color-scheme: light; --shadow: 0 4px 16px rgba(20,30,50,.08); }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) { color-scheme: light; --shadow: 0 4px 16px rgba(20,30,50,.08); }
 }
 * { box-sizing: border-box; }
+/* No browser margins: the container that holds a text, a list or a heading spaces it (below). */
+:where(p, ol, ul, dl, dd, pre, figure, blockquote, h1, h2, h3, h4) { margin: 0; }
+[hidden] { display: none !important; }
+/* A <noscript> inside a flow would take a gap where nothing shows. */
+@media (scripting: enabled) { noscript { display: none; } }
+/* A flow container spaces its children by one gap of the scale; they carry no margins of their own,
+   so a hidden child takes no room and nothing adds up. The named containers below join these. */
+:where(.stack-1, .stack-2, .stack-3, .stack-4) {
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start;
+}
+.stack-1 { gap: var(--sp-1); }
+.stack-2 { gap: var(--sp-2); }
+.stack-3 { gap: var(--sp-3); }
+.stack-4 { gap: var(--sp-4); }
+:where(.stack-1, .stack-2, .stack-3, .stack-4) > :is(button, .btn) { justify-self: start; }
+/* An empty live region stays in the page for a screen reader but takes no room (an empty hint,
+   status or note); once it says something it is laid out as usual. */
+:is(.field-hint, .action-hint, .check-field p, .sub, [role="status"], [aria-live]):empty {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
 body {
   margin: 0;
   min-height: 100vh;
@@ -158,20 +191,18 @@ main {
   margin-inline: auto;
   padding-block: clamp(.8rem, 1.6vw, 1.5rem);
 }
-h1 { font-size: 1.45rem; font-weight: 650; margin: 0 0 .35rem; }
+h1 { font-size: 1.45rem; font-weight: 650; }
+/* A page's title (and the way back above it) and its content: 9 px. */
+main > :is(h1, .help-back) { margin-block-end: var(--sp-3); }
 /* M1: sign-in and first start: one centred card, the same fields and buttons as elsewhere. */
 main.auth-shell {
   width: 100%; min-height: 100vh; margin: 0; padding: 1rem;
   display: grid; place-items: center;
 }
 .auth-card { width: min(26rem, 100%); }
+.card.auth-card { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3); }
 .auth-card.auth-card-wide { width: min(34rem, 100%); }
-.auth-card h1 { margin-bottom: .6rem; }
-.auth-card > p { margin: .35rem 0 .7rem; }
-.auth-form { display: grid; gap: .3rem; }
-.auth-form label { margin-top: 0; }
-.auth-card .technical-details { margin-top: 1rem; }
-.lead { color: var(--mut); margin: 0 0 1.2rem; }
+.lead { color: var(--mut); }
 .flash {
   display: flex; align-items: center; justify-content: space-between; gap: .6rem;
   background: var(--panel2); border: 1px solid var(--line); /* the kinds' colours: messages.css */
@@ -187,8 +218,8 @@ main.auth-shell {
 .flash > span:first-child:not(.msg-ico), .flash > .msg-text { flex: 1 1 auto; min-width: 0; }
 .flash-undo { margin: 0; flex: 0 0 auto; }
 .undo-left { font-variant-numeric: tabular-nums; color: var(--mut); }
-.grid { display: grid; gap: 1rem; }
-.grid.stats { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 1.2rem; }
+.grid { display: grid; gap: var(--sp-3); }
+.grid.stats { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -196,9 +227,8 @@ main.auth-shell {
   padding: 1rem 1.1rem;
   box-shadow: var(--shadow);
 }
-/* Cards stacked on a page (Diagnostics) keep the gap the stat tiles above them have. */
-main > .card + .card, main > .card + form { margin-top: 1rem; }
 .credential-prompt[open] {
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3);
   width: min(34rem, calc(100% - 2rem));
   margin: 1rem auto;
   padding: 1.1rem 1.2rem;
@@ -208,21 +238,23 @@ main > .card + .card, main > .card + form { margin-top: 1rem; }
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
-.credential-prompt h2 { margin: 0 0 .45rem; font-size: 1.05rem; }
-.credential-prompt p { margin: .35rem 0; }
+.credential-prompt h2 { font-size: 1.05rem; }
 .credential-prompt::backdrop { background: rgba(0,0,0,.42); }
 /* UI:C1: the one confirmation (app.js towConfirm): the question, then the action and Cancel. */
 dialog.confirm {
   width: min(26rem, calc(100% - 2rem)); margin: auto; padding: 1rem 1.1rem;
+  grid-template-columns: minmax(0, 1fr); gap: var(--sp-3);
   color: var(--fg); background: var(--panel); border: 1px solid var(--acc2);
   border-radius: var(--radius); box-shadow: var(--shadow);
 }
 dialog.confirm.danger { border-color: var(--line); }
+dialog.confirm[open] { display: grid; }
 dialog.confirm::backdrop { background: rgba(0,0,0,.42); }
-.confirm-text { margin: 0 0 .9rem; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.confirm-text { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .confirm-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .stat .k { color: var(--mut); font-size: 12px; }
-.stat .v { font-size: 1.05rem; font-weight: 650; margin-top: .15rem; overflow-wrap: anywhere; }
+.stat { display: grid; gap: var(--sp-1); }
+.stat .v { font-size: 1.05rem; font-weight: 650; overflow-wrap: anywhere; }
 .pill {
   display: inline-block; font-size: 11px; font-weight: 650;
   padding: .15rem .5rem; border-radius: 999px; white-space: nowrap;
@@ -346,10 +378,7 @@ button.ico, button.row-ico, button.flash-x { min-height: 0; }
 .folder-options.above { top: auto; bottom: calc(100% + .2rem); }
 .folder-options [role="option"]:hover, .folder-options [aria-selected="true"] { background: var(--panel2); color: var(--acc); }
 /* Save, Cancel and Delete: on a 320 px phone they wrap as whole buttons, never a two-line one. */
-.edit-actions {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .5rem;
-  margin-top: .55rem;
-}
+.edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 .edit-actions > button { white-space: nowrap; }
 /* D1: a row's actions stay in its form's column, Delete right after Cancel (at the row's far end it
    was 1150 px from Save). */
@@ -358,8 +387,6 @@ button.ico, button.row-ico, button.flash-x { min-height: 0; }
    block next to the form's one solid button. */
 button.ghost.danger, .btn.ghost.danger { background: transparent; border-color: var(--line); color: var(--bad); }
 button.ghost.danger:hover, .btn.ghost.danger:hover { background: var(--pill-bad-bg); border-color: var(--bad); filter: none; }
-.notifier-steps { margin: .2rem 0 .6rem; }
-.client-add { margin-top: .9rem; }
 .backup-folder { padding-top: .2rem; }
 .notifier-card > summary { list-style: none; cursor: pointer; align-items: center; }
 .notifier-card > summary::-webkit-details-marker { display: none; }
@@ -369,16 +396,14 @@ button.ghost.danger:hover, .btn.ghost.danger:hover { background: var(--pill-bad-
 .integration-pills { display: inline-flex; gap: .35rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .client-add-row { display: flex; gap: .5rem; align-items: center; }
 .client-add-row select { flex: 0 1 15rem; min-width: 0; }
-.notifier-steps ol { margin: .45rem 0 .3rem; padding-left: 1.2rem; display: grid; gap: .25rem; color: var(--fg); font-size: 13px; }
-.row { display: grid; gap: .55rem; }
-.actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .8rem; }
+.notifier-steps ol { color: var(--fg); font-size: 13px; }
+.actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
-.hash { color: var(--mut); margin-left: .5rem; }
 .topic-title {
   font-weight: 650; margin: 0; flex: 1;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.sub { color: var(--mut); font-size: 13px; margin: .2rem 0 .15rem; overflow-wrap: anywhere; }
+.sub { color: var(--mut); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
 /* A piece of text that never breaks inside (a free space with its " · ", Q4). */
 .nowrap { white-space: nowrap; }
@@ -414,15 +439,20 @@ code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 /* The sign-in pill keeps its own width in a column wide enough for the longest one ("No sign-in
    needed" ran out of a 5.5 rem pill; the Russian "Saved sign-in details" is 136 px). */
 details.row-edit.sites > summary > .pill { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.section-title { margin: 0 0 .6rem; font-size: 1rem; }
-.help-page { max-width: 42rem; }
+.section-title { font-size: 1rem; }
+/* The guide: its sections 12 px apart, a section's title, text and lists 6 px apart; Diagnostics:
+   its blocks 9 px apart, a card's title and text 6 px. */
+.help-page { max-width: 42rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
+.help-page > :is(header, section) { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.doctor-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.doctor-page .card:not(.stat) { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-2); }
 .doctor-page p { max-width: 46rem; } /* Diagnostics' notes end where a form ends */
-.help-back { margin: 0 0 .7rem; }
-.help-title { font-size: 1.1rem; margin: 0 0 .6rem; }
-.help-page h2 { font-size: 1rem; margin: 1rem 0 .35rem; }
+.help-title { font-size: 1.1rem; }
+.help-page h2 { font-size: 1rem; }
 .help-page h2[id] { scroll-margin-top: var(--land-top); }
 .help-page p, .help-page li { color: var(--fg); }
-.help-page ul, .help-page ol { margin: .2rem 0 .6rem; padding-left: 1.2rem; }
+/* A list's text starts 18 px in (its marker in front of it), its items 3 px apart. */
+:is(.help-page, .details-body, .help-pop) :is(ul, ol) { display: grid; gap: var(--sp-1); padding-left: var(--sp-5); }
 /* H6: the Log and History read as sentences in the page's font; their times keep even digits and
    only raw technical text (code) is monospace. */
 .log-box { max-height: 18rem; overflow: auto; font: 13px/1.45 "Segoe UI", system-ui, sans-serif; }
@@ -433,7 +463,7 @@ details.row-edit.sites > summary > .pill { justify-self: start; max-width: 100%;
 .log-line details.raw-error { display: inline; color: var(--mut); font-size: 12px; }
 .log-line details.raw-error > summary { display: inline; color: var(--acc); }
 .log-line details.raw-error[open] { display: block; }
-details.raw-error > code { display: block; margin-top: .2rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+details.raw-error > code { display: block; margin-top: var(--sp-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 dialog.log-pop {
   /* As tall as its lines, up to most of the screen (it opened full height for two lines: on a
      modal dialog, which sits at inset-block 0, `height: auto` stretches it to the screen). */
@@ -452,41 +482,46 @@ dialog.log-pop::backdrop { background: rgba(0,0,0,.55); }
 }
 dialog.log-pop .log-box { flex: 1 1 auto; max-height: none; min-height: 0; padding: .5rem 1rem 1rem; }
 .list-head { color: var(--mut); font-size: 12px; border-bottom: 1px solid var(--line); }
-.empty-state { padding: 2rem 1rem; text-align: center; }
+.empty-state {
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3);
+  padding: 2rem 1rem; text-align: center;
+}
+.empty-state .actions { justify-content: center; }
 .list-empty { margin: 0; padding: 1.25rem 1rem; text-align: center; color: var(--mut); }
 details.row-edit { border-bottom: 1px solid var(--line); }
 details.row-edit > summary { cursor: pointer; list-style: none; }
 details.row-edit > summary::-webkit-details-marker { display: none; }
-.mirror-pick { display: inline-block; max-width: 100%; margin: .1rem .15rem .1rem 0; }
+.mirror-pick { display: flex; max-width: 100%; }
+/* "Main mirror": the line above its choices (3 px), the choices 6 px apart as they wrap. */
+.mirror-choice { display: grid; gap: var(--sp-1); }
+.mirror-picks { display: flex; flex-wrap: wrap; gap: var(--sp-2); min-width: 0; }
 .mirror-list { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .8rem; min-width: 0; font-size: 13px; }
 .mirror { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
 .mirror > .pill { white-space: normal; max-width: 100%; }
-.mirror-choice { margin: .3rem 0 .5rem; }
-.mirror-choice .sub { margin-bottom: .3rem; }
 .mirror-pick button { max-width: 100%; text-align: left; }
 .mirror-pick .mirror-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mirror-pick button > .dot, .mirror-pick button > .pill { flex: 0 0 auto; }
-.edit-panel { padding: .4rem .8rem 1rem; border-top: 1px solid var(--line); background: var(--panel2); }
+.edit-panel {
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3);
+  padding: .4rem .8rem 1rem; border-top: 1px solid var(--line); background: var(--panel2);
+}
 .new-topic-form, .new-site-form { margin-top: 0; }
 .new-topic-form > label:first-of-type, .new-site-form > label:first-of-type { margin-top: 0; }
 details summary { cursor: pointer; }
-details.add { margin-bottom: 1rem; }
+details.add { margin-bottom: var(--sp-3); }
 /* The add card is as wide as its form (46 rem) plus its padding and border, not the whole page. */
 details#new.add.card { max-width: calc(46rem + 2.2rem + 2px); }
 details.add > summary { color: var(--acc); font-weight: 650; }
 /* The add forms say what they add; the site form's first field is the link that fills it in. */
 .add-title { margin: 0; font-size: 1.05rem; line-height: 1.3; }
 .lbl-row.add-head { margin: 0 0 .3rem; }
-details.advanced { margin-top: .7rem; }
 details.advanced > summary { width: fit-content; color: var(--acc); font-size: 12.5px; }
 .check-label { display: flex; align-items: center; gap: .45rem; min-height: 1.5rem; color: var(--fg); font-size: 12.5px; }
-.empty-state p { margin: .2rem 0 .6rem; }
 /* First start: what TOW is and the next steps (setup page, empty Home). */
 .first-steps { text-align: left; max-width: 44rem; margin-inline: auto; }
-.steps { margin: .5rem 0 .8rem; padding-left: 1.3rem; display: grid; gap: .55rem; }
-.steps li { padding-left: .2rem; }
+.steps { padding-left: var(--sp-5); display: grid; gap: var(--sp-2); }
 .steps .step-head { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; font-weight: 600; }
-.steps .field-hint { display: block; margin-top: .1rem; }
+.steps .field-hint { display: block; margin-top: var(--sp-1); }
 .auth-card .add-title { margin-top: 1rem; }
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { text-align: left; padding: .5rem .45rem; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: top; }
@@ -556,8 +591,7 @@ i.dot { font-style: normal; }
 details#new { position: relative; }
 /* H2: a target of #new or of the add error is not hidden under the sticky header. */
 #new, #add-error { scroll-margin-top: var(--land-top); }
-.add-error p { margin: 0; }
-.add-error .sub { margin-top: .2rem; }
+.add-error { display: grid; gap: var(--sp-1); }
 details.help { display: inline-flex; align-items: center; }
 details.help > summary {
   list-style: none; cursor: pointer;
@@ -670,7 +704,6 @@ label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: poin
 .check-field p { grid-column: 2; margin: 0; color: var(--mut); font-size: 12px; }
 .check-field p.locked-hint { color: var(--warn); }
 .check-field input:disabled + label { color: var(--mut); cursor: not-allowed; }
-.check-field.nested { margin-left: 1.75rem; }
 /* One persistent note (_note.html): a state shown while it lasts, in the messages' colours - neutral
    by default, amber (warn) as a .flash.warn, red (bad) as a .flash.error: one red for a failure,
    said now or kept. The text wraps beside the icon; controls after it (Copy) go under it on a phone. */
@@ -701,7 +734,9 @@ label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: poin
   gap: .75rem; margin-top: .85rem; padding-top: .85rem;
   border-top: 1px solid var(--line);
 }
-.technical-details { margin-top: .7rem; color: var(--mut); font-size: 12px; }
+.technical-details { color: var(--mut); font-size: 12px; }
+/* A disclosure's content is one body, 6 px under its summary, its parts 6 px apart. */
+.details-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-2); margin-top: var(--sp-2); }
 .technical-details > summary { width: fit-content; color: var(--acc); }
 /* A1: one disclosure everywhere - a summary at least 28 px high (18 px "How to connect" was below
    the 24 px target) and one chevron, the Settings sections' own, pointing right when closed and
@@ -725,7 +760,7 @@ label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: poin
 .technical-details > summary:focus-visible, .settings-log > summary:focus-visible {
   outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 4px;
 }
-.technical-details dl { margin: .45rem 0 0; display: grid; gap: .25rem; }
+.technical-details dl { display: grid; gap: var(--sp-1); }
 .technical-details dl > div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: .6rem; }
 .technical-details dt { color: var(--mut); }
 .technical-details dd { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
@@ -843,7 +878,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   .settings-actions button { width: 100%; }
   /* The sign-in and first-start pages keep their buttons as wide as their words, as Settings does. */
   .auth-card .settings-actions button { width: auto; }
-  .check-field.nested { margin-left: 0; }
   .service-restart { align-items: stretch; flex-direction: column; }
   .service-restart button { width: 100%; }
   .technical-details dl > div { grid-template-columns: 1fr; gap: .05rem; }
@@ -891,11 +925,7 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .settings-page-compact .service-restart {
   margin-top: .58rem; padding-top: .58rem;
 }
-.settings-page-compact .technical-details { margin-top: .5rem; }
 .settings-page-compact .notice { padding: .48rem .58rem; }
-.support-note {
-  margin: .5rem 0 0; color: var(--mut); font-size: 12px; line-height: 1.4;
-}
 .settings-page-compact button:not(.ico) { min-width: 0; }
 .immediate-form { margin: 0; }
 .service-restart { justify-content: flex-start; }
@@ -912,6 +942,7 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .restore-point-row b { font-size: 13px; font-weight: 600; }
 .restore-point-row span { color: var(--mut); font-size: 12px; }
 .restore-point-row .backup-copy-actions { align-items: center; justify-content: flex-end; gap: .35rem; margin: 0; }
+.backup-delete-confirm { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
 .backup-delete-confirm h2 { font-size: .95rem; }
 .backup-inventory, .backup-location { min-width: 0; border: 1px solid var(--line); border-radius: 6px; }
 .backup-inventory > summary, .backup-location > summary { padding: .35rem .5rem; font-size: 12.5px; cursor: pointer; }
@@ -1220,13 +1251,17 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
   display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: .4rem; margin-left: .4rem;
 }
 .secret-store-copy > button { white-space: nowrap; }
-/* Check all's report: below the sticky header when its link lands on it; closed by its x. */
-.check-results { padding: .8rem; margin-bottom: .6rem; scroll-margin-top: var(--land-top); }
+/* Check all's report: below the sticky header when its link lands on it; closed by its x. Its
+   title, sentences and list 6 px apart, the list's rows 3 px. */
+.check-results {
+  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-2);
+  padding: .8rem; margin-bottom: .6rem; scroll-margin-top: var(--land-top);
+}
 .check-results-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
-.check-results h2 { margin-top: 0; font-size: 1.05rem; } /* as every card and dialog title */
+.check-results h2 { font-size: 1.05rem; } /* as every card and dialog title */
 .check-results h2 .sub { font-weight: 400; } /* the run's time beside the title is not bold */
-.check-result-list { list-style: none; padding: 0; }
-.check-result-row { display: flex; flex-wrap: wrap; gap: .3rem .6rem; margin: .5rem 0; overflow-wrap: anywhere; }
+.check-result-list { list-style: none; padding: 0; display: grid; gap: var(--sp-1); }
+.check-result-row { display: flex; flex-wrap: wrap; gap: .3rem .6rem; overflow-wrap: anywhere; }
 .check-result-row > :last-child { flex: 1 1 20rem; }
 .check-activity { flex-wrap: wrap; align-items: center; margin: 0 0 .8rem; }
 .flash:has(> a) { flex-wrap: wrap; }
@@ -1344,7 +1379,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* The selection's rule field is hidden for "All files" and "Choose files" (content.js), also as a
    group of the form grid. */
 .form-grid .content-unused { display: none; }
-.panel-top { margin-bottom: .45rem; }
 /* The content picker: the whole box for "Choose files", one compact line for a rule, nothing for
    all files (data-view, content.js). */
 .content-picker[data-view="none"] { display: none; }

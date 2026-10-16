@@ -11,8 +11,10 @@
     {#- The steps are open until a connection is saved; how it works in full is in the guide. #}
     <details class="technical-details notifier-steps" id="protection-guide"{% if not protection.cards|rejectattr('new')|list %} open{% endif %}>
       <summary>{{ t('settings.common.how_to_connect') }}</summary>
+      <div class="details-body">
       <ol><li>{{ t('protection_ui.step_install') }}</li><li>{{ t('protection_ui.step_address') }}</li><li>{{ t('protection_ui.step_enable') }}</li><li>{{ t('protection_ui.step_check') }}</li></ol>
       <p class="action-hint"><a href="/settings/help#site-access">{{ t('protection_ui.guide_link') }}</a></p>
+      </div>
     </details>
     <form method="post" action="/settings/protection" class="settings-form form-grid protection-form" data-return-target="acc-protection">
       <fieldset{% if not access_local %} disabled{% endif %}>
@@ -57,11 +59,11 @@
         {% if protection.cards|length >= 16 and not protection.cards|selectattr('new')|list %}<p class="section-note">{{ t('protection_ui.capacity_hint') }}</p>{% endif %}
         <details class="technical-details protection-limits">
           <summary>{{ t('protection_ui.limits') }}</summary>
-          <div class="field-row">
+          <div class="details-body"><div class="field-row">
             <div class="field"><label for="protection-timeout">{{ t('protection_ui.timeout') }}</label><input id="protection-timeout" name="timeout_sec" value="{{ protection.timeout_sec }}" class="w-xs" type="number" min="5" max="90" inputmode="numeric" aria-describedby="protection-timeout-hint"><p class="field-hint" id="protection-timeout-hint">{{ t('protection_ui.timeout_hint') }}</p></div>
             <div class="field"><label for="protection-interval">{{ t('protection_ui.interval') }}</label><input id="protection-interval" name="min_interval_sec" value="{{ protection.min_interval_sec }}" class="w-xs" type="number" min="60" max="86400" inputmode="numeric" aria-describedby="protection-interval-hint"><p class="field-hint" id="protection-interval-hint">{{ t('protection_ui.interval_hint') }}</p></div>
             <div class="field"><label for="protection-attempts">{{ t('protection_ui.attempts') }}</label><input id="protection-attempts" name="max_attempts" value="{{ protection.max_attempts }}" class="w-xs" type="number" min="1" max="4" inputmode="numeric" aria-describedby="protection-attempts-hint"><p class="field-hint" id="protection-attempts-hint">{{ t('protection_ui.attempts_hint') }}</p></div>
-          </div>
+          </div></div>
         </details>
         <div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div>
       </fieldset>
@@ -71,17 +73,21 @@
     {% endfor %}{% endif %}
     <details class="technical-details">
       <summary>{{ t('protection_ui.troubleshooting') }}</summary>
-      <p>{{ t('protection_ui.error_hint') }}</p>
-      <p>{{ t('protection_ui.limits_hint') }}</p>
-      <p>{{ t('protection_ui.trust') }}</p>
+      <div class="details-body">
+        <p>{{ t('protection_ui.error_hint') }}</p>
+        <p>{{ t('protection_ui.limits_hint') }}</p>
+        <p>{{ t('protection_ui.trust') }}</p>
+      </div>
     </details>
     {% if access_local %}
     <details class="technical-details">
       <summary>{{ t('protection_ui.recovery') }}</summary>
-      <p class="action-hint" id="protection-reset-hint">{{ t('protection_ui.reset_hint') }}</p>
-      <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="{{ t('protection_ui.reset_confirm') }}" data-confirm-label="{{ t('protection_ui.reset') }}" data-confirm-danger>
-        <button type="submit" class="ghost" aria-describedby="protection-reset-hint">{{ t('protection_ui.reset') }}</button>
-      </form>
+      <div class="details-body"><div class="form-grid">
+        <p class="action-hint" id="protection-reset-hint">{{ t('protection_ui.reset_hint') }}</p>
+        <form method="post" action="/settings/protection/reset" data-return-target="acc-protection" data-confirm="{{ t('protection_ui.reset_confirm') }}" data-confirm-label="{{ t('protection_ui.reset') }}" data-confirm-danger>
+          <button type="submit" class="ghost" aria-describedby="protection-reset-hint">{{ t('protection_ui.reset') }}</button>
+        </form>
+      </div></div>
     </details>
     {% endif %}
   </div>

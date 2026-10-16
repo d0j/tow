@@ -104,10 +104,12 @@
 {% from "_secret.html" import reveal %}
 {#- The title names the site; the line under it, the topic that asked. -#}
 <dialog class="credential-prompt" open aria-labelledby="tracker-credentials-title-{{ credential_prompt.id }}">
-  <h2 id="tracker-credentials-title-{{ credential_prompt.id }}">{{ t('home.auth.title', site=site_title(credential_prompt.tracker)) }}</h2>
-  <p class="sub">{{ credential_prompt.title or credential_prompt.url or credential_prompt.id }}</p>
+  <div class="stack-1">
+    <h2 id="tracker-credentials-title-{{ credential_prompt.id }}">{{ t('home.auth.title', site=site_title(credential_prompt.tracker)) }}</h2>
+    <p class="sub">{{ credential_prompt.title or credential_prompt.url or credential_prompt.id }}</p>
+  </div>
   {% if credential_prompt.browser_auth %}
-  <form method="post" action="/topics/{{ credential_prompt.id|urlencode }}/tracker-browser-auth" data-browser-auth-start>
+  <form class="form-grid" method="post" action="/topics/{{ credential_prompt.id|urlencode }}/tracker-browser-auth" data-browser-auth-start>
     <p class="field-hint">{{ t('home.auth.browser_where') }}</p>
     <div class="actions">
       <button type="submit">{{ t('home.auth.start') }}</button>
@@ -207,8 +209,10 @@
   {#- First start (6): three steps, each with where it is done and how far it is. -#}
   {% set steps = first_steps or {} %}
   <section class="empty-state first-steps" aria-labelledby="first-steps-title">
-    <h2 id="first-steps-title" class="add-title">{{ t('home.start.title') }}</h2>
-    <p class="sub">{{ t('home.start.lead') }}</p>
+    <div class="stack-1">
+      <h2 id="first-steps-title" class="add-title">{{ t('home.start.title') }}</h2>
+      <p class="sub">{{ t('home.start.lead') }}</p>
+    </div>
     <ol class="steps">
       <li>
         <span class="step-head"><a href="/settings?open=clients">{{ t('home.start.client') }}</a>
