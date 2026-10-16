@@ -276,11 +276,31 @@ def test_the_content_pickers_parts_stand_apart():
     assert "margin-top: .45rem" in _first(".content-picker > :not(:first-child):not(:empty)", content)
 
 
-def test_the_language_select_takes_its_own_line_on_a_small_phone():
-    """1.32 QA L7: at 320 px the select shared its line with Save and was cut off."""
-    small = CSS.partition("@media (max-width: 420px) {")[2]
-    assert small
-    assert "flex-basis: 100%" in _first(".inline-save > select", small)
+def test_the_language_is_one_segmented_choice_like_the_theme():
+    """1.32.1 L1: the language is three submit buttons (a select changed with the arrow keys would
+    reload at each step). They were a solid button and two outlines in a row of actions; they are
+    the theme's segmented control now - the chosen one raised (aria-pressed), each segment a 26 px
+    target that wraps whole on a small phone. The 1.32 select's phone rule went with the select."""
+    from bs4 import BeautifulSoup
+    from fastapi.testclient import TestClient
+
+    from tow.web import app
+
+    page = BeautifulSoup(TestClient(app).get("/settings").text, "html.parser")
+    form = page.select_one('form[action="/settings/language"]')
+    buttons = form.select('button[name="language"]')
+    assert len(buttons) == 3
+    assert all(b.find_parent(class_="theme-choice") for b in buttons)
+    assert [b["class"] for b in buttons] == [["theme-option"]] * 3
+    assert [b["aria-pressed"] for b in buttons].count("true") == 1
+    assert "background: transparent" in _first(".theme-option")
+    assert "border: 0" in _first(".theme-option")
+    raised = _first('.theme-option:has(input:checked), .theme-option[aria-pressed="true"]')
+    assert "background: var(--panel)" in raised
+    assert "outline: 2px solid var(--acc)" in _first(
+        ".theme-option:has(input:focus-visible), .theme-option:focus-visible"
+    )
+    assert ".inline-save > select" not in CSS
     # And the automatic choice says itself in a few words ("Автоматически — язык браузера (сейчас:
     # Ру…" was still cut off at 390 px on its own line).
     from tow import i18n

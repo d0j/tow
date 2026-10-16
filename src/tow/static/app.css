@@ -746,7 +746,9 @@ label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: poin
 .settings-log > summary small { color: var(--mut); font-size: 12px; }
 .settings-log-body { padding: 0 1rem 1rem; border-top: 1px solid var(--line); }
 .settings-log-body .section-note { margin-bottom: .55rem; }
-/* Settings → Theme: one segmented choice, an icon and a word per option; the chosen one is raised. */
+/* Settings → Theme and Language: one segmented choice; the chosen one is raised. A theme option is
+   a label with a radio, an icon and a word; a language is a submit button (aria-pressed), which
+   keeps the shared button's 26 px and only loses its fill here. */
 .theme-choice {
   display: inline-flex; flex-wrap: wrap; gap: 2px; margin: 0 0 .5rem; padding: 2px; min-width: 0;
   background: var(--panel2); border: 1px solid var(--line); border-radius: 9px;
@@ -754,12 +756,12 @@ label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: poin
 .theme-option {
   position: relative; display: inline-flex; align-items: center; gap: .4rem;
   min-height: var(--btn-h); padding: 0 .75rem; border-radius: 7px;
-  color: var(--mut); font-size: 12.5px; cursor: pointer; user-select: none;
+  color: var(--mut); background: transparent; border: 0; font-size: 12.5px; cursor: pointer; user-select: none;
 }
 .theme-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .theme-option:hover { color: var(--fg); }
-.theme-option:has(input:checked) { color: var(--fg); background: var(--panel); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
-.theme-option:has(input:focus-visible) { outline: 2px solid var(--acc); outline-offset: 1px; }
+.theme-option:has(input:checked), .theme-option[aria-pressed="true"] { color: var(--fg); background: var(--panel); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.theme-option:has(input:focus-visible), .theme-option:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
 /* The rows below the sections (Diagnostics, Guide, Sign out): a section's look - title where the
    section titles start, a muted note, a chevron or the row's button at the end. */
 .settings-link {
@@ -1244,11 +1246,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .settings-panel.appearance { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .6rem 2.5rem; }
 .settings-page .appearance > form { flex: 0 1 auto; min-width: 0; max-width: 100%; margin: 0; padding-top: 0; }
 .inline-save { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
-.inline-save > select { flex: 1 1 12rem; width: auto; min-width: 0; }
-/* On a small phone the select takes the line and Save goes under it: beside Save it showed
-   "Automatic — the browser's l…". */
 @media (max-width: 420px) {
-  .inline-save > select { flex-basis: 100%; }
   /* AU1: a small phone keeps the sign-in card's room for its fields (290 px of 360 were left). */
   main.auth-shell { padding: .5rem; }
   .card.auth-card { padding: .9rem; }
