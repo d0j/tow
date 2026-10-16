@@ -617,7 +617,9 @@ def test_settings_section_titles_are_bigger_than_card_titles_and_pills_legible()
     ]
     assert "font-size: 15px" in section
     assert "font-size: 13.5px" in card
-    assert "font-size: 11px" in rules[".settings-page-compact .settings-accordion > summary .pill"]
+    # 1.32.3: one pill everywhere (the accordion's own smaller one is gone), 11 px.
+    assert "font-size: 11px" in rules[".pill"]
+    assert ".settings-page-compact .settings-accordion > summary .pill" not in rules
 
 
 def _interval_720_min() -> None:

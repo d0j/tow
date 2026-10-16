@@ -33,6 +33,7 @@
               <h2>{% if p.new %}{{ t('protection_ui.add') }}{% else %}{{ p.title }}{% if p.on_demand %} <span class="card-meta" title="{{ t('protection_ui.on_demand_hint') }}">{{ t('protection_ui.on_demand') }}</span>{% endif %}{% endif %}</h2>
               {% if not p.new and p.available %}<span class="integration-pills"><span class="pill {{ 'mut' if off else {'unavailable': 'bad', 'protocol': 'bad', 'busy': 'warn'}.get(p.api_status, 'mut') }}">{{ t('protection_ui.off') if off else t(p.api_key) }}</span></span>{% endif %}
             </summary>
+            <div class="card-body">
             <input type="hidden" name="provider_id" value="{{ p.id }}">
             {% if p.new %}
             <div class="field"><label for="protection-kind-{{ p.id }}">{{ t('protection_ui.service_kind') }}</label><select id="protection-kind-{{ p.id }}" name="provider_kind" class="w-m"><option value="">{{ t('protection_ui.choose_kind') }}</option>{% for choice in protection.choices %}<option value="{{ choice.kind }}">{{ choice.title }}</option>{% endfor %}</select></div>
@@ -53,6 +54,7 @@
             {#- P1: a saved connection is removed by its own button (its own form below, with only its
                 id: a draft in another card is neither sent nor saved). -#}
             {% if not p.new %}<div class="settings-actions"><button type="submit" class="ghost danger" form="protection-remove-{{ p.id }}">{{ t('settings.common.remove') }}</button></div>{% endif %}
+            </div>
           </details>
           {% endfor %}
         </div>
@@ -69,7 +71,7 @@
       </fieldset>
     </form>
     {% if access_local %}{% for p in protection.cards if not p.new %}
-    <form id="protection-remove-{{ p.id }}" method="post" action="/settings/protection/remove" data-return-target="acc-protection" data-confirm="{{ t('protection_ui.remove_confirm', title=p.title) }}" data-confirm-label="{{ t('settings.common.remove') }}" data-confirm-danger><input type="hidden" name="provider_id" value="{{ p.id }}"></form>
+    <form id="protection-remove-{{ p.id }}" method="post" action="/settings/protection/remove" data-return-target="acc-protection" data-confirm="{{ t('protection_ui.remove_confirm', title=p.title) }}" data-confirm-label="{{ t('settings.common.remove') }}" data-confirm-danger hidden><input type="hidden" name="provider_id" value="{{ p.id }}"></form>
     {% endfor %}{% endif %}
     <details class="technical-details">
       <summary>{{ t('protection_ui.troubleshooting') }}</summary>
