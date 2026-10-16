@@ -391,3 +391,11 @@ def test_the_sign_in_password_is_as_wide_as_a_password():
     save_config(cfg)
     page = BeautifulSoup(TestClient(app).get("/login").text, "html.parser")
     assert "w-m" in page.select_one("#lan-password")["class"]
+
+
+def test_the_log_dialogs_title_is_one_word(client):
+    """1.32 QA N5: "Журнал (обновляется каждые 2 с)" and its History link each took two lines on a
+    phone; how often it refreshes is no title."""
+    head = BeautifulSoup(client.get("/").text, "html.parser").select_one("#log-pop .log-pop-head")
+    assert head.select_one("#log-title").get_text() == "Журнал"
+    assert head.select_one("a.log-history-link")["href"] == "/history"

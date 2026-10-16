@@ -353,7 +353,7 @@
     },
     "log": {
       "open": "Log",
-      "title": "Log (updates every 2 s)",
+      "title": "Log",
       "history": "History of downloads and changes"
     },
     "new_topic": "New topic",
