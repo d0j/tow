@@ -42,6 +42,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   or a host 240 px, a link or a folder up to 576 px), fields that belong together share a line whenever they fit
   instead of only in a wide form, and on a phone every text field fills its line. A rule field starts as one line and
   grows as you type.
+- Settings is one column in the middle of the page instead of the whole window; the buttons of a topic's or a site's
+  edit panel stay beside its form, with Delete next to Cancel as a quiet red outline; the add forms on Home and Sites
+  are as wide as their fields.
 
 ## [1.32.0] — 2026-10-16
 

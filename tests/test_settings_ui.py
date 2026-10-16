@@ -112,7 +112,13 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert 'aria-describedby="lan-password-hint"' in page
     assert 'input[type="checkbox"], input[type="radio"] { width: auto; }' in css
     assert ".check-field" in css
-    assert ".settings-page.settings-page-compact { width: 100%; max-width: none; }" in css
+    # D1 (1.32.1): one 64 rem column in the middle, not the whole 1440 px window.
+    assert ".settings-page.settings-page-compact { width: 100%; max-width: 64rem; margin-inline: auto; }" in css
+    # A row's actions stay in its form's column, Delete right after Cancel; an add card is as wide
+    # as its form (46 rem, its padding and border), not the page.
+    assert ".edit-panel > .edit-actions { max-width: 46rem; }" in css
+    assert ".edit-actions .danger { margin-left: auto; }" not in css
+    assert "details#new.add.card { max-width: calc(46rem + 2.2rem + 2px); }" in css
     assert "min-height: 0; padding: .38rem .62rem" in css
     assert 'action="/settings/client/add"' in page
     assert "Поддерживаются:" not in page  # the list below names them
