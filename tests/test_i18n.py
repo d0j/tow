@@ -359,7 +359,11 @@ def test_language_is_one_choice_with_automatic_first():
     _set_language("auto")
     page = TestClient(app).get("/settings", headers={"Accept-Language": "ru"}).text
     values = re.findall(r'<button type="submit" name="language" value="([^"]+)"', _language_select(page))
-    assert values == ["auto", *i18n.codes()]
+    # Auto · Русский · English on every page: the translations first, English (the fallback) last.
+    assert values == ["auto", *(code for code in i18n.codes() if code != i18n.DEFAULT), i18n.DEFAULT]
+    assert values == ["auto", "ru", "en"]
+    english = TestClient(app).get("/settings", headers={"Accept-Language": "en"}).text
+    assert re.findall(r'<button type="submit" name="language" value="([^"]+)"', _language_select(english)) == values
     assert len(re.findall(r'aria-pressed="true"', _language_select(page))) == 1
     assert "<select" not in _language_select(page)
     assert 'type="checkbox"' not in page.split('id="acc-language"', 1)[1].split("</details>", 1)[0]
