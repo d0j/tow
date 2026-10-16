@@ -561,6 +561,34 @@ def test_ci_keeps_the_required_check_names_and_audits_once():
     assert "${{ matrix.audit && '-Audit' || '' }}" in _runs(jobs["gate"])
 
 
+def test_a_docs_only_pull_request_skips_the_heavy_work_but_reports_every_check():
+    """Every pull request ran the gate on four systems and install.sh on three, docs-only ones too.
+    No path filter (a required check it never started would stay pending): the jobs keep their
+    names and always report; their steps do the work unless the change is docs only, and the
+    ubuntu-latest gate always does (the docs have tests). Pushes and runs by hand run everything."""
+    _text, flow = _workflow("ci")
+    triggers = flow[True]  # YAML 1.1 reads the key `on` as True
+    assert triggers["pull_request"] is None  # every pull request, no paths or paths-ignore
+    jobs = flow["jobs"]
+    changes = jobs["changes"]
+    assert changes["outputs"] == {"code": "${{ steps.diff.outputs.code }}"}
+    assert changes["steps"][0]["with"]["fetch-depth"] == 0
+    diff = changes["steps"][-1]
+    assert 'if [ "$EVENT" != "pull_request" ]; then' in diff["run"]
+    assert 'git diff --name-only "$BASE" HEAD' in diff["run"]
+    assert diff["env"]["BASE"] == "${{ github.event.pull_request.base.sha }}"
+    assert "github.event.pull_request" not in diff["run"]  # through env only: no expression in a script
+    for job_id in ("gate", "install"):
+        job = jobs[job_id]
+        assert job["needs"] == "changes"
+        assert job["if"] == "${{ !cancelled() }}"  # also when `changes` failed: then everything runs
+        assert "!= 'false'" in job["env"]["RUN"]
+        assert "if" not in job["steps"][0]  # the checkout
+        assert all(step["if"].startswith("env.RUN == 'true'") for step in job["steps"][1:]), job_id
+    assert "matrix.os == 'ubuntu-latest'" in jobs["gate"]["env"]["RUN"]
+    assert "ubuntu-latest" not in jobs["install"]["env"]["RUN"]
+
+
 def test_ci_lets_the_gate_stop_a_hung_test_run_itself():
     """The job's limit equalled the gate's 30-minute deadline for the test run alone: GitHub ended
     the job first, and the gate never named and stopped the hung processes."""
@@ -580,7 +608,7 @@ def test_ci_compiles_the_base_python_files_with_a_real_python_3_11():
     gate = flow["jobs"]["gate"]
     rows = [row["os"] for row in gate["strategy"]["matrix"]["include"] if row.get("py311")]
     assert rows == ["ubuntu-latest"]  # one OS: syntax does not depend on it
-    step = next(step for step in gate["steps"] if step.get("if") == "matrix.py311")
+    step = next(step for step in gate["steps"] if step.get("if") == "env.RUN == 'true' && matrix.py311")
     assert "uv python install 3.11" in step["run"]
     compiled = re.search(r'"\$\(uv python find --no-project 3\.11\)" -m py_compile (.+)', step["run"])
     assert compiled is not None
