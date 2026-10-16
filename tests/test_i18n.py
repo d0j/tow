@@ -69,12 +69,16 @@ def test_rendered_help_separates_topic_timers_server_recovery_and_watchdog_obser
         (
             "en",
             ["ends this pause", "The address you click in the site's row", "can only be changed on this computer"],
-            ["only shows which mirrors answer", "Main mirror — TOW tries it first", "only with the current one"],
+            [
+                "only shows which mirrors answer",
+                "under “Main mirror” (TOW tries it first)",
+                "only with the current one",
+            ],
         ),
         (
             "ru",
             ["снимает эту паузу", "Адрес, нажатый в строке сайта", "Менять доступ и пароль можно только"],
-            ["только показывает, какие зеркала отвечают", "Основное зеркало", "только зная текущий"],
+            ["только показывает, какие зеркала отвечают", "под «Основное зеркало» (к нему", "только зная текущий"],
         ),
     ],
 )
@@ -98,6 +102,44 @@ def test_the_guide_says_what_the_sites_page_and_the_password_card_really_do(lang
         assert words in text
     assert f"{launcher(windows=is_windows())} export" in text  # the launcher, not a bare `tow`
     assert "{launcher}" not in text
+
+
+@pytest.mark.parametrize(
+    ("language", "settings", "test_button", "old"),
+    [
+        (
+            "en",
+            (
+                "torrent clients, notifications, checks, access from other devices, backups, version and updates, "
+                "the service, language and theme, site access and the log"
+            ),
+            "a “Send a test” button",
+            "a “Check” button that sends",
+        ),
+        (
+            "ru",
+            (
+                "торрент-клиенты, уведомления, проверки, доступ с других устройств, резервные копии, версия и "
+                "обновления, сервис, язык и тема, доступ к сайтам и журнал"
+            ),
+            "кнопка «Отправить тест»",
+            "кнопка «Проверить», она отправляет",
+        ),
+    ],
+)
+def test_the_guide_names_settings_in_their_order_and_the_test_button(language, settings, test_button, old):
+    # 1.32 put Settings in the order of use and 1.32.1 named the messenger test "Send a test"; the
+    # in-app Guide still listed the language and the theme first and spoke of a "Check" button.
+    from tow.config import load_config, save_config
+    from tow.web import create_app
+
+    cfg = load_config()
+    cfg.update(language=language)
+    save_config(cfg)
+    text = " ".join(TestClient(create_app()).get("/settings/help").text.split())
+    assert settings in text
+    assert test_button in text
+    assert old not in text
 
 
 @pytest.mark.parametrize(

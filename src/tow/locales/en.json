@@ -976,7 +976,7 @@
       "title": "1. Sections",
       "home": "<b>Home</b> — the topics TOW watches: link, name, folder in the torrent client.",
       "sites": "<b>Sites</b> — where the topics come from (rutor, kinozal…). A site can have several mirror addresses: if one does not answer, TOW takes the next.",
-      "settings": "<b>Settings</b> — the language, the theme, torrent clients, notifications, how often to check, access from other devices, version and updates, the service, backups and the log; at the end, Diagnostics, this guide and, on another device, signing out.",
+      "settings": "<b>Settings</b> — torrent clients, notifications, checks, access from other devices, backups, version and updates, the service, language and theme, site access and the log; at the end, Diagnostics, this guide and, on another device, signing out.",
       "log": "<b>Log</b> (the scroll icon in the header) — recent events. Passwords never get there. The log does not grow forever: {n} files of {size} each are kept."
     },
     "s2": {
@@ -994,12 +994,12 @@
       "step1": "Sites →",
       "step2": "The easiest way is to paste a link to any topic on that site — the fields fill in by themselves.",
       "step3": "If the file cannot be downloaded without signing in, enter the site's user name and password. They are stored encrypted.",
-      "step4": "With several mirrors, open the site's row and press a mirror under “Main mirror — TOW tries it first” to make it the main one; the globe icon opens the main mirror (or one that answers).",
+      "step4": "With several mirrors, open the site's row and press a mirror under “Main mirror” (TOW tries it first) to make it the main one; the globe icon opens the main mirror (or one that answers).",
       "note": "If a site address does not answer three times in a row, TOW skips it for an hour (rutor: 30 minutes) and tries the others. A check you start (the check icon in a topic's row on Home, or “Check all topics now”) tries resting mirrors too, and a mirror that answers ends its pause; the check icon in the site's row (“Check the site's mirrors”) only shows which mirrors answer. When a site says “download limit for today”, scheduled checks leave it alone until tomorrow; a check you start still tries it."
     },
     "s4": {
       "title": "4. Notifications",
-      "text": "Telegram, Discord, WhatsApp and ntfy are in Settings → Notifications. Each has “How to connect” steps and, once saved, a “Check” button that sends a test message. Every message goes to all connected messengers. If a messenger is unavailable, the message waits and goes out later by itself. The bell in the header: green — messages get through, red — some messenger did not accept a message, grey — nothing is connected."
+      "text": "Telegram, Discord, WhatsApp and ntfy are in Settings → Notifications. Each has “How to connect” steps and, once connected, a “Send a test” button that sends a test message. Every message goes to all connected messengers. If a messenger is unavailable, the message waits and goes out later by itself. The bell in the header: green — messages get through, red — some messenger did not accept a message, grey — nothing is connected."
     },
     "s5": {
       "title": "5. Checks and the clock in the header",
