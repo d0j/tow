@@ -800,9 +800,11 @@ def test_deploy_finds_the_installs_own_python_after_a_move(tmp_path, shell, case
     root = tmp_path / "TOW"
     (root / "app" / "scripts").mkdir(parents=True)
     shutil.copy2(ROOT / "scripts" / "deploy.ps1", root / "app" / "scripts" / "deploy.ps1")
-    # update.py: only says which Python runs it
+    # update.py: only says which Python runs it, and with which of the account's Python settings
     (root / "app" / "scripts" / "update.py").write_text(
-        "import sys\nprint('picked:' + sys.executable)\n", encoding="utf-8"
+        "import os, sys\nprint('picked:' + sys.executable)\n"
+        "print('seen:' + repr([os.environ.get(n) for n in ('PYTHONHOME', 'PYTHONPATH', 'UV_PYTHON')]))\n",
+        encoding="utf-8",
     )
 
     def python(folder: Path) -> None:
@@ -825,6 +827,9 @@ def test_deploy_finds_the_installs_own_python_after_a_move(tmp_path, shell, case
         (root / "app" / ".venv").mkdir()
         (root / "app" / ".venv" / "pyvenv.cfg").write_text(f"home = {home}\nversion_info = 3.14.8\n", encoding="utf-8")
     env = {key: value for key, value in os.environ.items() if not key.upper().startswith(("TOW_", "UV_"))}
+    # Final review of 1.32.1: an account-wide PYTHONHOME that does not fit stopped every Python
+    # deploy.ps1 tried ("no base Python found"); PYTHONPATH and UV_PYTHON reached update.py.
+    env.update(PYTHONHOME=str(tmp_path / "no-python"), PYTHONPATH=str(tmp_path / "lib"), UV_PYTHON="3.12")
     done = subprocess.run(
         [
             program,
@@ -845,5 +850,6 @@ def test_deploy_finds_the_installs_own_python_after_a_move(tmp_path, shell, case
     assert done.returncode == 0, done.stdout + done.stderr
     line = next(row for row in done.stdout.splitlines() if row.startswith("picked:"))
     assert Path(line[len("picked:") :]).parent.name == picked, done.stdout
+    assert "seen:[None, None, None]" in done.stdout
     if case != "old_layout":
         assert Path(line[len("picked:") :]).parent.parent == root / "runtime" / "python"

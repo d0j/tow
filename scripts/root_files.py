@@ -75,6 +75,11 @@ rem it; if anything fails, the previous version comes back by itself. It needs t
 title TOW update
 set "TOW_REF=%~1"
 if not defined TOW_REF set "TOW_REF=latest"
+rem Python settings of the whole account would give TOW's Python another home or modules, and one
+rem that does not fit stops it before update.py runs (as in app\scripts\tow-env.cmd).
+set "PYTHONHOME="
+set "PYTHONPATH="
+set "UV_PYTHON="
 set "TOW_PYS=%~dp0runtime\python"
 set "TOW_CFG=%~dp0app\.venv\pyvenv.cfg"
 set "TOW_RE=^cpython-3\.[0-9][0-9]*\.[0-9][0-9]*-"
