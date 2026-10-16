@@ -17,8 +17,8 @@
   {%- if topic.last_error_details or error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error_details or topic.last_error }}</code></details>{% endif %}
   {#- The next step of a failure that has one elsewhere: the site's row (all mirrors paused), the
       torrent client's settings. -#}
-  {%- if topic.last_error_class == 'frozen' and topic.tracker %}<p class="sub"><a href="/sites?open={{ topic.tracker|urlencode }}#site-row-{{ topic.tracker|urlencode }}">{{ t('home.topic.open_site', site=site_title(topic.tracker)) }}</a></p>
-  {%- elif topic.last_error_class == 'qbit' %}<p class="sub"><a href="/settings?open=clients">{{ t('home.topic.client_settings') }}</a></p>{% endif %}{% endif %}
+  {%- if topic.last_error_class == 'frozen' and topic.tracker %}<p class="sub link-row"><a href="/sites?open={{ topic.tracker|urlencode }}#site-row-{{ topic.tracker|urlencode }}">{{ t('home.topic.open_site', site=site_title(topic.tracker)) }}</a></p>
+  {%- elif topic.last_error_class == 'qbit' %}<p class="sub link-row"><a href="/settings?open=clients">{{ t('home.topic.client_settings') }}</a></p>{% endif %}{% endif %}
   {% if topic.site_retry_at %}<p class="sub">{{ tm('site_access.retry_at', at=topic.site_retry_raw|short_time) }}</p>{% endif %}
   {% if topic.torrent_tone == 'warn' and topic.last_error and topic.last_error_class != 'frozen' %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" class="ghost" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
   {% if topic.sign_in_href %}<div class="actions"><a class="btn ghost" href="{{ topic.sign_in_href }}"{{ fix_attrs('sign_in', topic.id) }}>{{ t('home.topic.sign_in') }}</a></div>{% endif %}

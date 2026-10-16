@@ -28,7 +28,7 @@
   {% if check_result.report.total > check_result.report.rows|length %}<p class="sub">{{ t('web.check_all.more', n=check_result.report.total) }}</p>{% endif %}
   {% elif check_result %}{% if check_result_message %}<p>{{ check_result_message|sentence }}</p>{% endif %}
   {% else %}<p>{{ t('web.check_all.unconfirmed') }}</p>{% endif %}
-  <p><a href="/history?group=errors">{{ t('web.check_all.history') }}</a></p>
+  <p class="sub link-row"><a href="/history?group=errors">{{ t('web.check_all.history') }}</a></p>
 </section>
 {% endif %}
 {# The draft comes only from the server's own record of a refused add (?add=<token>), never
@@ -44,7 +44,7 @@
     {% if draft.get('error') %}
     <div class="form-error add-error" id="add-error" role="alert" tabindex="-1" data-focus-field="{{ bad_field }}">
       <p>{{ t('home.add.not_added', error=draft.get('error')) }}</p>
-      {% if draft.get('kind') == 'no_site' %}<p class="sub"><a href="/sites#new">{{ t('home.add.add_site') }}</a></p>{% endif %}
+      {% if draft.get('kind') == 'no_site' %}<p class="sub link-row"><a href="/sites#new">{{ t('home.add.add_site') }}</a></p>{% endif %}
     </div>
     {% endif %}
     {% macro invalid(field, bad, hint='') %}{% if bad == field %} aria-invalid="true" aria-describedby="add-error{{ ' ' ~ hint if hint }}"{% elif hint %} aria-describedby="{{ hint }}"{% endif %}{% endmacro %}

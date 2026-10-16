@@ -227,9 +227,9 @@ EXCEPTIONS = {
         "app.css",
         ":is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary::before",
         "margin-inline-end",
-    ): "the chevron (.36rem) fills a 12 px slot",
+    ): "the chevron (.45rem) fills a 12 px slot",
     ("app.css", ":is(.notifier-card, .client-card, .protection-card) > summary h2::before", "margin-inline-end"): (
-        "the chevron (.36rem) fills a 12 px slot, then 6 px"
+        "the chevron (.45rem) fills a 12 px slot, then 6 px"
     ),
     ("app.css", ".theme-choice", "gap"): "one segmented control (2 px seams)",
     ("app.css", ".theme-choice", "padding"): "one segmented control (2 px rim)",
@@ -254,7 +254,6 @@ EXCEPTIONS = {
     ("app.css", "#topics details.row-edit > summary > .dot", "margin-top"): "the dot on the name's first line",
     ("app.css", ".follow-row > .check-label", "margin-top"): "level with the interval field beside it",
     ("messages.css", ".msg-count", "padding"): "a counter badge on an icon",
-    ("updates.css", ".app-version", "padding"): "the version badge",
     ("updates.css", "body:has(> .app-version)", "padding-bottom"): "room for the version at the page's end",
 } | {
     ("content.css", f'.content-tree [data-depth="{depth}"]', "padding-inline-start"): "8 px a level of the tree"
@@ -316,7 +315,7 @@ def test_browser_pass_targets_clipping_and_empty_rows():
     message took a row (and 3 px) in the phone strip; a copy's row on a phone put 12 px between its words
     and its buttons."""
     messages = (STATIC / "messages.css").read_text(encoding="utf-8")
-    links = [body for sel, body in _rules(CSS) if ".help-back, .step-head, .check-result-row" in sel]
+    links = [body for sel, body in _rules(CSS) if ".help-back, .link-row, .step-head, .check-result-row" in sel]
     assert links
     assert "min-block-size: 1.5rem" in links[0]
     assert "line-height: 1.2" in _rule(".trk")
@@ -324,3 +323,25 @@ def test_browser_pass_targets_clipping_and_empty_rows():
     assert "align-items: center" in _rule(".check-result-row")
     assert ".flash[data-kind] > .msg-actions:empty { display: none; }" in messages.replace(".msg-actions:empty, ", "")
     assert ".restore-point-row { grid-template-columns: 1fr; row-gap: var(--sp-2); }" in CSS
+
+
+def test_the_text_after_a_chevron_starts_18px_from_it_and_menu_rings_stay_inside():
+    """A pseudo-element is no `*`: the chevron's 1.5 px border came on top of its .36rem box and put every
+    disclosure's and card's title at 19.3 px. The chevron is one border-box now, in a 12 px slot, then
+    6 px. A menu scrolls, so it clips: its rows' focus rings go inside them. The version badge's links
+    and the links alone on their line are 24 px targets."""
+    chevron = [body for sel, body in _rules(CSS) if sel.endswith(".settings-accordion > summary::before")]
+    assert chevron
+    assert "box-sizing: border-box" in chevron[0]
+    assert "width: .45rem" in chevron[0]
+    assert "outline-offset: -2px" in _rule(".sort-menu .sort-option:focus-visible")
+    updates = (STATIC / "updates.css").read_text(encoding="utf-8")
+    assert "min-block-size: 1.5rem" in _rule(".app-version > a", updates)
+    for name in (
+        "index.html",
+        "_topic_edit.html",
+        "_topic_row.html",
+        "settings_help.html",
+        "_settings_protection.html",
+    ):
+        assert "link-row" in (TEMPLATES / name).read_text(encoding="utf-8"), name

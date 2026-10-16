@@ -34,7 +34,7 @@
       </span>
       <span class="row-ops-slot" aria-hidden="true"></span>
     </summary>
-    {% if landing %}{% include "_topic_edit.html" %}{% else %}<div class="edit-panel" data-edit-src="/topics/{{ topic.id|urlencode }}/edit-panel"><p class="sub"><a href="/topics/{{ topic.id|urlencode }}/edit">{{ t('home.edit.open') }}</a></p></div>{% endif %}
+    {% if landing %}{% include "_topic_edit.html" %}{% else %}<div class="edit-panel" data-edit-src="/topics/{{ topic.id|urlencode }}/edit-panel"><p class="sub link-row"><a href="/topics/{{ topic.id|urlencode }}/edit">{{ t('home.edit.open') }}</a></p></div>{% endif %}
   </details>
   {%- if progress_text %}
   <span class="row-progress" data-label="{{ t('home.row.progress') }}"><span class="sr-only">{{ t('home.row.progress') }} </span><a class="download-details progress-link{% if ds.is_complete %} complete{% endif %}" href="/topics/{{ topic.id|urlencode }}/downloads.json" data-topic-id="{{ topic.id }}" title="{{ progress_title }}">{{ progress_text }}</a></span>
