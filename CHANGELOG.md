@@ -114,6 +114,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   short time like every other page, Delete comes before Cancel, and the page is as wide as Settings.
 - Settings → Version and updates no longer repeats "Automatic update checks are off" under the unticked box; a check
   asked by hand still says its result.
+- The Guide inside TOW lists the Settings sections in their order on the page, names the messenger test button
+  "Send a test" and the main mirror's heading "Main mirror" as the pages show them.
 - Files whose first folder or name has a colon (`Star Trek: Discovery/…`, as a torrent client on Linux, macOS or
   a NAS saves them) are now tracked: before, they were silently left out of progress, completions and episode
   events. Under a Windows folder a colon is still refused in any part of a file's path, since Windows reads it as
