@@ -100,6 +100,8 @@ a:hover { text-decoration: underline; }
 :is(.help-back, .link-row, .step-head, .check-result-row, .msg-actions, .flash, .log-pop-head) > a {
   display: inline-flex; align-items: center; min-block-size: 1.5rem;
 }
+/* A link in the edit panel's top line may be its only words: a 24 px target that leaves its line as it is. */
+.panel-top a { padding-block: .25rem; }
 /* A link inside running text is told from the words around it by more than its colour
    (WCAG 1.4.1): underlined. Links that stand alone (icons, menus, rows) keep no line. */
 :where(.section-note, .action-hint, .field-hint, .sub, .lead, .notice, .support-note, .help-pop, .help-page p,

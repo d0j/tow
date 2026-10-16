@@ -253,6 +253,7 @@ EXCEPTIONS = {
     ("app.css", "body", "padding-bottom"): "room for the version at the page's end",
     ("app.css", "#topics details.row-edit > summary > .dot", "margin-top"): "the dot on the name's first line",
     ("app.css", ".follow-row > .check-label", "margin-top"): "level with the interval field beside it",
+    ("app.css", ".panel-top a", "padding-block"): "an inline link's 24 px target, its line unchanged",
     ("messages.css", ".msg-count", "padding"): "a counter badge on an icon",
     ("updates.css", "body:has(> .app-version)", "padding-bottom"): "room for the version at the page's end",
 } | {
