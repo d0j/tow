@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -99,9 +100,33 @@ LONG = {
     "provider_url",
 }
 TEMPLATES = ROOT / "src" / "tow" / "templates"
-# One way to read each character (no nested lazy ".*?" that could take ">" or a brace two ways):
-# a tag's text, a {{ … }} or a {% … %} up to its own closing pair.
-FIELD = re.compile(r"<(input|select|textarea)\b(?:[^>{]|\{\{(?:[^}]|\}(?!\}))*\}\}|\{%(?:[^%]|%(?!\}))*%\})*>")
+FIELD_START = re.compile(r"<(input|select|textarea)\b")
+
+
+class FieldTag(NamedTuple):
+    name: str  # input, select or textarea
+    start: int
+    end: int
+    text: str
+
+
+def _field_tags(source: str) -> list[FieldTag]:
+    """Every <input>, <select> and <textarea> tag of a template, read once from left to right: a
+    {{ … }} or {% … %} inside the tag is skipped to its own closing pair (a ">" there is not the
+    tag's end). No regular expression over the whole tag: CodeQL found ones that backtrack."""
+    tags = []
+    for opening in FIELD_START.finditer(source):
+        at = opening.end()
+        while at < len(source) and source[at] != ">":
+            pair = {"{{": "}}", "{%": "%}"}.get(source[at : at + 2])
+            if pair:
+                closing = source.find(pair, at + 2)
+                at = len(source) if closing < 0 else closing + 2
+            else:
+                at += 1
+        if at < len(source):
+            tags.append(FieldTag(opening.group(1), opening.start(), at + 1, source[opening.start() : at + 1]))
+    return tags
 
 
 def _fields() -> list[tuple[str, str, str]]:
@@ -109,12 +134,12 @@ def _fields() -> list[tuple[str, str, str]]:
     found = []
     for path in sorted(TEMPLATES.glob("*.html")):
         source = re.sub(r"\{#.*?#\}", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
-        for match in FIELD.finditer(source):
-            tag = match.group()
+        for field in _field_tags(source):
+            tag = field.text
             kind = re.search(r'\stype="([^"]+)"', tag)
             if kind and kind.group(1) in ("hidden", "checkbox", "radio", "file", "submit"):
                 continue
-            found.append((path.name, match.group(1), tag))
+            found.append((path.name, field.name, tag))
     return found
 
 
@@ -567,14 +592,14 @@ def test_every_secret_field_is_the_same_on_every_screen():
         if path.name == "_secret.html":
             continue
         source = re.sub(r"\{#.*?#\}", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
-        for match in FIELD.finditer(source):
-            tag = match.group()
+        for field in _field_tags(source):
+            tag = field.text
             if 'type="password"' not in tag:
                 continue
             found += 1
-            assert source[: match.start()].endswith('<span class="secret">'), (path.name, tag[:80])
+            assert source[: field.start].endswith('<span class="secret">'), (path.name, tag[:80])
             field_id = re.search(r'\sid="([^"]+)"', tag).group(1)
-            after = source[match.end() :]
+            after = source[field.end :]
             assert after.startswith("{{ reveal("), (path.name, field_id, after[:60])
             eye_for = after[len("{{ reveal(") :].split(",", 1)[0]
             same = re.compile(r"[{}'~\s-]")
