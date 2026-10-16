@@ -23,7 +23,7 @@ const t = (key, vars = {}) => String(I18N[key] ?? key).replace(
 // ``now`` for the tests; ``offset``: the minutes east of UTC to read ``value`` with (NaN: TOW's).
 const towTime = (() => {
   const DAY = 86400000;
-  const offsetNow = String(I18N._tz_now ?? "").trim() ? Number(I18N._tz_now) : NaN;
+  let offsetNow = String(I18N._tz_now ?? "").trim() ? Number(I18N._tz_now) : NaN; // the server's again: reader
   // The offset a server's ISO time ends with ("+03:00", "-0500"), in minutes; NaN for none ("Z" is
   // not the server's: a stamp in UTC is shown in TOW's zone, not as UTC).
   const ownOffset = (text) => {
@@ -142,7 +142,30 @@ const towTime = (() => {
   };
   document.addEventListener("visibilitychange", () => { if (!document.hidden) rewrite(); });
   if (document.querySelector(SHORT)) keepToday();
-  return { short, full, iso, element, untilMidnight };
+  // TOW's offset now changes with summer and winter time while a page stays open: a page that
+  // shows times asks the server again (/health.json's tz_now, its signed-in poll: healthPoll
+  // below) when the tab is shown again and after each midnight, and writes every time again.
+  let askAt = 0; // when to ask next: after the coming midnight (set once a page shows a time)
+  const reader = {
+    shown: () => Boolean(document.querySelector(SHORT)),
+    due: () => {
+      if (!document.querySelector(SHORT)) return null;
+      if (!askAt) askAt = Date.now() + untilMidnight() + 1000;
+      return askAt;
+    },
+    receive: (data) => {
+      askAt = Date.now() + untilMidnight() + 1000;
+      const minutes = data && typeof data.tz_now === "number" ? data.tz_now : NaN;
+      if (!Number.isFinite(minutes) || minutes === offsetNow) return;
+      offsetNow = minutes;
+      if (midnight > 0) window.clearTimeout(midnight);
+      midnight = 0;
+      askAt = Date.now() + untilMidnight() + 1000;
+      rewrite();
+      if (document.querySelector(SHORT)) keepToday();
+    },
+  };
+  return { short, full, iso, element, untilMidnight, reader };
 })();
 window.towTime = towTime;
 
@@ -581,6 +604,7 @@ const healthPoll = (() => {
 })();
 
 const clock = document.getElementById("next-check");
+healthPoll.add(towTime.reader); // TOW's offset now, for the page's times (towTime)
 if (clock) {
   // Compact countdown; its meaning and failures are the tooltip and the hidden text before the
   // value (a failed check is said in words, not by the red alone). Both change only on a change.

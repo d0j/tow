@@ -138,6 +138,19 @@ def test_pages_have_short_time_and_the_scripts_tows_zone(monkeypatch):
     assert "_tz_half" not in texts
 
 
+def test_the_header_poll_carries_tows_offset_now():
+    """A page open across a summer/winter time change learns TOW's new offset from the poll it
+    already makes (/health.json, signed in), for "today" and its midnight."""
+    from fastapi.testclient import TestClient
+
+    from tow.web import app
+    from tow.web.text import zone_minutes
+
+    body = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/health.json").json()
+    assert body["tz_now"] == zone_minutes()
+    assert isinstance(body["tz_now"], int)
+
+
 @pytest.mark.parametrize("lang", ["en", "ru"])
 def test_every_month_has_a_short_name(lang):
     names = [i18n.translate(f"time.month_short.{n}", lang) for n in range(1, 13)]

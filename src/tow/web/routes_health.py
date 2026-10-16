@@ -13,7 +13,7 @@ from tow import __version__, access
 from tow.clock import format_ui_timestamp
 from tow.web import _context, services
 from tow.web.templating import header_health
-from tow.web.text import t, time_parts
+from tow.web.text import t, time_parts, zone_minutes
 from tow.web_update import WebUpdateError
 
 router = APIRouter()
@@ -107,6 +107,9 @@ def health_json() -> dict[str, Any]:
         "ok": True,
         **header_health(),
         "now_ts": time.time(),
+        # TOW's UTC offset now, in minutes: a page open across a summer/winter time change keeps
+        # "today" right (app.js towTime; it asks when the tab is shown again and at midnight).
+        "tz_now": zone_minutes(),
         "topic_timers": services.topic_timer_status(_context.state()),
     }
 
