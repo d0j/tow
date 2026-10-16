@@ -1261,6 +1261,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .settings-page .appearance > form { flex: 0 1 auto; min-width: 0; max-width: 100%; margin: 0; padding-top: 0; }
 .inline-save { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
 .inline-save > select { flex: 1 1 12rem; width: auto; min-width: 0; }
+/* On a small phone the select takes the line and Save goes under it: beside Save it showed
+   "Automatic — the browser's l…". */
+@media (max-width: 420px) { .inline-save > select { flex-basis: 100%; } }
 .theme-field { display: grid; gap: .16rem; min-width: 0; margin: 0; padding: 0; border: 0; }
 .theme-field > legend { margin: 0 0 .16rem; padding: 0; color: var(--mut); font-size: 12px; }
 .theme-field .theme-choice { margin: 0; }

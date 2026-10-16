@@ -242,3 +242,10 @@ def test_the_content_pickers_parts_stand_apart():
     sources" and to "Find a file"."""
     content = (ROOT / "src" / "tow" / "static" / "content.css").read_text(encoding="utf-8")
     assert "margin-top: .45rem" in _first(".content-picker > :not(:first-child):not(:empty)", content)
+
+
+def test_the_language_select_takes_its_own_line_on_a_small_phone():
+    """1.32 QA L7: at 320 px the select shared its line with Save and was cut off."""
+    small = CSS.partition("@media (max-width: 420px) {")[2]
+    assert small
+    assert "flex-basis: 100%" in _first(".inline-save > select", small)
