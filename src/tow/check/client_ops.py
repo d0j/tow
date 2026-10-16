@@ -299,6 +299,12 @@ def _open_client(cfg: dict[str, Any], secrets: dict[str, Any], client_id: str, *
 EMPTY_CLIENT_CHECKS = 2
 
 
+def _still_starting(error: Exception) -> bool:
+    """The client answered but still loads its torrents after a start: its topics wait, and
+    the owner is not told it is down (nor, the next time, that it is back)."""
+    return isinstance(error, TowError) and error.code == "check.client_empty"
+
+
 @dataclass
 class ClientPool:
     """The torrent clients one run talks to: opened on first use, a client that does not answer
@@ -346,6 +352,10 @@ class ClientPool:
                 raise TowError("check.client_empty", cls="qbit")
         return answer
 
+    def _was_starting(self, client_id: str) -> bool:
+        """The last check found the client still loading its torrents (not down: never said so)."""
+        return int(self.previous_empty.get(client_id) or 0) > 0
+
     def _client_event(self, client_id: str, kind: str, title: str = "") -> None:
         self.batch.queue(
             {"id": f"__client__:{client_id}", "title": title}, kind=kind, operation_id=new_operation_id("bot")
@@ -370,10 +380,10 @@ class ClientPool:
                 **error_fields(e),
                 how=self.how,
             )
-            if self.notify and self.previous_qbit_ok is not False:
+            if self.notify and self.previous_qbit_ok is not False and not _still_starting(e):
                 self._client_event(client_id, "qbit_down")
         else:
-            if self.notify and self.previous_qbit_ok is False:
+            if self.notify and self.previous_qbit_ok is False and not self._was_starting(client_id):
                 self._client_event(client_id, "qbit_up")
 
     def get(self, topic: Topic, secrets: dict[str, Any]) -> tuple[str, TorrentClientAdapter | None]:
@@ -392,7 +402,7 @@ class ClientPool:
             self.record(
                 "client_unreachable", component="client", integration_id=wanted, **error_fields(e), how=self.how
             )
-            if self.notify and self.previous_clients_ok.get(wanted) is not False:
+            if self.notify and self.previous_clients_ok.get(wanted) is not False and not _still_starting(e):
                 self._client_event(wanted, "qbit_down", _client_title(self.cfg, wanted))
             return wanted, None
         self.clients[wanted] = adapter
@@ -402,7 +412,13 @@ class ClientPool:
     def queue_recovered(self) -> None:
         """A second client that was down in the previous run answered again."""
         for client_id, ok in self.ok.items():
-            if client_id != self.default_id and ok and self.previous_clients_ok.get(client_id) is False and self.notify:
+            if (
+                client_id != self.default_id
+                and ok
+                and self.previous_clients_ok.get(client_id) is False
+                and self.notify
+                and not self._was_starting(client_id)
+            ):
                 self._client_event(client_id, "qbit_up", _client_title(self.cfg, client_id))
 
     @property
