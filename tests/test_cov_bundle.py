@@ -1042,8 +1042,25 @@ def test_destination_with_legacy_plaintext_secrets_blocks_import(tmp_path):
     secrets_path().write_text('{"qbittorrent": {}}', encoding="utf-8")
     bundle = _bundle(tmp_path / "in" / "tow.towx")
 
-    _rejects(tmp_path, bundle, "cannot read destination secrets to preserve access", preserve_secret_keys=["lan_auth"])
+    _rejects(tmp_path, bundle, "legacy plaintext secrets require explicit migration", preserve_secret_keys=["lan_auth"])
     _rejects(tmp_path, bundle, "legacy plaintext secrets require explicit migration")
+
+
+@pytest.mark.parametrize("apply", [False, True])
+def test_unreadable_destination_secrets_drop_the_bundles_access_password(tmp_path, apply):
+    """No access password can be kept from a store that cannot be opened: the import goes on
+    without one (the file's is not taken instead) and says so."""
+    save_secrets({"lan_auth": "destination-hash"})
+    encrypted_secrets_path().write_bytes(b"not an encrypted store")
+    bundle = _bundle(tmp_path / "in" / "tow.towx", _members(secrets_json={**BASE_SECRETS, "lan_auth": "bundle-hash"}))
+
+    result = import_bundle(bundle, PASS, apply=apply, preserve_secret_keys=["lan_auth"])
+
+    assert result["local_secrets_unreadable"] is True
+    access = [item for item in result["security_settings"] if item["setting"] == "lan_auth"]
+    assert access == [{"setting": "lan_auth", "file": "set", "this_computer": "unknown", "kept": True}]
+    if apply:
+        assert load_secrets() == BASE_SECRETS
 
 
 # --------------------------------------------------------------------------- apply, read-back and automatic rollback
