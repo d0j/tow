@@ -843,6 +843,7 @@
     "save": "Save",
     "details": "Details",
     "example": "e.g. {example}",
+    "default_path": "Default: {path}",
     "busy": {
       "checking": "Checking…",
       "copying": "Making a copy…",
@@ -2079,7 +2080,8 @@
     "infohash_path": "Current hash page",
     "infohash_hint": "Optional: a page with {id} and the 40-character hash; an unchanged hash saves a .torrent download. Empty: off.",
     "title": "Sites",
-    "name": "Short name (Latin)",
+    "name": "Site code",
+    "name_label": "Site code · a–z, 0–9, _",
     "how_to_fill": "How to fill in",
     "help": {
       "like_rutor": "like rutor: <code>https://rutor.info/torrent/1234567/name</code> → <code>{pattern}</code>",

@@ -847,6 +847,7 @@
     "save": "Сохранить",
     "details": "Подробности",
     "example": "Напр. {example}",
+    "default_path": "По умолчанию: {path}",
     "busy": {
       "checking": "Проверка…",
       "copying": "Создание копии…",
@@ -2101,7 +2102,8 @@
     "infohash_path": "Страница текущего хеша",
     "infohash_hint": "Необязательно: страница с {id} и хешем из 40 символов; прежний хеш избавляет от скачивания .torrent. Пусто — выключено.",
     "title": "Сайты",
-    "name": "Код сайта (латиницей)",
+    "name": "Код сайта",
+    "name_label": "Код сайта · a–z, 0–9, _",
     "how_to_fill": "Как заполнить",
     "help": {
       "like_rutor": "как rutor: <code>https://rutor.info/torrent/1234567/имя</code> → <code>{pattern}</code>",
