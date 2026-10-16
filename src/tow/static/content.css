@@ -4,8 +4,6 @@
    status line (a live region, kept in place) takes no room. */
 .content-picker > :not(:first-child):not(:empty) { margin-top: .45rem; }
 .content-picker > :empty { margin-block: 0; }
-/* "Find a file" above its field, as every label is (the form grid drops the label's margins). */
-[data-content-results] > label { display: grid; gap: .1875rem; }
 .content-tree { max-height: 22rem; overflow: auto; margin-block: .4rem; }
 .content-file, .content-folder { display: flex; align-items: center; gap: .5rem; margin: 0; padding: .25rem; overflow-wrap: anywhere; }
 /* File names read as content, not as muted field labels (the global label rule). */

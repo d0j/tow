@@ -50,10 +50,11 @@ tracker degradation from a client or TOW failure before changing state.
   rule): short `.w-xs` 88 px for every number (ports, intervals, minutes, days, attempts, order, limits); standard
   `.w-m` 240 px for every password, user name, token, API key, chat ID, host, reminder, site code, search and every
   select; long `.w-xl` 576 px for links and webhooks, folders, site paths, rules, host lists and a topic's name (each
-  on its own row). Fields that belong together share a `.field-row`, which wraps by those widths; on a phone
-  (≤ 720 px) every other field fills the row and numbers stay short. A rule field is a one-row textarea that grows. Links, paths and rules carry `autocapitalize="off"`, `autocorrect="off"` and
-  `spellcheck="false"`; an example in a field is `common.example` ("e.g. …"), a real default is said under it with
-  `common.default_path` ("Default: …").
+  on its own row). A label sits 3 px above its field (`.field`); fields that belong together share a `.field-row`,
+  12 px apart, which wraps by those widths; on a phone (≤ 720 px) every other field fills the row and numbers stay
+  short. A rule field is a one-row textarea that grows. Links, paths and rules carry `autocapitalize="off"`,
+  `autocorrect="off"` and `spellcheck="false"`; an example in a field is `common.example` ("e.g. …"), a real default
+  is said under it with `common.default_path` ("Default: …").
 - **At most one solid button per card or form**; the others are `ghost`. Remove, Delete and Disconnect are
   `ghost danger`; Restore is `ghost`.
 - **Confirmations** use TOW's own dialog, never `window.confirm`: `data-confirm="<text>"` and
@@ -61,8 +62,9 @@ tracker degradation from a client or TOW failure before changing state.
   has the focus first), or `towConfirm({text, confirmLabel, danger})` in a script. Without JavaScript the form submits
   as before; a server confirmation page stays where one exists.
 - A file is chosen with `file_input` from `_file.html` (buttons that need the file carry `data-needs-file`). A
-  password, token or key field has the eye (`reveal`); a stored one gets `saved_hint` in its label, the placeholder
-  `web.secret.keep_placeholder`, and one `keep_note` per form.
+  password, token or key field is the same on every screen (Login and Setup too): standard size (a webhook, a link,
+  long), `<span class="secret">`, the field, then its eye (`reveal`); a stored one gets `saved_hint` in its label,
+  the placeholder `web.secret.keep_placeholder`, and one `keep_note` per form.
 - `tests/test_ui_standard.py` enforces this; a new screen is also measured in a real browser before release.
 - Settings spans the page on a desktop (its forms keep their own width); the page that deletes a backup copy
   is as wide. Its cards follow one pattern: a status pill (only when it says something

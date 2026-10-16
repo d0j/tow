@@ -549,3 +549,51 @@ def test_a_hint_under_a_wide_field_runs_as_wide_as_the_field():
     assert _first(wide).strip() == "max-width: 36rem;"
     assert CSS.index(wide) > CSS.index(".settings-panel :is(.field-hint, .action-hint, .section-note")
     assert _first(".nowrap").strip() == "white-space: nowrap;"
+
+
+def test_every_secret_field_is_the_same_on_every_screen():
+    """1.32.2: a password, a token or a key looks and works the same on every screen (Settings,
+    Sites, Setup, Login, the sign-in dialog): the standard size (the Discord webhook, a link, is
+    long), in its .secret wrapper with the eye for that very field right after it, and a saved one
+    says "saved" in its label with the "leave empty to keep" placeholder."""
+    found = 0
+    for path in sorted(TEMPLATES.glob("*.html")):
+        if path.name == "_secret.html":
+            continue
+        source = re.sub(r"\{#.*?#\}", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
+        for match in FIELD.finditer(source):
+            tag = match.group()
+            if 'type="password"' not in tag:
+                continue
+            found += 1
+            assert source[: match.start()].endswith('<span class="secret">'), (path.name, tag[:80])
+            field_id = re.search(r'\sid="([^"]+)"', tag).group(1)
+            after = source[match.end() :]
+            assert after.startswith("{{ reveal("), (path.name, field_id, after[:60])
+            eye_for = after[len("{{ reveal(") :].split(",", 1)[0]
+            same = re.compile(r"[{}'~\s-]")
+            assert same.sub("", eye_for) == same.sub("", field_id), (path.name, field_id, eye_for)  # its own eye
+            assert after.split("</span>", 1)[0].count("{{") == 1, (path.name, field_id)  # the eye, then the end
+            assert 'class="w-m"' in tag or 'class="w-{{ f.width }}"' in tag, (path.name, field_id)
+            if "keep_placeholder" in tag:
+                assert "saved_hint(" in source, (path.name, field_id)
+    assert found >= 10
+
+
+def test_one_label_gap_and_one_pair_gap_everywhere():
+    """1.32.2: a label sits 3 px above its field on every screen (Settings had its own 2.6 px, a
+    field outside a form 4.5 px), a search's label too (it wrapped its field); fields that share a
+    line are 12 px apart (the three site-access limits were spread over the whole card)."""
+    assert "gap: .1875rem" in _first(".field")
+    gaps = [(selector, body) for selector, body in _rules(CSS) if re.search(r"\.field$", selector) and "gap" in body]
+    assert all("gap: .1875rem" in body for _, body in gaps), gaps
+    assert "gap: .55rem .75rem" in _first(".field-row")
+    assert ".protection-limits .field-row > .field" not in CSS
+    for path in sorted(TEMPLATES.glob("*.html")):
+        source = path.read_text(encoding="utf-8")
+        for label in re.findall(
+            r"<label\b[^>]*>(?:(?!</label>).)*?<(?:input|select|textarea)\b[^>]*>", source, re.DOTALL
+        ):
+            assert re.search(r'type="(checkbox|radio|file)"', label), (path.name, label[:120])
+    picker = (TEMPLATES / "_content_picker.html").read_text(encoding="utf-8")
+    assert '<div class="field"><label for="{{ search_id }}">' in picker
