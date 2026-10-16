@@ -295,6 +295,9 @@ def test_the_language_is_one_segmented_choice_like_the_theme():
     assert [b["aria-pressed"] for b in buttons].count("true") == 1
     assert "background: transparent" in _first(".theme-option")
     assert "border: 0" in _first(".theme-option")
+    # A theme option is a label: without this the shared label margin made its box 44 px beside the
+    # language's 32 px and pushed the options 9 px down (measured in Chromium).
+    assert "margin: 0" in _first(".theme-option")
     raised = _first('.theme-option:has(input:checked), .theme-option[aria-pressed="true"]')
     assert "background: var(--panel)" in raised
     assert "outline: 2px solid var(--acc)" in _first(
