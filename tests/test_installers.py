@@ -1119,6 +1119,41 @@ def test_the_posix_install_smoke_ignores_runner_noise_in_home():
     assert done.stdout.split() == ["Mozilla", "X"]
 
 
+@pytest.mark.allow_system  # sh with the smoke's own helpers on a temp folder
+def test_the_posix_install_smoke_gives_only_the_tested_programs_a_sentinel_temp(tmp_path):
+    # TC-new: the POSIX smoke never saw uv or TOW write into the system's temporary folder; the
+    # sentinel goes to the tested programs alone (the smoke's own tools keep the runner's).
+    shell = shutil.which("dash") or shutil.which("sh")
+    if shell is None:
+        pytest.skip("no sh on this machine")
+    text = (ROOT / "scripts" / "install-smoke.sh").read_text(encoding="utf-8")
+    code = _code_lines(text)
+    for line in code:
+        if re.search(r'"\$(start|stop|installer)"|/app/scripts/tow" status', line) and "[ -x" not in line:
+            assert line.lstrip().startswith("tested "), line
+    assert 'TMPDIR="$sentinel" TMP="$sentinel" TEMP="$sentinel"' in text
+    assert [line for line in code if line.startswith("temp_untouched ")] == [
+        'temp_untouched "install, start, stop"',
+        'temp_untouched "offline setup and start of the moved install"',
+        'temp_untouched "reinstall, start, stop, uninstall"',
+    ]
+    assert text.index('temp_untouched "reinstall') > text.index('--uninstall --yes --purge --dir "$dir"')
+    assert 'rm -rf "$dir" "$sums" "$sentinel"' in text
+    helpers = re.search(r"^say\(\) .*?^healthy\(\)", text, re.MULTILINE | re.DOTALL)
+    assert helpers is not None
+    sentinel = tmp_path / "sentinel"
+    sentinel.mkdir()
+    script = (
+        helpers.group(0).removesuffix("healthy()")
+        + f'\nsentinel="{_posix(sentinel)}"\ntested sh -c \'printf "%s" "$TMPDIR" > "$0"\' "{_posix(tmp_path)}/seen"\n'
+        + 'temp_untouched "first"\ntested sh -c \': > "$TMPDIR/uv-123.lock"\'\ntemp_untouched "second"\n'
+    )
+    done = subprocess.run([shell, "-c", script], capture_output=True, text=True, check=False, timeout=60)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert (tmp_path / "seen").read_text(encoding="utf-8") == _posix(sentinel)
+    assert "FAILED: written into TMPDIR (second): uv-123.lock" in done.stderr
+
+
 @pytest.mark.parametrize(("workflow", "job_id"), [("ci", "gate"), ("ci", "install"), ("release", "posix")])
 def test_linux_runners_keep_both_lts_versions_without_renaming_required_checks(workflow, job_id):
     import yaml
