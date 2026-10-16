@@ -782,7 +782,8 @@ def test_add_and_edit_round_trip_selection_and_once_mode(monkeypatch):
     html = client.get("/").text
     assert 'name="selection_mode"' in html
     assert 'name="tracking_mode"' in html
-    assert "нет совпадения или оно неоднозначно — ничего не запускается" in html.lower()
+    # The rule's hint is a condition, not a verdict above a preview that matched (1.32 QA L5).
+    assert "если ничего не подходит или подходит неоднозначно — ничего не добавится" in html.lower()
 
     topic["hash"] = "A" * 40
     topic["once_done"] = True

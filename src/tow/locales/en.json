@@ -1083,7 +1083,7 @@
       "follow": "Add new versions",
       "selection": "Episodes or masks",
       "selection_placeholder": "S01E03-E05, S01E07  or  *.mkv, Subs/*.srt",
-      "selection_hint": "No match or an ambiguous match: nothing starts.",
+      "selection_hint": "If nothing matches, or a match is ambiguous, nothing is added.",
       "submit": "Add",
       "add_site": "Add this site on the Sites page first",
       "title": "Add a topic",
