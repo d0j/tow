@@ -303,6 +303,56 @@ def test_atomic_write_fsyncs_and_closes_the_directory_when_it_can_be_opened(monk
     assert directory_fds[0] in closed
 
 
+def _directory_fsync_fails(monkeypatch, tmp_path, error: int, *, on_file: bool = False) -> list[int]:
+    """The folder's (or the file's) fsync refused with ``error``; the descriptors closed are recorded."""
+    stand_in = tmp_path / "directory-stand-in"
+    stand_in.write_bytes(b"")
+    real_open, real_fsync, real_close = os.open, os.fsync, os.close
+    directory_fds: list[int] = []
+    closed: list[int] = []
+
+    def fake_open(path, flags, *args, **kwargs):
+        if Path(path) == tmp_path:
+            fd = real_open(stand_in, os.O_RDWR)
+            directory_fds.append(fd)
+            return fd
+        return real_open(path, flags, *args, **kwargs)
+
+    def refusing_fsync(fd):
+        if (fd in directory_fds) != on_file:
+            raise OSError(error, os.strerror(error))
+        return real_fsync(fd)
+
+    monkeypatch.setattr(store.os, "open", fake_open)
+    monkeypatch.setattr(store.os, "fsync", refusing_fsync)
+    monkeypatch.setattr(store.os, "close", lambda fd: closed.append(fd) or real_close(fd))
+    return closed if not on_file else directory_fds
+
+
+@pytest.mark.parametrize("error", [errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP])
+def test_a_folder_that_cannot_be_flushed_does_not_fail_a_finished_write(monkeypatch, tmp_path, error):
+    # CIFS, 9p/drvfs (WSL) and some FUSE file systems refuse fsync of a folder: the file is already
+    # in place, flushed and replaced, so the write succeeded.
+    closed = _directory_fsync_fails(monkeypatch, tmp_path, error)
+    store.atomic_write_bytes(tmp_path / "store.json", b"durable")
+    assert (tmp_path / "store.json").read_bytes() == b"durable"
+    assert closed  # the folder's descriptor is closed either way
+
+
+def test_a_real_io_error_flushing_the_folder_is_not_hidden(monkeypatch, tmp_path):
+    closed = _directory_fsync_fails(monkeypatch, tmp_path, errno.EIO)
+    with pytest.raises(OSError, match=os.strerror(errno.EIO)):
+        store.atomic_write_bytes(tmp_path / "store.json", b"durable")
+    assert closed
+
+
+def test_the_files_own_flush_stays_mandatory(monkeypatch, tmp_path):
+    _directory_fsync_fails(monkeypatch, tmp_path, errno.EINVAL, on_file=True)
+    with pytest.raises(OSError, match=os.strerror(errno.EINVAL)):
+        store.atomic_write_bytes(tmp_path / "store.json", b"durable")
+    assert not (tmp_path / "store.json").exists()
+
+
 # --------------------------------------------------------------------------- persistence lock
 
 
