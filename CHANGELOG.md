@@ -36,6 +36,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   for another one, is no longer added back by it.
 - First start in a browser without JavaScript is no longer stopped by a short password typed and then hidden by
   clearing "Open TOW from other devices": Start goes on, for this computer only.
+### Changed
+
+- Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
+  or a host 240 px, a link or a folder up to 576 px), fields that belong together share a line whenever they fit
+  instead of only in a wide form, and on a phone every text field fills its line. A rule field starts as one line and
+  grows as you type.
 
 ## [1.32.0] — 2026-10-16
 

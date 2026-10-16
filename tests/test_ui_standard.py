@@ -77,19 +77,40 @@ def test_fields_are_36px_on_a_desktop_and_44px_on_phones_and_touch_screens():
 
 
 @pytest.mark.parametrize(
-    ("name", "width"), [("w-xs", "6.5rem"), ("w-s", "12rem"), ("w-m", "18rem"), ("w-l", "26rem"), ("w-xl", "36rem")]
+    ("name", "width"),
+    [("w-2xs", "4.5rem"), ("w-xs", "5.5rem"), ("w-s", "12rem"), ("w-m", "15rem"), ("w-l", "26rem"), ("w-xl", "36rem")],
 )
 def test_a_field_is_as_wide_as_what_it_holds_at_most(name, width):
     """A port, a password and a webhook were all 1354 px wide at 1440 px. A width class is a
-    maximum: the field still shrinks with its form; a secret field's wrapper takes its field's class."""
+    maximum: the field still shrinks with its form; a secret field's wrapper and a folder field's
+    take their field's class. 1.32.1 (F2): 72 px for attempts and order, 88 px for ports and
+    intervals (65535, 10080), 240 px for names, passwords and hosts (288 px held 20 characters)."""
     assert _first(f".{name}").strip() == f"max-width: {width};"
-    assert f"max-width: {width}" in _first(f".secret:has(> .{name})")
+    assert f"max-width: {width}" in _first(f":is(.secret, .folder-input):has(> .{name})")
+
+
+def test_a_phone_field_fills_its_line_and_a_number_stays_short():
+    """1.32.1 F3: at 360-390 px the classes still capped fields, so one form ended at 288, 306 and
+    346 px. On a phone a text, select, secret or folder field has no cap and fills its line in a
+    row; ports, intervals and attempts keep theirs."""
+    blocks = CSS.split("@media (max-width: 720px) {")[1:]
+    phone = next(block.split("\n}")[0] for block in blocks if ".field-row >" in block.split("\n}")[0])
+    caps = (
+        ":is(input, select, textarea):is(.w-s, .w-m, .w-l, .w-xl), "
+        ":is(.secret, .folder-input):has(> :is(.w-s, .w-m, .w-l, .w-xl))"
+    )
+    assert _first(caps, phone).strip() == "max-width: none;"
+    row = ".field-row > :is(.w-s, .w-m, .w-l, .w-xl, :has(.w-s, .w-m, .w-l, .w-xl))"
+    assert "flex: 1 1 12rem" in _first(row, phone)
+    assert "w-xs" not in caps
+    assert "w-2xs" not in caps
 
 
 def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
     """One form system: at most 46 rem wide, a label 3 px above its field, 8-10 px between groups,
-    help text at most 68 characters a line. A row of fields stands on one line once its form (not
-    the window) is 38 rem wide: two cards side by side stack their fields on their own."""
+    help text at most 68 characters a line. 1.32.1 (F4): a row of fields wraps by its fields'
+    classes instead of waiting for a 38 rem form - Setup, the sign-in dialog and half cards stacked
+    two 288 px fields with half the card empty. Two 240 px fields share a line from 492 px on."""
     grid = _first(".form-grid")
     for declaration in ("display: grid", "max-width: 46rem", "container-type: inline-size"):
         assert declaration in grid
@@ -104,15 +125,17 @@ def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
     # A panel's intro and notes end where its widest field ends (1.32 QA L1: 440 px beside 576 px).
     assert _first(".settings-panel > p, .support-note").strip() == "max-width: 36rem;"
     assert "support-note" not in "".join(selector for selector, body in _rules(CSS) if "68ch" in body)
-    assert "flex-direction: column" in _first(".field-row")
-    wide = _block("@container (min-width: 38rem) {")
-    assert "flex-direction: row" in _first(".field-row", wide)
-    assert "flex: 0 1 6.5rem" in _first(".field-row > :is(.w-xs, :has(.w-xs))", wide)
-    # An address and its port stay paired on a phone while the address keeps 12 rem.
-    keep = _first(".field-row.keep")
-    assert "flex-direction: row" in keep
-    assert "flex-wrap: wrap" in keep
-    assert "flex: 1 1 12rem" in _first(".field-row.keep > *")
+    row = _first(".field-row")
+    assert "flex-flow: row wrap" in row
+    assert "flex-direction: column" not in row
+    assert "flex: 1 1 12rem" in _first(".field-row > *")
+    assert "min-width: 0" in _first(".form-grid > *, .field-row > *")
+    assert "flex: 0 1 auto" in _first(".field-row > :is(.w-2xs, .w-xs, :has(.w-2xs, .w-xs))")
+    assert "flex: 0 1 15rem" in _first(".field-row > :is(.w-m, :has(.w-m))")
+    assert "flex: 1 1 26rem" in _first(".field-row > :is(.w-xl, :has(.w-xl))")
+    # No form-width switch for rows any more, and no "keep" variant: a pair wraps on its own.
+    assert ".field-row.keep" not in CSS
+    assert ".field-row {" not in "".join(CSS.split("@container (min-width: 38rem) {")[1:])
 
 
 def test_placeholders_are_as_readable_as_hints():
