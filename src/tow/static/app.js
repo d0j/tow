@@ -463,13 +463,123 @@ const showBusy = (form, b) => {
   form.querySelectorAll("[data-busy-note]").forEach((note) => { note.hidden = false; });
 };
 
+// UI:C1: one confirmation in the page's look and language instead of the browser's own (its
+// "127.0.0.1 says", its OK in the browser's language). ``towConfirm({text, confirmLabel, danger})``
+// answers true or false; the confirm button says the action ("Delete", "Restore"). A destructive one
+// (danger) is a red outline and Cancel has the focus first. Escape or a click beside the box is
+// Cancel; the focus goes back where it was. One question at a time: a second one while it is open
+// is answered no. A browser without <dialog> asks the browser's way.
+const towConfirm = (() => {
+  let dialog = null;
+  let answer = null;
+  let opener = null;
+  const build = () => {
+    dialog = document.createElement("dialog");
+    dialog.className = "confirm";
+    dialog.id = "tow-confirm";
+    dialog.setAttribute("aria-describedby", "tow-confirm-text");
+    const text = document.createElement("p");
+    text.id = "tow-confirm-text";
+    text.className = "confirm-text";
+    const actions = document.createElement("div");
+    actions.className = "confirm-actions";
+    const ok = document.createElement("button");
+    ok.type = "button";
+    ok.setAttribute("data-confirm-ok", "");
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "ghost";
+    cancel.setAttribute("data-confirm-cancel", "");
+    cancel.textContent = t("js.confirm.cancel");
+    actions.append(ok, cancel);
+    dialog.append(text, actions);
+    ok.addEventListener("click", () => finish(true));
+    cancel.addEventListener("click", () => finish(false));
+    // Escape: the browser's cancel; closed it answers no.
+    dialog.addEventListener("cancel", (event) => { event.preventDefault(); finish(false); });
+    // A click on the backdrop lands on the dialog itself, not on its content.
+    dialog.addEventListener("click", (event) => { if (event.target === dialog) finish(false); });
+    document.body.append(dialog);
+  };
+  const finish = (yes) => {
+    if (!answer) return;
+    const resolve = answer;
+    answer = null;
+    if (dialog.open) dialog.close();
+    const back = opener;
+    opener = null;
+    if (back?.isConnected !== false) back?.focus?.({ preventScroll: true });
+    resolve(Boolean(yes));
+  };
+  return ({ text = "", confirmLabel = "", danger = false } = {}) => {
+    if (answer) return Promise.resolve(false);
+    if (!dialog) build();
+    if (typeof dialog.showModal !== "function") return Promise.resolve(Boolean(window.confirm(text)));
+    dialog.querySelector("#tow-confirm-text").textContent = text;
+    const ok = dialog.querySelector("[data-confirm-ok]");
+    ok.textContent = confirmLabel || t("js.confirm.ok");
+    ok.className = danger ? "ghost danger" : "";
+    dialog.classList.toggle("danger", Boolean(danger));
+    opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    const promise = new Promise((resolve) => { answer = resolve; });
+    dialog.showModal();
+    (danger ? dialog.querySelector("[data-confirm-cancel]") : ok).focus();
+    return promise;
+  };
+})();
+window.towConfirm = towConfirm;
+// What a form's question says and does: on its submitter or on the form (data-confirm,
+// data-confirm-label, data-confirm-danger; a submitter of class danger is destructive too).
+const confirmOf = (form, b) => {
+  const text = b?.dataset.confirm || form.dataset.confirm;
+  if (!text) return null;
+  const label = b?.dataset.confirmLabel || form.dataset.confirmLabel || b?.textContent?.trim() || "";
+  const danger = b?.dataset.confirmDanger !== undefined || form.dataset.confirmDanger !== undefined
+    || Boolean(b?.classList?.contains("danger"));
+  return { text, confirmLabel: label, danger };
+};
+// Sent again once confirmed, by the same button: its name and value and every field go as they
+// would have; this second submit is not asked again.
+const submitConfirmed = (form, b) => {
+  form.dataset.confirmed = "1";
+  if (typeof form.requestSubmit === "function") {
+    try {
+      // The submit event comes at once (and takes the mark); a form the browser refused to send
+      // (a required field) keeps none, so its next submit is asked again.
+      form.requestSubmit(b || undefined);
+      delete form.dataset.confirmed;
+      return;
+    } catch {
+      // a submitter the form does not own: below, its value in a field of its own
+    }
+  }
+  if (b?.name) {
+    const carried = document.createElement("input");
+    carried.type = "hidden";
+    carried.name = b.name;
+    carried.value = b.value;
+    form.append(carried);
+  }
+  delete form.dataset.confirmed;
+  form.submit();
+};
+
 document.addEventListener("submit", (e) => {
   if (e.defaultPrevented) return;
   const form = e.target;
   const b = e.submitter;
-  const confirmText = b?.dataset.confirm || form.dataset.confirm;
-  if (confirmText && !window.confirm(confirmText)) {
+  const question = confirmOf(form, b);
+  if (question && form.dataset.confirmed === "1") {
+    delete form.dataset.confirmed;
+  } else if (question) {
     e.preventDefault();
+    // A second press while the question is open (or Enter in a field) asks nothing more.
+    if (form.dataset.confirming === "1") return;
+    form.dataset.confirming = "1";
+    towConfirm(question).then((yes) => {
+      delete form.dataset.confirming;
+      if (yes) submitConfirmed(form, b);
+    });
     return;
   }
   // A GET form (a filter or a search) is a plain navigation: a disabled submitter would drop

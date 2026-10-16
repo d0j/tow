@@ -273,7 +273,7 @@
       if (pollRequest === request) pollRequest = null;
     }
   };
-  const begin = async (version) => {
+  const begin = async (version, source = null) => {
     if (updating || !supported) return;
     if (!/^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version || "")) {
       progress.hidden = false; progress.textContent = t("js.releases.invalid_version"); return;
@@ -284,7 +284,11 @@
     const order = target.map((part, index) => part - (current[index] ?? 0)).find((difference) => difference !== 0) ?? 0;
     const question = installed && current.length === 3 && order < 0 ?
       t("js.releases.confirm_older", { version: version.replace(/^v/, ""), current: installed }) : t("js.releases.confirm", { version });
-    if (!window.confirm(question)) return;
+    // The page's own dialog (app.js towConfirm), its button the action clicked; going back is
+    // asked with Cancel first.
+    const ask = { text: question, confirmLabel: source?.textContent?.trim() || "", danger: order < 0 };
+    if (!(window.towConfirm ? await window.towConfirm(ask) : window.confirm(question))) return;
+    if (updating || !supported) return;
     generation++;
     operation = "";
     pendingBaseline = seenJob;
@@ -316,9 +320,9 @@
       await pollJob();
     }
   };
-  install?.addEventListener("click", () => { begin(latest); });
-  apply?.addEventListener("click", () => { begin(input?.value.trim() || ""); });
-  previous?.addEventListener("click", () => { begin(rollbackVersion); });
+  install?.addEventListener("click", () => { begin(latest, install); });
+  apply?.addEventListener("click", () => { begin(input?.value.trim() || "", apply); });
+  previous?.addEventListener("click", () => { begin(rollbackVersion, previous); });
   reload?.addEventListener("click", () => { window.location.reload(); });
   const refreshLog = async () => {
     if (!logPanel?.open || !logText || pendingTarget) return;

@@ -266,7 +266,12 @@
       showSpace();
     };
     const load = async (allowLimited = false, restore = false, fromMagnet = false, fromTracker = false) => {
-      if (allowLimited && !window.confirm(t("content.limited_confirm"))) return;
+      // It uses the site's download limit: asked in the page's own dialog (app.js towConfirm).
+      if (allowLimited) {
+        const question = { text: t("content.limited_confirm"), confirmLabel: String(limited.textContent || "").trim() };
+        const yes = window.towConfirm ? await window.towConfirm(question) : window.confirm(question.text);
+        if (!yes) return;
+      }
       controller?.abort();
       controller = new AbortController();
       const epoch = ++generation, origin = source();

@@ -55,17 +55,24 @@ function setup(saved = null, existing = [], before = () => {}) {
   };
   root.querySelectorAll = () => [];
   const requests = [];
+  const asked = [];
+  controls.limited.textContent = " Request a .torrent ";
   before(fields);
   vm.runInNewContext(fs.readFileSync(new URL("../../src/tow/static/content.js", import.meta.url), "utf8"), {
     document, Element, FormData, AbortController, Option: class { constructor(text, value) { Object.assign(this, { text, value }); } },
     MutationObserver: class { observe() {} },
-    window: { setTimeout, clearTimeout, confirm: () => controls.limited.approved === true },
+    // The page's own confirmation (app.js towConfirm): the question and the action's words.
+    window: {
+      setTimeout, clearTimeout,
+      confirm: () => { throw new Error("the browser's own confirm is not used"); },
+      towConfirm: async (question) => { asked.push(question); return controls.limited.approved === true; },
+    },
     fetch: (url, options) => new Promise((resolve) => requests.push({ url, options, respond: (data, ok = true, status = ok ? 200 : 400, type = "application/json") => resolve({
       ok, status, headers: { get: (name) => name.toLowerCase() === "content-type" ? type : null },
       json: async () => { if (type !== "application/json") throw new SyntaxError("Unexpected token 'a', \"authentica\"... is not valid JSON"); return data; },
     }) })),
   });
-  return { fields, controls, requests, form, root };
+  return { fields, controls, requests, form, root, asked };
 }
 const find = (tree, name) => tree.querySelectorAll("*").find((n) => n.attributes["aria-label"] === name);
 const reply = async (request, ...response) => { request.respond(...response); await tick(); };
@@ -226,9 +233,12 @@ assert.equal(cached.requests.at(-1).options.body.get("source"), "fresh");
 await reply(cached.requests.at(-1), { code: "content.limited", error: "Limit warning" }, false);
 const countBeforeConsent = cached.requests.length;
 cached.controls.limited.fire("click");
+await tick();
 assert.equal(cached.requests.length, countBeforeConsent, "declined quota confirmation sends no request");
+assert.deepEqual(JSON.parse(JSON.stringify(cached.asked.at(-1))), { text: "content.limited_confirm", confirmLabel: "Request a .torrent" });
 cached.controls.limited.approved = true;
 cached.controls.limited.fire("click");
+await tick();
 assert.equal(cached.requests.at(-1).options.body.get("allow_limited"), "true");
 await reply(cached.requests.at(-1), { ...snapshot, cached: false });
 assert.equal(cached.controls.cached.hidden, true);

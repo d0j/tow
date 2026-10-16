@@ -48,6 +48,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Fields stand out from grey cards; every checkbox has one size and the accent colour; every fold-out (How to connect,
   Advanced, Technical details…) has the same arrow and a larger target; an intro above the cards runs as wide as the
   fields; the Log and History read in the page's font; the sign-in field fills its card, also on a small phone.
+- Confirmations (remove a topic or a site, restore a backup, install an update, use a site's download limit…) open in
+  TOW's own window in the page's language, with the action on its button; for a destructive one Cancel is selected
+  first. Without JavaScript the pages ask as before.
 
 ## [1.32.0] — 2026-10-16
 

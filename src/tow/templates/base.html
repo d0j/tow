@@ -87,7 +87,7 @@
     {% elif path in ('/', '/history') %}
     <form method="post" action="/check" class="ico-form">
       <input type="hidden" name="mode" value="apply">
-      <button class="ico" type="submit" title="{{ t('base.check_all.title') }}" aria-label="{{ t('base.check_all.title') }}" data-confirm="{{ t('base.check_all.confirm') }}"{{ fix_attrs('check_all') }}>{{ icon('refresh') }}</button>
+      <button class="ico" type="submit" title="{{ t('base.check_all.title') }}" aria-label="{{ t('base.check_all.title') }}" data-confirm="{{ t('base.check_all.confirm') }}" data-confirm-label="{{ t('base.check_all.button') }}"{{ fix_attrs('check_all') }}>{{ icon('refresh') }}</button>
     </form>
     {% endif %}
     {#- Diagnostics, the Guide and signing out live at the end of Settings: the header keeps the

@@ -214,6 +214,16 @@ main > .card + .card, main > .card + form { margin-top: 1rem; }
 .credential-prompt h2 { margin: 0 0 .45rem; font-size: 1.05rem; }
 .credential-prompt p { margin: .35rem 0; }
 .credential-prompt::backdrop { background: rgba(0,0,0,.42); }
+/* UI:C1: the one confirmation (app.js towConfirm): the question, then the action and Cancel. */
+dialog.confirm {
+  width: min(26rem, calc(100% - 2rem)); margin: auto; padding: 1rem 1.1rem;
+  color: var(--fg); background: var(--panel); border: 1px solid var(--acc2);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+dialog.confirm.danger { border-color: var(--line); }
+dialog.confirm::backdrop { background: rgba(0,0,0,.42); }
+.confirm-text { margin: 0 0 .9rem; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.confirm-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .stat .k { color: var(--mut); font-size: 12px; }
 .stat .v { font-size: 1.05rem; font-weight: 650; margin-top: .15rem; overflow-wrap: anywhere; }
 .pill {
