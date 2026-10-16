@@ -107,44 +107,37 @@ class _SignIn:
     """A login typed on Home and the check that confirms it: ``checked`` says what the check
     found (and puts the earlier password back when the site still refused the new one),
     ``follow_up`` (the instance called) does the same for a check that had to wait in the queue,
-    and ``dropped`` for one that never ran. Until then it is one of the site's unchecked sign-ins
-    (``check_jobs.UNCHECKED``): what any of them puts back is what was saved before the first."""
+    and ``dropped`` for one that never ran. Until then it is a member of the site's generation of
+    unchecked sign-ins (``check_jobs.UNCHECKED``): what it puts back is that generation's
+    baseline - what was saved before the first of them, or the last login the site confirmed."""
 
     def __init__(self, tid: str, tracker: GenericHttpTracker, old_entry: Any, username: str, password: str) -> None:
-        self.tid, self.tracker, self.old_entry = tid, tracker, old_entry
+        self.tid, self.tracker, self.old_entry = tid, tracker, old_entry  # old_entry: saved before this one
         self.username, self.password = username, password
-        with check_jobs.LOCK:
-            unchecked = check_jobs.UNCHECKED.setdefault(tracker.name, [])
-            if unchecked:  # an earlier one still waits or runs: its password is not known to work
-                self.old_entry = copy.deepcopy(unchecked[0].old_entry)
-            unchecked.append(self)
+        check_jobs.join_unchecked(tracker.name, self, old_entry)
 
     def __call__(self, out: dict[str, Any] | None, error: BaseException | None) -> dict[str, str]:
         return self.follow_up(out, error)
 
+    def baseline(self) -> Any:
+        """The login this sign-in puts back if the site refuses it or its check never runs."""
+        return check_jobs.unchecked_baseline(self.tracker.name, self, self.old_entry)
+
     def settle(self, *, confirmed: bool = False) -> None:
-        """Checked (or never to be): no longer one of the site's unchecked sign-ins. ``confirmed``:
-        the site took this password, so it is what a later unchecked one puts back."""
-        with check_jobs.LOCK:
-            unchecked = check_jobs.UNCHECKED.get(self.tracker.name, [])
-            if self in unchecked:
-                unchecked.remove(self)
-            if confirmed:
-                for later in unchecked:
-                    later.old_entry = {"username": self.username, "password": self.password}
-            if not unchecked:
-                check_jobs.UNCHECKED.pop(self.tracker.name, None)
+        """Checked (or never to be): it leaves the site's generation. ``confirmed``: the site took
+        this login, which the sign-ins still unchecked put back from now on."""
+        login = {"username": self.username, "password": self.password} if confirmed else None
+        check_jobs.leave_unchecked(self.tracker.name, self, confirmed=login)
 
     def succeeds(self, earlier: object) -> None:
-        """This sign-in replaces ``earlier``'s, still waiting in the queue unchecked: what to put
-        back is what was saved before that one, the last password not refused yet."""
+        """This sign-in replaces ``earlier``'s, still waiting in the queue unchecked: ``earlier``
+        will never be checked and leaves the generation (this one shares its baseline)."""
         if isinstance(earlier, _SignIn) and earlier.tracker.name == self.tracker.name:
-            self.old_entry = copy.deepcopy(earlier.old_entry)
             earlier.settle()
 
     def dropped(self) -> dict[str, str]:
-        """Its check never ran (cancelled, never given the check lock): the password it saved,
-        never checked, is put back, and the owner is told (``check_jobs._drop``)."""
+        """Its check never ran (cancelled, never given the check lock, a full queue): the password
+        it saved, never checked, is put back, and the owner is told (``check_jobs.drop``)."""
         restored = self.restore()
         text, kind = t("web.topics.login_not_checked", site=_title(self.tracker)), "warn"
         if restored is False:
@@ -154,11 +147,13 @@ class _SignIn:
         return {"text": text, "kind": kind, "credential_topic": self.tid}
 
     def restore(self) -> bool | None:
-        """The password saved before this one, back (False: not, it changed meanwhile; None: the
-        store refused, logged)."""
+        """Its baseline back, only while the saved login is still this one (False: not, it changed
+        meanwhile; None: the store refused, logged). Never under ``check_jobs.LOCK``: the stores
+        are written here."""
+        previous = self.baseline()
         self.settle()
         try:
-            return bool(restore_unverified_password(self.tracker.name, self.old_entry, self.username, self.password))
+            return bool(restore_unverified_password(self.tracker.name, previous, self.username, self.password))
         except SecretStoreError:
             services.log_event(
                 "site_login_restore_failed", tracker=self.tracker.name, topic=self.tid, status="failed", how="manual"
@@ -169,8 +164,8 @@ class _SignIn:
         """(message, its kind, ask for the login again) after the check ran."""
         row = topic_check_row(self.tid, out)
         flash, prompt, kind = _tracker_login_retry_flash(row, _title(self.tracker))
-        self.settle(confirmed=kind == "ok")
         if kind == "ok":
+            self.settle(confirmed=True)
             _signed_in(self.tracker.name)
         if (
             prompt
@@ -187,6 +182,7 @@ class _SignIn:
                 kind = "err"
             elif restored is None:
                 flash, kind = t("web.topics.restore_failed", site=_title(self.tracker)), "err"
+        self.settle()  # checked either way (a member no longer: nothing)
         return flash, kind, prompt
 
     def follow_up(self, out: dict[str, Any] | None, error: BaseException | None) -> dict[str, str]:

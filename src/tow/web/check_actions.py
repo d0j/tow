@@ -16,7 +16,7 @@ from tow.records import CheckRow
 from tow.store import CheckBusyError, SecretStoreError
 from tow.trackers import load_trackers, match_tracker
 from tow.web import _context, check_jobs, services
-from tow.web.messages import flash_redirect
+from tow.web.messages import flash_redirect, home_redirect
 from tow.web.views import check_feedback, check_report, check_status_message, topic_check_row
 
 
@@ -49,6 +49,12 @@ def enqueue_check(
         follow_up=follow_up,
     )
     if job is None:
+        # A full queue: the caller's follow-up never runs (a sign-in puts its password back) and
+        # what it says comes with the refusal.
+        said = check_jobs.drop(follow_up, owner_language())
+        if said is not None:
+            text = f"{i18n.t('web.check_all.queue_full')}; {said['text']}"
+            return home_redirect(text, str(said.get("kind") or "warn"), credential_topic=said.get("credential_topic"))
         return flash_redirect("/", "web.check_all.queue_full", "warn")
     # A topic's check comes here only when it has to wait; one of every topic may start at once.
     starts_now = added and not topic_id and job["position"] == 1
