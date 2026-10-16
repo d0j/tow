@@ -170,6 +170,8 @@ main.auth-shell {
 .auth-card > p { margin: .35rem 0 .7rem; }
 .auth-form { display: grid; gap: .3rem; }
 .auth-form label { margin-top: 0; }
+/* AU1: the sign-in page's one field fills its card (288 px in a 416 px card). */
+.auth-form .secret, .auth-form .secret > input { max-width: none; }
 .auth-card .technical-details { margin-top: 1rem; }
 .lead { color: var(--mut); margin: 0 0 1.2rem; }
 .flash {
@@ -353,12 +355,6 @@ button.ghost.danger:hover, .btn.ghost.danger:hover { background: var(--pill-bad-
 .backup-folder { padding-top: .2rem; }
 .notifier-card > summary { list-style: none; cursor: pointer; align-items: center; }
 .notifier-card > summary::-webkit-details-marker { display: none; }
-.notifier-card > summary h2::before {
-  content: ""; display: inline-block; width: .4rem; height: .4rem; margin: 0 .6rem .12rem .1rem;
-  border-right: 2px solid var(--mut); border-bottom: 2px solid var(--mut); transform: rotate(-45deg);
-  transition: transform .15s ease;
-}
-.notifier-card[open] > summary h2::before { transform: rotate(45deg); }
 .settings-page-compact .notifier-card:not([open]) > summary { border-bottom: 0; padding-bottom: 0; }
 .watchdog-note { margin: .8rem 0; }
 .watchdog-lines { margin: .3rem 0 0; padding-left: 1.2rem; font-size: 13px; display: grid; gap: .2rem; }
@@ -443,7 +439,10 @@ a.set-link:hover { background: var(--panel2); text-decoration: none; }
 .help-page h2[id] { scroll-margin-top: var(--land-top); }
 .help-page p, .help-page li { color: var(--fg); }
 .help-page ul, .help-page ol { margin: .2rem 0 .6rem; padding-left: 1.2rem; }
-.log-box { max-height: 18rem; overflow: auto; font: 12px/1.45 ui-monospace, Consolas, monospace; }
+/* H6: the Log and History read as sentences in the page's font; their times keep even digits and
+   only raw technical text (code) is monospace. */
+.log-box { max-height: 18rem; overflow: auto; font: 13px/1.45 "Segoe UI", system-ui, sans-serif; }
+.log-line time { font-variant-numeric: tabular-nums; }
 .log-box:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
 .log-line { padding: .15rem 0; border-bottom: 1px solid var(--line); word-break: break-word; }
 /* The raw text of a network error, one click away from the words that say it. */
@@ -503,7 +502,7 @@ details.add > summary { color: var(--acc); font-weight: 650; }
 .field-narrow { max-width: 20rem; }
 details.advanced { margin-top: .7rem; }
 details.advanced > summary { width: fit-content; color: var(--acc); font-size: 12.5px; }
-.check-label { display: flex; align-items: center; gap: .45rem; color: var(--fg); font-size: 12.5px; }
+.check-label { display: flex; align-items: center; gap: .45rem; min-height: 1.5rem; color: var(--fg); font-size: 12.5px; }
 .empty-state p { margin: .2rem 0 .6rem; }
 /* First start: what TOW is and the next steps (setup page, empty Home). */
 .first-steps { text-align: left; max-width: 44rem; margin-inline: auto; }
@@ -671,6 +670,13 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
 /* A grey pill ("Main", "Not checked") is --panel2, the card's own colour: on a card it takes the
    page's panel colour, or it reads as plain bold text. */
 .integration-card .pill.mut { background: var(--panel); }
+/* V1: a field in a grey card (a client, a messenger, a row's edit panel) is the page's white, not
+   the card's grey with only its border to show it; white cards (sign-in, dialogs, add) keep grey
+   fields. Borders, focus and a refusal's red stay as they are. */
+:is(.integration-card, .edit-panel) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  background: var(--panel);
+}
+:is(.integration-card, .edit-panel) .secret > button.ico.reveal:hover { background: var(--panel2); }
 .integration-head {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: .75rem; padding-bottom: .7rem; border-bottom: 1px solid var(--line);
@@ -712,12 +718,12 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
   padding: .45rem 0;
 }
 .check-field + .check-field { border-top: 1px solid var(--line); }
-.check-field input {
-  width: 1.1rem; height: 1.1rem; margin: .15rem 0 0;
-  accent-color: var(--acc);
+.check-field input { margin-top: .1rem; }
+/* margin: 0 - the global label margin put the text ~7 px below its box outside .settings-form. A
+   one-line label is still a 24 px target: its padding takes the space back from its margins. */
+.check-field label {
+  margin: -.19rem 0; padding: .19rem 0; line-height: 1.45; cursor: pointer; color: var(--fg); font-size: 12.5px;
 }
-/* margin: 0 - the global label margin put the text ~7 px below its box outside .settings-form. */
-.check-field label { margin: 0; line-height: 1.45; cursor: pointer; color: var(--fg); font-size: 12.5px; }
 /* A check field that is itself the <label> (Backups) reads like the others, not like a field label. */
 label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: pointer; }
 .check-field p { grid-column: 2; margin: 0; color: var(--mut); font-size: 12px; }
@@ -757,6 +763,25 @@ label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: poin
 }
 .technical-details { margin-top: .7rem; color: var(--mut); font-size: 12px; }
 .technical-details > summary { width: fit-content; color: var(--acc); }
+/* A1: one disclosure everywhere - a summary at least 28 px high (18 px "How to connect" was below
+   the 24 px target) and one chevron, the Settings sections' own, pointing right when closed and
+   down when open (there were the browser's triangles and two other chevrons). */
+:is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary {
+  display: flex; align-items: center; gap: .45rem; min-height: 1.75rem; list-style: none; cursor: pointer;
+}
+:is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary::-webkit-details-marker { display: none; }
+:is(.notifier-card, .client-card, .protection-card) > summary { min-height: 1.75rem; }
+:is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary::before,
+:is(.notifier-card, .client-card, .protection-card) > summary h2::before,
+.settings-accordion > summary::before {
+  content: ""; display: inline-block; flex: 0 0 auto; width: .36rem; height: .36rem;
+  border-right: 1.5px solid var(--mut); border-bottom: 1.5px solid var(--mut);
+  transform: rotate(-45deg); transition: transform .15s ease;
+}
+:is(.notifier-card, .client-card, .protection-card) > summary h2::before { margin: 0 .6rem .12rem .1rem; }
+:is(.technical-details, details.advanced, .backup-inventory, .backup-location)[open] > summary::before,
+:is(.notifier-card, .client-card, .protection-card)[open] > summary h2::before,
+.settings-accordion[open] > summary::before { transform: rotate(45deg); }
 .technical-details > summary:focus-visible, .settings-log > summary:focus-visible {
   outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 4px;
 }
@@ -829,12 +854,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   padding: .7rem .9rem; list-style: none; cursor: pointer;
 }
 .settings-accordion > summary::-webkit-details-marker { display: none; }
-.settings-accordion > summary::before {
-  content: ""; width: .45rem; height: .45rem;
-  border-right: 2px solid var(--mut); border-bottom: 2px solid var(--mut);
-  transform: rotate(-45deg); transition: transform .15s ease;
-}
-.settings-accordion[open] > summary::before { transform: rotate(45deg); }
 .settings-accordion[open] > summary { background: var(--open-row); }
 .settings-accordion > summary:hover { background: var(--panel2); }
 .settings-summary-title { font-size: 14px; font-weight: 650; color: var(--fg); }
@@ -919,9 +938,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   min-height: 0; padding: .38rem .62rem;
   grid-template-columns: .75rem minmax(0, 1fr) auto;
   gap: .48rem; line-height: 1.25;
-}
-.settings-page-compact .settings-accordion > summary::before {
-  width: .34rem; height: .34rem; border-width: 1px;
 }
 /* A section title reads above its cards: 15 px against 13.5 px; pills stay legible (11 px). */
 .settings-page-compact .settings-summary-title { font-size: 15px; }
@@ -1042,6 +1058,9 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 }
 /* Transport trouble (site unreachable, mirror paused) is amber, as the row's dot. */
 .form-error.warn { color: var(--warn); }
+/* AU1: a refusal about one field sits right under that field (its aria-describedby names it); a
+   refusal about the whole form stays above it (.form-error). */
+.field-error { margin: .1rem 0 0; color: var(--bad); font-size: 12.5px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
 
 /* The event's time goes under the event (it wrapped anyway, starting the line with "·"). */
 .event-at { display: block; }
@@ -1292,7 +1311,12 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .inline-save > select { flex: 1 1 12rem; width: auto; min-width: 0; }
 /* On a small phone the select takes the line and Save goes under it: beside Save it showed
    "Automatic — the browser's l…". */
-@media (max-width: 420px) { .inline-save > select { flex-basis: 100%; } }
+@media (max-width: 420px) {
+  .inline-save > select { flex-basis: 100%; }
+  /* AU1: a small phone keeps the sign-in card's room for its fields (290 px of 360 were left). */
+  main.auth-shell { padding: .5rem; }
+  .card.auth-card { padding: .9rem; }
+}
 .theme-field { display: grid; gap: .16rem; min-width: 0; margin: 0; padding: 0; border: 0; }
 .theme-field > legend { margin: 0 0 .16rem; padding: 0; color: var(--mut); font-size: 12px; }
 .theme-field .theme-choice { margin: 0; }
@@ -1310,6 +1334,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* A panel's intro and its notes run as wide as its widest field (.w-xl) rather than stopping at
    440 px beside 576 px fields and full-width cards, where they read as cut off. */
 .settings-panel > p, .support-note { max-width: 36rem; }
+/* B1: an intro that is a hint (.action-hint) too: the hints' 68ch rule above outranked the 36 rem
+   one (0,2,1 against 0,1,1), so such an intro stopped at 440 px in two lines. */
+.settings-panel > p:is(.action-hint, .support-note) { max-width: 36rem; }
 .settings-panel .notice { max-width: 46rem; }
 /* Clients and connected messengers: two open cards side by side on a wide screen, in their own
    order; a folded card takes the whole line. */
@@ -1320,12 +1347,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* A client (and a site-access connection) folds like a messenger: its title row is the toggle. */
 :is(.client-card, .protection-card) > summary { list-style: none; cursor: pointer; align-items: center; }
 :is(.client-card, .protection-card) > summary::-webkit-details-marker { display: none; }
-:is(.client-card, .protection-card) > summary h2::before {
-  content: ""; display: inline-block; width: .4rem; height: .4rem; margin: 0 .6rem .12rem .1rem;
-  border-right: 2px solid var(--mut); border-bottom: 2px solid var(--mut); transform: rotate(-45deg);
-  transition: transform .15s ease;
-}
-:is(.client-card, .protection-card)[open] > summary h2::before { transform: rotate(45deg); }
 .settings-page-compact :is(.client-card, .protection-card):not([open]) > summary { border-bottom: 0; padding-bottom: 0; }
 .client-card > summary h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-meta { margin-left: .35rem; color: var(--mut); font-size: 12px; font-weight: 400; }
