@@ -95,6 +95,12 @@ body {
 }
 a { color: var(--acc); text-decoration: none; }
 a:hover { text-decoration: underline; }
+/* A link that stands alone on its line (not inside a sentence) is a 24 px target (WCAG 2.5.8):
+   the way back, a step, a result row, a message's link, the log's link to History. */
+:is(.help-back, .step-head, .check-result-row, .check-results > .sub, .msg-actions, .flash, .log-pop-head) > a,
+.help-page section > p > a:only-child, .edit-panel > .sub > a:only-child {
+  display: inline-flex; align-items: center; min-block-size: 1.5rem;
+}
 /* A link inside running text is told from the words around it by more than its colour
    (WCAG 1.4.1): underlined. Links that stand alone (icons, menus, rows) keep no line. */
 :where(.section-note, .action-hint, .field-hint, .sub, .lead, .notice, .support-note, .help-pop, .help-page p,
@@ -143,14 +149,15 @@ header.app .ico.on, header.app .ico:hover, header.app .ico:focus-visible {
 .hdr-controls > * { flex: 0 0 auto; }
 .hdr-sites {
   justify-self: center; display: flex; align-items: center; flex-wrap: nowrap; gap: var(--sp-4);
-  min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: thin;
+  min-width: 0; min-height: 1.5rem; max-width: 100%; overflow-x: auto; scrollbar-width: thin;
   padding-right: 2.5rem; mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
 }
 /* relative: a name's hidden state text stays inside the strip, not at its far end in the page. */
 .hdr-sites .trk { position: relative; flex: 0 0 auto; white-space: nowrap; }
 .hdr-sites:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+/* 1.2: a name's descenders stay inside the strip that scrolls (line-height 1 cut them by 2 px). */
 .trk {
-  font-size: 12px; font-weight: 650; letter-spacing: .02em; line-height: 1;
+  font-size: 12px; font-weight: 650; letter-spacing: .02em; line-height: 1.2;
 }
 .trk.ok { color: var(--ok); }
 .trk.bad { color: var(--bad); }
@@ -643,13 +650,14 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
   border-radius: var(--radius); box-shadow: var(--shadow);
 }
 .integration-list { display: grid; gap: var(--sp-3); }
-/* A card: its head, the line, 6 px, then its body, whose parts are 9 px apart; 9 px all round. */
+/* A card: its head, the line, 6 px, then its body, whose parts are 9 px apart; 9 px all round. The
+   body owns the 6 px (a <details> card is no grid in every browser). */
 .integration-card {
-  display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-2);
   min-width: 0; padding: var(--sp-3); background: var(--panel2);
   border: 1px solid var(--line); border-radius: 10px;
 }
 .card-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3); min-width: 0; }
+.integration-head + .card-body { margin-top: var(--sp-2); }
 /* A grey pill ("Main", "Not checked") is --panel2, the card's own colour: on a card it takes the
    page's panel colour, or it reads as plain bold text. */
 .integration-card .pill.mut { background: var(--panel); }
@@ -666,7 +674,6 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: var(--sp-3); padding-bottom: var(--sp-2); border-bottom: 1px solid var(--line);
 }
-.integration-head > div { display: grid; gap: var(--sp-1); min-width: 0; }
 .integration-head p { color: var(--mut); font-size: 13px; line-height: 1.45; }
 .integration-head > .pill { flex: 0 0 auto; }
 .settings-form { display: grid; gap: var(--sp-3); }
@@ -942,7 +949,7 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .file-pick[data-ready]:has(> .file-native:focus-visible) > .file-button { outline: 2px solid var(--acc); outline-offset: 2px; }
 @media (max-width: 720px) {
   .settings-page-compact .copy-command { width: 100%; }
-  .restore-point-row { grid-template-columns: 1fr; }
+  .restore-point-row { grid-template-columns: 1fr; row-gap: var(--sp-2); }
   .restore-point-row .backup-copy-actions { justify-content: flex-start; }
   .settings-page-compact .settings-actions { align-items: center; }
   .settings-page-compact .settings-actions button,
@@ -1202,7 +1209,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .check-results h2 { font-size: 1.05rem; } /* as every card and dialog title */
 .check-results h2 .sub { font-weight: 400; } /* the run's time beside the title is not bold */
 .check-result-list { list-style: none; padding: 0; display: grid; gap: var(--sp-1); }
-.check-result-row { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); overflow-wrap: anywhere; }
+.check-result-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); overflow-wrap: anywhere; }
 .check-result-row > :last-child { flex: 1 1 20rem; }
 .check-activity { flex-wrap: wrap; align-items: center; margin: 0 0 var(--sp-3); }
 .flash:has(> a) { flex-wrap: wrap; }

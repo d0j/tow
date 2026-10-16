@@ -33,7 +33,7 @@
   <input type="hidden" name="content_token" value="{{ draft.get('content_token', '') if draft else '' }}">
   <input type="hidden" name="selection_indices" value="{{ draft.get('selection_indices', '') if draft else '' }}">
   <p class="field-hint" data-content-status role="status" aria-live="polite"></p>
-  <div data-content-results hidden>
+  <div class="content-results" data-content-results hidden>
     {#- "Find a file" above its field, as every label is (.field). -#}
     {% set search_id = 'content-search-' ~ (topic.id if topic else 'new') %}
     <div class="field"><label for="{{ search_id }}">{{ t('content.search') }}</label><input id="{{ search_id }}" type="search" class="w-m" data-content-search></div>

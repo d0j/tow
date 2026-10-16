@@ -7,7 +7,7 @@
 .content-picker > button { justify-self: start; }
 .content-picker .actions { flex-wrap: wrap; }
 /* The files: the search, the list (its rows 3 px apart), the pages' buttons 9 px apart. */
-[data-content-results] { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.content-results { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
 .content-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .content-tree { max-height: 22rem; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-1); }
 .content-file, .content-folder { display: flex; align-items: center; gap: var(--sp-2); overflow-wrap: anywhere; }

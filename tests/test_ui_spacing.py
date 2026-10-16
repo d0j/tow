@@ -147,9 +147,8 @@ def test_settings_sections_panels_and_cards_on_the_scale():
     assert "padding: var(--sp-3) var(--sp-4)" in panel
     assert "gap: var(--sp-3)" in panel
     assert "  .settings-panel { padding: var(--sp-3); }" in CSS  # a phone
-    card = _rule(".integration-card")
-    assert "padding: var(--sp-3)" in card
-    assert "gap: var(--sp-2)" in card
+    assert "padding: var(--sp-3)" in _rule(".integration-card")
+    assert "margin-top: var(--sp-2)" in _rule(".integration-head + .card-body")
     assert "gap: var(--sp-3)" in _rule(".card-body")
     head = _rule(".integration-head")
     assert "padding-bottom: var(--sp-2)" in head
@@ -308,3 +307,20 @@ def test_every_distance_is_on_the_scale_or_a_named_exception():
                 off.append(f"{name}: {selector} {{ {prop}: {value} }}")
     assert not off, "\n".join(off)
     assert seen == set(EXCEPTIONS), set(EXCEPTIONS) - seen
+
+
+def test_browser_pass_targets_clipping_and_empty_rows():
+    """Found in the browser (1.32.3 QA): links alone on their line were 18.9-22.5 px targets; the site
+    strip's names lost 2 px of their letters (line-height 1 in a strip that scrolls) and the strip was a
+    16 px target; Check all's pills stretched to their row (text 3.5 px high); an empty actions box of a
+    message took a row (and 3 px) in the phone strip; a copy's row on a phone put 12 px between its words
+    and its buttons."""
+    messages = (STATIC / "messages.css").read_text(encoding="utf-8")
+    links = [body for sel, body in _rules(CSS) if ".help-back, .step-head, .check-result-row" in sel]
+    assert links
+    assert "min-block-size: 1.5rem" in links[0]
+    assert "line-height: 1.2" in _rule(".trk")
+    assert "min-height: 1.5rem" in _rule(".hdr-sites")
+    assert "align-items: center" in _rule(".check-result-row")
+    assert ".flash[data-kind] > .msg-actions:empty { display: none; }" in messages.replace(".msg-actions:empty, ", "")
+    assert ".restore-point-row { grid-template-columns: 1fr; row-gap: var(--sp-2); }" in CSS

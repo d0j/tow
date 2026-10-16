@@ -19,7 +19,7 @@
 .flash[data-kind] > .msg-actions { display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: var(--sp-2); white-space: nowrap; }
 .msg-actions form { margin: 0; }
 .msg-actions a { text-decoration: underline; }
-.msg-actions:empty { display: none; }
+.msg-actions:empty, .flash[data-kind] > .msg-actions:empty { display: none; }
 @media (max-width: 480px) {
   .flash[data-kind] { display: grid; grid-template-columns: auto 1fr auto; column-gap: var(--sp-2); row-gap: var(--sp-1); }
   .flash[data-kind] > .msg-ico { grid-area: 1 / 1; }
