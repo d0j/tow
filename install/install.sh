@@ -231,6 +231,13 @@ main() {
     command -v tar >/dev/null 2>&1 || die "tar is needed"
 
     arch=$(uname -m)
+    # A Terminal under Rosetta says x86_64 on an Apple silicon Mac: its native uv and Python run
+    # there too, faster and without the Intel Mac's build step. No sysctl, or one without this
+    # key (older macOS), is a real Intel Mac.
+    if [ "$os-$arch" = macos-x86_64 ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ]; then
+        say "this terminal runs under Rosetta on an Apple silicon Mac: TOW installs for Apple silicon"
+        arch=arm64
+    fi
     case $os-$arch in
         linux-x86_64 | linux-amd64) target=x86_64-unknown-linux ;;
         linux-aarch64 | linux-arm64) target=aarch64-unknown-linux ;;
