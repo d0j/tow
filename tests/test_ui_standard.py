@@ -255,3 +255,14 @@ def test_the_check_all_cards_title_is_a_card_title():
     """1.32 QA L8: "Results" used the browser's 1.5em (22 px); every card or dialog title is 1.05rem."""
     assert "font-size: 1.05rem" in _first(".check-results h2")
     assert "font-size: 1.05rem" in _first(".add-title")
+
+
+def test_a_low_screen_keeps_its_height_for_the_page():
+    """1.32 QA L9: at 200 % zoom (450 CSS px high) the sticky header and message strip took about
+    30 % of the screen. Below 520 px of height neither sticks, and a target clears nothing."""
+    low = CSS.partition("@media (max-height: 520px) {")[2]
+    assert "position: static" in _first("header.app", low)
+    assert "--land-top: .75rem" in _first(":root", low)
+    assert CSS.rindex("@media (max-height: 520px) {") > CSS.rindex("--land-top: calc(")  # it wins
+    messages = (ROOT / "src" / "tow" / "static" / "messages.css").read_text(encoding="utf-8")
+    assert "@media (max-height: 520px) { .msg-host { position: static; } }" in messages

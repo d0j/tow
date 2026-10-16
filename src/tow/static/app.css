@@ -1393,3 +1393,11 @@ details.advanced > .form-grid { margin-top: .55rem; }
 /* First start: the password fields only for a yes to "open TOW from other devices" (without
    :has() they stay in view, and a password typed with the box clear is saved as before). */
 .setup-form:not(:has(#allow-lan:checked)) .lan-password { display: none; }
+
+/* A screen this low (200 % zoom on a laptop) keeps its height for the page: the header and the
+   message strip (messages.css) scroll away instead of covering a third of it, so a link's target
+   has nothing to clear. */
+@media (max-height: 520px) {
+  header.app { position: static; }
+  :root { --land-top: .75rem; }
+}
