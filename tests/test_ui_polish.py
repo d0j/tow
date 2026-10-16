@@ -28,20 +28,25 @@ def client():
 
 
 def test_the_header_search_is_only_on_the_pages_it_filters(client):
-    """The header search filters Home's topics and the Sites list (their [data-q] rows). On History
+    """The header search filters Home's topics, the Sites list and the Settings sections (their
+    [data-q] rows and sections; 1.32.0 took it off Settings by mistake, where it worked). On History
     with a search (`/history?q=zzzz`) it opened by itself with the same words and covered the
-    page's title; on History, Settings, the Guide, Diagnostics and 404 it filtered nothing and said
+    page's title; on History, the Guide, Diagnostics and 404 it filtered nothing and said
     "Showing 0"."""
     from tow.store import save_state
 
     save_state(
         {"topics": [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1/x", "save_path": "Z:\\a"}]}
     )
-    for path in ("/", "/?q=show", "/sites"):
+    for path in ("/", "/?q=show", "/sites", "/settings"):
         page = client.get(path).text
         assert '<details class="hdr-search">' in page, path
         assert 'id="q"' in page, path
-    for path in ("/history?q=zzzz", "/history", "/settings", "/settings/help", "/doctor", "/no-such-page"):
+    # Every Settings section and the links below them carry their search words.
+    settings = client.get("/settings").text
+    assert re.findall(r'<details class="settings-section[^>]*>', settings)
+    assert all("data-q=" in tag for tag in re.findall(r'<details class="settings-section[^>]*>', settings))
+    for path in ("/history?q=zzzz", "/history", "/settings/help", "/doctor", "/no-such-page"):
         page = client.get(path).text
         assert "hdr-search" not in page, path
         assert 'id="q"' not in page, path

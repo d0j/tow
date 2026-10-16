@@ -56,6 +56,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The header no longer ends in a bare “—” while no check is scheduled: the countdown appears once there is one, and a
   failed check is always shown.
 
+### Fixed
+
+- The search icon is back in the header of Settings, where it finds a section by its words. 1.32.0 removed it saying
+  it filtered nothing there; on Settings it did filter the sections.
+
 ## [1.32.0] — 2026-10-16
 
 ### Security

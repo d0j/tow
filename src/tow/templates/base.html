@@ -14,9 +14,9 @@
   <nav aria-label="{{ t('base.nav.label') }}">
     <a href="/" class="ico{% if path == '/' %} on{% endif %}" {% if path == '/' %}aria-current="page"{% endif %} title="{{ t('base.nav.home') }}" aria-label="{{ t('base.nav.home') }}">{{ icon('home') }}</a>
     <a href="/sites" class="ico{% if path.startswith('/sites') %} on{% endif %}" {% if path.startswith('/sites') %}aria-current="page"{% endif %} title="{{ t('base.nav.sites') }}" aria-label="{{ t('base.nav.sites') }}">{{ icon('globe') }}</a>
-    {#- The search filters the rows of Home and Sites ([data-q]); elsewhere it would filter nothing
-        (History has its own, and the header's opened over its title with the same words). -#}
-    {% if path in ('/', '/sites') %}
+    {#- The search filters the rows of Home and Sites and the sections of Settings ([data-q]);
+        History has its own (the header's opened over its title with the same words). -#}
+    {% if path in ('/', '/sites', '/settings') %}
     <details class="hdr-search">
       <summary title="{{ t('base.search.open') }}" aria-label="{{ t('base.search.open') }}">{{ icon('search') }}</summary>
       <label class="sr-only" for="q">{{ t('base.search.label') }}</label>

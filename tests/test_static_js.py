@@ -297,6 +297,14 @@ def test_a_file_field_speaks_the_pages_language():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_header_search_filters_the_settings_sections():
+    """1.32.1 (C2): matching sections stay, the others hide; cleared, all come back as they were."""
+    verdict = _verdict("settings_search.mjs")
+    assert verdict == dict.fromkeys(("matchingSectionsShown", "allWordsMatch", "clearingKeepsTheirState"), True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_the_updates_card_writes_its_times_by_the_one_rule():
     verdict = _verdict("update_times.mjs")
     assert verdict == {"timesByTheOneRule": True, "olderServerKeepsItsLabel": True}
