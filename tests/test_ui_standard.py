@@ -100,9 +100,10 @@ def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
     # The older "next field" margins (.field + .field, the compact Settings one) pushed the second
     # field of a row 11 px down (seen in a browser); in the form the gap alone spaces groups.
     assert _first(".form-grid :is(.field, .field-grid) + .field.field").strip() == "margin-top: 0;"
-    assert "max-width: 68ch" in _first(
-        ".form-grid :is(.field-hint, .action-hint, .section-note, .support-note, .check-field p)"
-    )
+    assert "max-width: 68ch" in _first(".form-grid :is(.field-hint, .action-hint, .section-note, .check-field p)")
+    # A panel's intro and notes end where its widest field ends (1.32 QA L1: 440 px beside 576 px).
+    assert _first(".settings-panel > p, .support-note").strip() == "max-width: 36rem;"
+    assert "support-note" not in "".join(selector for selector, body in _rules(CSS) if "68ch" in body)
     assert "flex-direction: column" in _first(".field-row")
     wide = _block("@container (min-width: 38rem) {")
     assert "flex-direction: row" in _first(".field-row", wide)

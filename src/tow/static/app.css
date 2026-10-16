@@ -281,7 +281,7 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
 /* The gap spaces the groups: no older "next field" margin, which pushed the second field of a row
    down (the doubled class outranks `.settings-page-compact .field + .field`). */
 .form-grid :is(.field, .field-grid) + .field.field { margin-top: 0; }
-.form-grid :is(.field-hint, .action-hint, .section-note, .support-note, .check-field p) { max-width: 68ch; }
+.form-grid :is(.field-hint, .action-hint, .section-note, .check-field p) { max-width: 68ch; }
 /* Fields that belong together (address and port, user and password) share a line once their
    form is 38 rem wide - the form's width, not the window's: two cards side by side stack their
    own rows. Each takes the width of its field's class; one without a class takes what is left. */
@@ -1272,7 +1272,10 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* An intro line above the cards keeps clear of the first one. */
 .settings-panel > p:not(:last-child) { margin-bottom: .5rem; }
 /* Hints and notes outside a form keep a readable line too. */
-.settings-panel :is(.field-hint, .action-hint, .section-note, .support-note, .check-field p, .notifier-steps ol) { max-width: 68ch; }
+.settings-panel :is(.field-hint, .action-hint, .section-note, .check-field p, .notifier-steps ol) { max-width: 68ch; }
+/* A panel's intro and its notes run as wide as its widest field (.w-xl) rather than stopping at
+   440 px beside 576 px fields and full-width cards, where they read as cut off. */
+.settings-panel > p, .support-note { max-width: 36rem; }
 .settings-panel .notice { max-width: 46rem; }
 /* Clients and connected messengers: two open cards side by side on a wide screen, in their own
    order; a folded card takes the whole line. */
