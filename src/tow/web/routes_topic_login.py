@@ -82,11 +82,11 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
     # Another applying check runs or waits: the check that confirms the sign-in waits in the
     # queue, and its result is followed up as here (the password confirmed or put back).
     if check_jobs.has_pending(apply=True):
-        return enqueue_check(topic_id=str(tid), apply=True, follow_up=login.follow_up)
+        return enqueue_check(topic_id=str(tid), apply=True, follow_up=login)
     try:
         out = services.run_check(apply=True, notify=True, ids=[str(tid)], ignore_cool=True, how="manual", wait=False)
     except CheckBusyError:
-        return enqueue_check(topic_id=str(tid), apply=True, follow_up=login.follow_up)
+        return enqueue_check(topic_id=str(tid), apply=True, follow_up=login)
     except SecretStoreError as exc:
         services.record_check_failure(exc, how="manual")
         login.restore()
@@ -104,11 +104,20 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
 class _SignIn:
     """A login typed on Home and the check that confirms it: ``checked`` says what the check
     found (and puts the earlier password back when the site still refused the new one),
-    ``follow_up`` does the same for a check that had to wait in the queue."""
+    ``follow_up`` (the instance called) does the same for a check that had to wait in the queue."""
 
     def __init__(self, tid: str, tracker: GenericHttpTracker, old_entry: Any, username: str, password: str) -> None:
         self.tid, self.tracker, self.old_entry = tid, tracker, old_entry
         self.username, self.password = username, password
+
+    def __call__(self, out: dict[str, Any] | None, error: BaseException | None) -> dict[str, str]:
+        return self.follow_up(out, error)
+
+    def succeeds(self, earlier: object) -> None:
+        """This sign-in replaces ``earlier``'s, still waiting in the queue unchecked: what to put
+        back is what was saved before that one, the last password not refused yet."""
+        if isinstance(earlier, _SignIn) and earlier.tracker.name == self.tracker.name:
+            self.old_entry = copy.deepcopy(earlier.old_entry)
 
     def restore(self) -> bool | None:
         """The password saved before this one, back (False: not, it changed meanwhile; None: the

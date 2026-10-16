@@ -850,6 +850,37 @@ def test_a_sign_in_checked_from_the_queue_is_confirmed_or_put_back(client, monke
     assert job not in check_jobs.FOLLOW_UPS  # no password kept beside a finished job
 
 
+def test_sign_ins_queued_one_after_another_put_back_the_password_before_the_first(client, monkeypatch, consumers):
+    # Working password A, then B and C typed while another check ran: C's follow-up replaced B's
+    # with B as its baseline, so a refused C put back the unverified B instead of A.
+    monkeypatch.setattr("tow.web.services.load_config", lambda: {"trackers": {"nnmclub": NNM}})
+    save_state({"topics": [{"id": "t1", "title": "Show A", "url": "https://nnmclub.to/forum/viewtopic.php?t=1234567"}]})
+    secrets = {"trackers": {"nnmclub": {"username": "user", "password": "pass-a"}}}
+    monkeypatch.setattr("tow.web.services.load_secrets", lambda: copy.deepcopy(secrets))
+    monkeypatch.setattr("tow.web.services.save_secrets", lambda value: secrets.update(copy.deepcopy(value)))
+    monkeypatch.setattr("tow.web.services.log_event", lambda *_a, **_kw: None)
+    calls = []
+
+    def check(**kw):
+        calls.append(kw["ids"])
+        if len(calls) == 1:
+            raise CheckBusyError("a scheduled check holds the lock")
+        refused = {"id": "t1", "title": "Show A", "ok": False, "error": "refused", "error_class": "tracker_auth"}
+        return {"results": [refused]}
+
+    monkeypatch.setattr("tow.web.services.run_check", check)
+    first = _job(
+        client.post("/topics/t1/tracker-login", data={"username": "user", "password": "pass-b"}, follow_redirects=False)
+    )
+    second = _job(
+        client.post("/topics/t1/tracker-login", data={"username": "user", "password": "pass-c"}, follow_redirects=False)
+    )
+    assert first == second  # one queued check for both
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-c"
+    consumers[0].run()
+    assert secrets["trackers"]["nnmclub"]["password"] == "pass-a"  # the last one known to work
+
+
 @pytest.mark.parametrize("ends", ["added", "crash"])
 def test_a_new_topics_first_check_from_the_queue_says_what_a_check_at_once_says(client, monkeypatch, consumers, ends):
     # Queued behind another check, a new topic's first check lost "topic added; ..." and a crash of

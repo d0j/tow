@@ -28,7 +28,9 @@ ACTIONS: dict[str, str] = {}
 # password, a new topic's first check says "added to TOW, ...". Kept beside the job, never in it:
 # a job is deep-copied for every page that asks about it, and a follow-up may hold a password.
 # ``follow_up(result, error)`` gets the check's result or the error that ended it and returns the
-# job's feedback (``views.check_feedback``'s shape), or None to keep the check's own words.
+# job's feedback (``views.check_feedback``'s shape), or None to keep the check's own words. A
+# follow-up that replaces another one of a waiting job is first handed it (``succeeds(earlier)``,
+# when it has that method): a second sign-in keeps the first one's password to put back.
 type FollowUp = Callable[[dict[str, Any] | None, BaseException | None], dict[str, str] | None]
 FOLLOW_UPS: dict[str, FollowUp] = {}
 # The consumer of each lane, by the lane's ``apply``.
@@ -85,6 +87,10 @@ def submit(
                 if action:
                     _register(action, job["id"])
                 if follow_up is not None:
+                    earlier = FOLLOW_UPS.get(job["id"])
+                    succeeds = getattr(follow_up, "succeeds", None)
+                    if earlier is not None and callable(succeeds):
+                        succeeds(earlier)
                     FOLLOW_UPS[job["id"]] = follow_up
                 return get(job["id"]), False
         if len(_lane(apply)) >= MAX_PENDING:
