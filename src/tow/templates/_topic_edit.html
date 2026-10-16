@@ -50,12 +50,15 @@
     </div>
     <div class="field-row">
       <div class="field"><label for="edit-selection-mode-{{ topic.id }}">{{ t('home.add.what') }}</label><select id="edit-selection-mode-{{ topic.id }}" class="w-m" name="selection_mode" data-exact-option="{{ t('content.manual') }}"><option value="all"{% if mode == 'all' %} selected{% endif %}>{{ t('home.add.mode_all') }}</option>{% if mode == 'exact' %}<option value="exact" selected>{{ t('content.manual') }}</option>{% endif %}<option value="episodes"{% if mode == 'episodes' %} selected{% endif %}>{{ t('home.add.mode_episodes') }}</option><option value="files"{% if mode == 'files' %} selected{% endif %}>{{ t('home.add.mode_files') }}</option></select></div>
-      <div class="field interval-field"><label for="edit-check-interval-{{ topic.id }}">{{ t('timer.field') }}</label><input id="edit-check-interval-{{ topic.id }}" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ topic.check_interval_min or '' }}" aria-describedby="edit-check-interval-hint-{{ topic.id }}"><p class="field-hint" id="edit-check-interval-hint-{{ topic.id }}">{{ t('timer.hint') }}</p></div>
     </div>
-    <input type="hidden" name="tracking_unchecked" value="once">
-    <label class="check-label" for="edit-tracking-mode-{{ topic.id }}"><input id="edit-tracking-mode-{{ topic.id }}" name="tracking_mode" value="watch" type="checkbox"{% if topic.tracking_mode != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
     <div class="field" data-content-expression><label for="edit-selection-value-{{ topic.id }}">{{ t('home.add.selection') }}</label><textarea id="edit-selection-value-{{ topic.id }}" class="w-xl" name="selection_value" rows="2" placeholder="{{ t('home.add.selection_placeholder') }}">{{ topic.selection.value if topic.selection else '' }}</textarea></div>
     {% set draft = none %}{% include '_content_picker.html' %}
+    {#- The add form's order: following and the timer after what to download and its rule. -#}
+    <div class="field-row follow-row">
+      <input type="hidden" name="tracking_unchecked" value="once">
+      <label class="check-label" for="edit-tracking-mode-{{ topic.id }}"><input id="edit-tracking-mode-{{ topic.id }}" name="tracking_mode" value="watch" type="checkbox"{% if topic.tracking_mode != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
+      <div class="field interval-field"><label for="edit-check-interval-{{ topic.id }}">{{ t('timer.field') }}</label><input id="edit-check-interval-{{ topic.id }}" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ topic.check_interval_min or '' }}" aria-describedby="edit-check-interval-hint-{{ topic.id }}"><p class="field-hint" id="edit-check-interval-hint-{{ topic.id }}">{{ t('timer.hint') }}</p></div>
+    </div>
   </form>
   {% if (topic.download_summary or {}).is_complete and not topic.paused %}
   <form id="stop-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/pause" hidden></form>

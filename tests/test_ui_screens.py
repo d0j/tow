@@ -352,3 +352,25 @@ def test_a_cleared_follow_box_is_saved_as_once_on_edit(client, monkeypatch):
     assert load_state()["topics"][0]["tracking_mode"] == "once"
     panel = BeautifulSoup(client.get(f"/topics/{topic['id']}/edit-panel").text, "html.parser")
     assert not panel.select_one(f"#edit-tracking-mode-{topic['id']}").has_attr("checked")
+
+
+def test_the_add_form_and_the_edit_panel_keep_one_order(client):
+    """1.32 QA L10: "Add new versions" and "Check every" stood between "What to download" and its
+    rule in the add form, while the edit panel had the interval beside "What to download". Both
+    now say what to download, its rule and files, then following and the timer."""
+    from tow.store import save_state
+
+    save_state({"topics": [{"id": "t1", "title": "Show", "url": "http://rutor.info/torrent/1", "save_path": "M:/TV"}]})
+    home = BeautifulSoup(client.get("/").text, "html.parser").select_one("#new form")
+    panel = BeautifulSoup(client.get("/topics/t1/edit-panel").text, "html.parser")
+    for form, prefix, suffix in ((home, "topic-", ""), (panel, "edit-", "-t1")):
+        ids = [
+            node.get("id") or node.get("data-content-picker", "") for node in form.select("[id], [data-content-picker]")
+        ]
+        ids = ["picker" if value == "" else value for value in ids]
+        names = [f"{prefix}selection-mode{suffix}", f"{prefix}selection-value{suffix}", "picker"]
+        names += [f"{prefix}tracking-mode{suffix}", f"{prefix}check-interval{suffix}"]
+        assert [ids.index(name) for name in names] == sorted(ids.index(name) for name in names), prefix
+        row = form.select_one(".follow-row")
+        assert row.select_one(f"#{prefix}tracking-mode{suffix}")
+        assert row.select_one(f"#{prefix}check-interval{suffix}")
