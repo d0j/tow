@@ -97,8 +97,7 @@ a { color: var(--acc); text-decoration: none; }
 a:hover { text-decoration: underline; }
 /* A link that stands alone on its line (not inside a sentence) is a 24 px target (WCAG 2.5.8):
    the way back, a step, a result row, a message's link, the log's link to History. */
-:is(.help-back, .step-head, .check-result-row, .check-results > .sub, .msg-actions, .flash, .log-pop-head) > a,
-.help-page section > p > a:only-child, .edit-panel > .sub > a:only-child {
+:is(.help-back, .link-row, .step-head, .check-result-row, .msg-actions, .flash, .log-pop-head) > a {
   display: inline-flex; align-items: center; min-block-size: 1.5rem;
 }
 /* A link inside running text is told from the words around it by more than its colour
@@ -749,15 +748,15 @@ label.check-field { min-block-size: 24px; align-content: center; color: var(--fg
 :is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary::before,
 :is(.notifier-card, .client-card, .protection-card) > summary h2::before,
 .settings-accordion > summary::before {
-  content: ""; display: inline-block; flex: 0 0 auto; width: .36rem; height: .36rem;
+  content: ""; display: inline-block; flex: 0 0 auto; box-sizing: border-box; width: .45rem; height: .45rem;
   border-right: 1.5px solid var(--mut); border-bottom: 1.5px solid var(--mut);
   transform: rotate(-45deg); transition: transform .15s ease;
 }
 :is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary::before {
-  margin-inline-end: calc(var(--sp-4) - .36rem);
+  margin-inline-end: calc(var(--sp-4) - .45rem);
 }
 :is(.notifier-card, .client-card, .protection-card) > summary h2::before {
-  margin-inline-end: calc(var(--sp-4) - .36rem + var(--sp-2)); vertical-align: .12rem;
+  margin-inline-end: calc(var(--sp-4) - .45rem + var(--sp-2)); vertical-align: .12rem;
 }
 :is(.technical-details, details.advanced, .backup-inventory, .backup-location)[open] > summary::before,
 :is(.notifier-card, .client-card, .protection-card)[open] > summary h2::before,
@@ -1061,6 +1060,7 @@ svg.i.xs { width: .75rem; height: .75rem; stroke-width: 2.4; }
 .sort-menu .sort-option { width: 100%; justify-content: start; text-align: left; border-color: transparent; }
 .sort-option svg { flex-shrink: 0; }
 .sort-option:hover, .sort-option:focus-visible { background: var(--panel2); }
+.sort-menu .sort-option:focus-visible { outline-offset: -2px; }
 .sort-selected { margin-left: auto; visibility: hidden; }
 .sort-option[aria-checked="true"] .sort-selected { visibility: visible; }
 .tracker-picker[hidden] { display: none; }

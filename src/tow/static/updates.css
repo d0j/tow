@@ -10,7 +10,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-2);
-  padding: .15rem .4rem;
+  padding: 0 var(--sp-2);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--header-bg);
@@ -18,7 +18,8 @@
   font-size: 11px;
   line-height: 1.4;
 }
-.app-version > a { color: var(--mut); text-decoration: none; }
+/* Each link a 24 px target (the badge is 26 px with its border). */
+.app-version > a { display: inline-flex; align-items: center; min-block-size: 1.5rem; color: var(--mut); text-decoration: none; }
 .app-version > a:hover, .app-version > a:focus-visible { text-decoration: underline; }
 .app-version.is-obstructing { visibility: hidden; pointer-events: none; }
 /* Room for the version at the end of every page: on a long list it stepped aside for the last row and
