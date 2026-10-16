@@ -1902,7 +1902,7 @@
       },
       "remove_confirm": "Remove the client “{title}” from TOW? The client itself and its torrents stay as they are (you can bring it back with “Undo”).",
       "empty": "No clients available.",
-      "add_label": "Add a client",
+      "add_label": "Client type",
       "add_open": "Add client",
       "add": "Add",
       "pill_down": "{name} — not answering",
