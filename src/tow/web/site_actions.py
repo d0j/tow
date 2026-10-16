@@ -8,6 +8,7 @@ The configuration comes from ``tow.web.site_form``; every store is reached throu
 from __future__ import annotations
 
 import copy
+import dataclasses
 from typing import Any
 from urllib.parse import urlencode
 
@@ -147,6 +148,10 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
     spec = trackers.get(name)
     if not isinstance(spec, dict):
         return flash_redirect("/sites", "web.sites.no_site", "err")
+    if form.browser_sign_in():
+        # The fields browser sign-in hides are never a new login: a typed or autofilled password
+        # sent with them must not replace the saved one, which stays for a return to passwords.
+        form = dataclasses.replace(form, username="", password="")
     previous_spec = copy.deepcopy(spec)
     try:
         key, added_login_hosts = edit_site_hosts(name, spec, form, trackers)

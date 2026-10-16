@@ -45,8 +45,8 @@
       <textarea id="site-hosts" class="w-xl" name="fetch_hosts" rows="2" placeholder="https://tracker.example"{{ invalid('site-hosts') }}>{{ draft.get('fetch_hosts', '') }}</textarea>
     </div>
     <div class="field-row">
-      <div class="field"><label for="site-user">{{ t('sites.login') }}</label><input id="site-user" class="w-m" name="username" autocomplete="username" value="{{ draft.get('username', '') }}"></div>
-      <div class="field"><label for="site-pass">{{ t('sites.password') }}</label><span class="secret"><input id="site-pass" class="w-m" name="password" type="password" autocomplete="current-password">{{ reveal('site-pass', t('sites.password')) }}</span></div>
+      <div class="field"><label for="site-user">{{ t('sites.login') }}</label><input id="site-user" class="w-m" name="username" autocomplete="section-new-site username" value="{{ draft.get('username', '') }}"></div>
+      <div class="field"><label for="site-pass">{{ t('sites.password') }}</label><span class="secret"><input id="site-pass" class="w-m" name="password" type="password" autocomplete="section-new-site current-password">{{ reveal('site-pass', t('sites.password')) }}</span></div>
     </div>
     {#- What a pasted link fills in by itself: folded away, opened for a field that was refused. -#}
     <details class="advanced"{% if bad_field in ('site-regex', 'site-dl', 'site-login-path', 'site-topic-path', 'site-href-rx') %} open{% endif %}>
@@ -146,10 +146,11 @@
             <input type="hidden" name="browser_auth_present" value="1">
             <label class="check-label" for="site-browser-{{ name }}"><input id="site-browser-{{ name }}" name="browser_auth" value="1" type="checkbox" aria-describedby="site-browser-hint-{{ name }}"{% if spec.browser_auth %} checked{% endif %}> {{ t('sites.browser_auth') }}</label>
             <p class="field-hint browser-note" id="site-browser-hint-{{ name }}">{{ t('sites.browser_auth_hint') }}</p>
-            {#- Browser sign-in replaces the password: the fields step aside (CSS), what is saved stays. -#}
-            <div class="field-row password-group">
-              <div class="field"><label for="site-user-{{ name }}">{{ t('sites.login') }}</label><input id="site-user-{{ name }}" class="w-m" name="username" value="{{ login.user }}" autocomplete="username"{{ fix_attrs('site_login', name) }}></div>
-              <div class="field"><label for="site-pass-{{ name }}">{{ t('sites.password') }}</label><span class="secret"><input id="site-pass-{{ name }}" class="w-m" name="password" type="password" autocomplete="current-password"{% if login.password_saved %} aria-describedby="site-pass-saved-{{ name }}"{% endif %}{{ mark('password', bad) }}>{{ reveal('site-pass-' ~ name, t('sites.password')) }}</span>
+            {#- Browser sign-in replaces the password: the fields step aside (CSS) and are disabled
+                (app.js), the server ignores them then, and what is saved stays. -#}
+            <div class="field-row password-group" data-enabled-by="site-browser-{{ name }}" data-enabled-when="unchecked">
+              <div class="field"><label for="site-user-{{ name }}">{{ t('sites.login') }}</label><input id="site-user-{{ name }}" class="w-m" name="username" value="{{ login.user }}" autocomplete="section-site-{{ name }} username"{{ fix_attrs('site_login', name) }}></div>
+              <div class="field"><label for="site-pass-{{ name }}">{{ t('sites.password') }}</label><span class="secret"><input id="site-pass-{{ name }}" class="w-m" name="password" type="password" autocomplete="section-site-{{ name }} current-password"{% if login.password_saved %} aria-describedby="site-pass-saved-{{ name }}"{% endif %}{{ mark('password', bad) }}>{{ reveal('site-pass-' ~ name, t('sites.password')) }}</span>
                 {%- if login.password_saved %}{{ saved_hint('site-pass-saved-' ~ name) }}{% endif %}</div>
             </div>
           </div>

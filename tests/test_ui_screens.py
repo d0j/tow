@@ -145,6 +145,36 @@ def test_the_site_password_says_it_is_saved_only_when_it_is(client, stored):
     assert field.get("aria-describedby") == ("site-pass-saved-rutor" if stored else None)
 
 
+def test_browser_sign_in_keeps_the_saved_login_whatever_the_hidden_fields_send(client):
+    """With browser sign-in chosen the user name and password step aside, but a typed or
+    autofilled password was still sent and replaced the saved one. The server ignores them then;
+    without browser sign-in they are saved as before."""
+    from tow.store import load_secrets, save_secrets
+
+    secrets = load_secrets()
+    secrets.setdefault("trackers", {})["rutor"] = {"username": "kept-user", "password": "kept-pass"}
+    save_secrets(secrets)
+    data = {"fetch_hosts": "http://rutor.info", "username": "typed-user", "password": "typed-pass"}
+    browser = {**data, "browser_auth_present": "1", "browser_auth": "1"}
+    assert client.post("/sites/rutor", data=browser, follow_redirects=False).status_code == 303
+    assert load_secrets()["trackers"]["rutor"] == {"username": "kept-user", "password": "kept-pass"}
+    plain = client.post("/sites/rutor", data={**data, "browser_auth_present": "1"}, follow_redirects=False)
+    assert plain.status_code == 303
+    assert load_secrets()["trackers"]["rutor"] == {"username": "typed-user", "password": "typed-pass"}
+
+
+def test_site_credentials_are_disabled_with_browser_sign_in_and_autofilled_per_site(client):
+    """The fields a chosen browser sign-in hides are disabled with it (app.js, data-enabled-by),
+    and each site's login is its own autofill section: a password manager keeps one per card."""
+    page = BeautifulSoup(client.get("/sites?open=rutor").text, "html.parser")
+    group = page.select_one("#ed-site-rutor .password-group")
+    assert (group["data-enabled-by"], group["data-enabled-when"]) == ("site-browser-rutor", "unchecked")
+    assert page.select_one("#site-user-rutor")["autocomplete"] == "section-site-rutor username"
+    assert page.select_one("#site-pass-rutor")["autocomplete"] == "section-site-rutor current-password"
+    assert page.select_one("#site-user")["autocomplete"] == "section-new-site username"
+    assert page.select_one("#site-pass")["autocomplete"] == "section-new-site current-password"
+
+
 def test_a_sign_in_target_on_a_site_without_a_sign_in_page_opens_advanced(client):
     """The "site asks to sign in" link of a site without a sign-in path focuses its user name; the
     sign-in path it also needs is under Advanced, which opens for it."""
