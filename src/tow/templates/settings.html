@@ -56,10 +56,12 @@
             {% if c.steps %}
             <details class="technical-details notifier-steps" {% if not c.host %}open{% endif %}>
               <summary>{{ t('settings.common.how_to_connect') }}</summary>
-              <ol>
-                {% for step in c.steps %}<li>{{ step }}</li>{% endfor %}
-              </ol>
-              {% if c.note %}<p class="action-hint">{{ c.note }}</p>{% endif %}
+              <div class="details-body">
+                <ol>
+                  {% for step in c.steps %}<li>{{ step }}</li>{% endfor %}
+                </ol>
+                {% if c.note %}<p class="action-hint">{{ c.note }}</p>{% endif %}
+              </div>
             </details>
             {% endif %}
             <form id="client-form-{{ c.form_id }}" method="post" action="/settings/client" class="settings-form form-grid" data-return-target="client-{{ c.id }}">
@@ -118,7 +120,7 @@
             {% endif %}
             <details class="technical-details">
               <summary>{{ t('settings.common.technical') }}</summary>
-              <dl>
+              <dl class="details-body">
                 <div><dt>{{ t('settings.common.type') }}</dt><dd><code>{{ c.kind }}</code></dd></div>
                 <div><dt>ID</dt><dd><code>{{ c.id }}</code></dd></div>
               </dl>
@@ -132,6 +134,7 @@
             may be what the owner needs); open while there is none at all. -#}
         <details class="technical-details client-add-toggle"{% if not clients %} open{% endif %}>
           <summary>{{ t('settings.clients.add_open') }}</summary>
+          <div class="details-body">
           <form method="post" action="/settings/client/add" class="settings-form client-add" data-return-target="acc-clients">
             <div class="field">
               <label for="client-add-kind">{{ t('settings.clients.add_label') }}</label>
@@ -143,6 +146,7 @@
               </div>
             </div>
           </form>
+          </div>
         </details>
       </div>
     </details>
@@ -183,10 +187,12 @@
             {% endif %}
             <details class="technical-details notifier-steps" {% if not n.connected %}open{% endif %}>
               <summary>{{ t('settings.common.how_to_connect') }}</summary>
-              <ol>
-                {% for step in n.steps %}<li>{{ step }}</li>{% endfor %}
-              </ol>
-              {% if n.note %}<p class="action-hint">{{ n.note }}</p>{% endif %}
+              <div class="details-body">
+                <ol>
+                  {% for step in n.steps %}<li>{{ step }}</li>{% endfor %}
+                </ol>
+                {% if n.note %}<p class="action-hint">{{ n.note }}</p>{% endif %}
+              </div>
             </details>
             <form id="notifier-form-{{ n.kind }}" method="post" action="/settings/notifier/{{ n.kind }}" class="settings-form form-grid" data-return-target="acc-bots">
               <fieldset>
@@ -307,6 +313,7 @@
           {#- Folded at rest; open after a refused change (?card=password) and while none is set. -#}
           <details class="technical-details access-password" id="password-change"{% if open_card == 'password' or not lan_password_set %} open{% endif %}>
             <summary>{% if lan_password_set %}{{ t('settings.access.password_set') }} · {{ t('settings.access.change') }}{% else %}{{ t('settings.access.password_unset') }} · {{ t('settings.access.set') }}{% endif %}</summary>
+            <div class="details-body">
             <form method="post" action="/settings/password" class="settings-form form-grid" data-return-target="acc-access">
               <fieldset>
                 <legend class="sr-only">{{ t('settings.access.password_title') }}</legend>
@@ -342,7 +349,8 @@
               </div>
               <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
             </form>
-            {% if lan_password_set %}<form id="sign-out-everywhere" method="post" action="/settings/sessions/sign-out" data-return-target="acc-access"></form>{% endif %}
+            {% if lan_password_set %}<form id="sign-out-everywhere" method="post" action="/settings/sessions/sign-out" data-return-target="acc-access" hidden></form>{% endif %}
+            </div>
           </details>
           {% endif %}
         </div>
@@ -521,27 +529,33 @@
           <div class="settings-actions"><button type="button" class="ghost" data-update-reload hidden>{{ t('js.releases.reload') }}</button></div>
           <details class="technical-details" data-update-details>
             <summary>{{ t('releases.details') }}</summary>
-            <p class="action-hint" data-update-history hidden></p>
-            <p class="action-hint" data-update-support></p>
-          <details class="technical-details" data-update-rollback hidden>
-            <summary>{{ t('releases.rollback_title') }}</summary>
-            <p class="action-hint">{{ t('releases.rollback_policy') }}</p>
-            <div class="field">
-              <label for="rollback-version">{{ t('releases.target_label') }}</label>
-              <input id="rollback-version" class="w-m" data-update-version inputmode="text" placeholder="{{ t('common.example', example='1.22.21') }}" maxlength="32" autocomplete="off">
+            <div class="details-body">
+              <p class="action-hint" data-update-history hidden></p>
+              <p class="action-hint" data-update-support></p>
+              <details class="technical-details" data-update-rollback hidden>
+                <summary>{{ t('releases.rollback_title') }}</summary>
+                <div class="details-body"><div class="form-grid">
+                  <p class="action-hint">{{ t('releases.rollback_policy') }}</p>
+                  <div class="field">
+                    <label for="rollback-version">{{ t('releases.target_label') }}</label>
+                    <input id="rollback-version" class="w-m" data-update-version inputmode="text" placeholder="{{ t('common.example', example='1.22.21') }}" maxlength="32" autocomplete="off">
+                  </div>
+                  <div class="settings-actions"><button type="button" class="ghost" data-update-apply>{{ t('releases.apply_version') }}</button><button type="button" class="ghost" data-update-previous hidden></button></div>
+                </div></div>
+              </details>
+              <p class="action-hint">{{ t('releases.policy') }}</p>
+              <details class="technical-details">
+                <summary>{{ t('releases.how') }}</summary>
+                <div class="details-body">
+                  <p>{{ t('releases.install') }}</p>
+                  <code data-release-command>{{ os_launcher() }} update --ref v{{ hh.ver }}</code>
+                </div>
+              </details>
+              <details class="technical-details" data-update-log>
+                <summary>{{ t('releases.log') }}</summary>
+                <pre class="details-body" data-update-log-text>{{ t('releases.log_pending') }}</pre>
+              </details>
             </div>
-            <div class="settings-actions"><button type="button" class="ghost" data-update-apply>{{ t('releases.apply_version') }}</button><button type="button" class="ghost" data-update-previous hidden></button></div>
-          </details>
-          <p class="action-hint">{{ t('releases.policy') }}</p>
-          <details class="technical-details">
-            <summary>{{ t('releases.how') }}</summary>
-            <p>{{ t('releases.install') }}</p>
-            <code data-release-command>{{ os_launcher() }} update --ref v{{ hh.ver }}</code>
-          </details>
-          <details class="technical-details" data-update-log>
-            <summary>{{ t('releases.log') }}</summary>
-            <pre data-update-log-text>{{ t('releases.log_pending') }}</pre>
-          </details>
           </details>
           <noscript><p class="action-hint">{{ t('releases.no_script') }}</p></noscript>
         </section>
@@ -595,7 +609,7 @@
         {% endif %}
         <details class="technical-details">
           <summary>{{ t('settings.common.technical') }}</summary>
-          <dl>
+          <dl class="details-body">
             {% if service.running_since %}<div><dt>{{ t('settings.service.running_since') }}</dt><dd>{{ service.running_since_at | short_time }}</dd></div>{% endif %}
             <div><dt>PID</dt><dd><code>{{ service.pid }}</code></dd></div>
             <div><dt>{{ t('settings.service.autostart_where') }}</dt><dd><code>{{ (service.autostart_detail or {}).get('where') or '—' }}</code></dd></div>

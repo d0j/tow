@@ -5,6 +5,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Changed
+
+- Every distance in the interface follows one scale (3, 6, 9, 12 and 18 px): a label and its hint sit 3 px from
+  their field, the groups of a form 9 px apart, the buttons 9 px under the last field on every screen (there were
+  14 different gaps above them), a disclosure's text 6 px under its title. The browser's own blank lines under
+  paragraphs and lists are gone (sign-in, Updates, Diagnostics, the guide), so every screen is shorter.
+
 ## [1.32.2] — 2026-10-16
 
 ### Changed

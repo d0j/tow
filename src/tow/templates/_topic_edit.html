@@ -21,7 +21,7 @@
   {%- elif topic.last_error_class == 'qbit' %}<p class="sub"><a href="/settings?open=clients">{{ t('home.topic.client_settings') }}</a></p>{% endif %}{% endif %}
   {% if topic.site_retry_at %}<p class="sub">{{ tm('site_access.retry_at', at=topic.site_retry_raw|short_time) }}</p>{% endif %}
   {% if topic.torrent_tone == 'warn' and topic.last_error and topic.last_error_class != 'frozen' %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" class="ghost" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
-  {% if topic.sign_in_href %}<p><a class="btn ghost" href="{{ topic.sign_in_href }}"{{ fix_attrs('sign_in', topic.id) }}>{{ t('home.topic.sign_in') }}</a></p>{% endif %}
+  {% if topic.sign_in_href %}<div class="actions"><a class="btn ghost" href="{{ topic.sign_in_href }}"{{ fix_attrs('sign_in', topic.id) }}>{{ t('home.topic.sign_in') }}</a></div>{% endif %}
   {% if topic.replaces_revision %}
   <form method="post" action="/topics/{{ topic.id|urlencode }}/replace-revision" data-confirm="{{ t('home.topic.replace_confirm') }}">
     <button type="submit" class="ghost" data-busy-label="{{ t('common.busy.checking') }}">{{ t('home.topic.replace') }}</button>

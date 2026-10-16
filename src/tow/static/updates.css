@@ -31,9 +31,8 @@ body:has(> .app-version) { box-sizing: border-box; padding-bottom: 2.2rem; }
   border-radius: 999px;
   padding: 0 .45rem;
 }
-.release-panel { margin: 0; }
-.release-panel h2 { font-size: 13px; margin: 0 0 .35rem; }
-.release-panel > p { margin: .35rem 0; }
+/* Updates: the panel's blocks 9 px apart (app.css .settings-panel). */
+.release-panel { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3); }
 .release-panel code { white-space: normal; overflow-wrap: anywhere; }
 .release-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow-y: auto; }
 .release-panel [hidden], [data-release-badge][hidden] { display: none !important; }

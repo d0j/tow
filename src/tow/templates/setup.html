@@ -13,11 +13,17 @@
   {% macro reason(field) %}{% if error and error_field == field %}<p class="field-error" id="setup-error" role="alert">{{ error|sentence }}</p>{% endif %}{% endmacro %}
   <main class="auth-shell">
     <section class="card auth-card auth-card-wide" aria-labelledby="setup-title">
-      <h1 id="setup-title">{{ t('setup.heading') }}</h1>
-      <p>{{ t('setup.what') }}</p>
+      <div class="stack-4">
+      <div class="stack-2">
+        <h1 id="setup-title">{{ t('setup.heading') }}</h1>
+        <p>{{ t('setup.what') }}</p>
+      </div>
       {#- The one question of this page first; the password only for a yes (1.32). -#}
-      <h2 class="add-title">{{ t('setup.access_title') }}</h2>
-      <p class="sub">{{ t('setup.intro') }}</p>
+      <section class="stack-3" aria-labelledby="setup-access-title">
+      <div class="stack-1">
+        <h2 class="add-title" id="setup-access-title">{{ t('setup.access_title') }}</h2>
+        <p class="sub">{{ t('setup.intro') }}</p>
+      </div>
       {% if error and not error_field %}<p class="form-error" id="setup-error" role="alert">{{ error|sentence }}</p>{% endif %}
       {#- Sent as a form (data-native-submit): app.js is here for the eyes only. novalidate: without
           app.js a hidden short password must not block Start; the server checks the choice. -#}
@@ -49,6 +55,8 @@
           <button type="submit" name="action" value="save">{{ t('setup.save') }}</button>
         </div>
       </form>
+      </section>
+      </div>
     </section>
   </main>
   <script type="application/json" id="tow-i18n">{{ js_texts(before_sign_in=True)|tojson }}</script>
