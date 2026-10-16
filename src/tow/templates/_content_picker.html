@@ -1,6 +1,7 @@
 {#- The torrent's files: the whole box for "Choose files", one compact line that previews what an
     episode or pattern rule takes, nothing for "All files" (data-view; content.js keeps it with the
     select). -#}
+{% from "_file.html" import file_input %}
 {% set picker_mode = (draft.get('selection_mode', 'all') if draft else (topic.selection.mode if topic and topic.selection else 'all')) %}
 <section class="content-picker" data-content-picker data-view="{{ 'files' if picker_mode == 'exact' else 'none' if picker_mode == 'all' else 'rule' }}" data-topic-id="{{ topic.id if topic else '' }}" data-existing="{{ content_existing(topic)|tojson|forceescape }}">
   <div class="actions picker-head">
@@ -13,7 +14,9 @@
   {% if topic and topic.selection and topic.selection.mode == 'exact' %}<p class="field-hint">{{ t('content.pending') }}</p>{% endif %}
   <details class="technical-details">
     <summary>{{ t('content.other_sources') }}</summary>
-    <label>{{ t('content.upload') }}<input type="file" accept=".torrent,application/x-bittorrent" data-content-upload></label>
+    {% set upload_id = 'content-upload-' ~ (topic.id if topic else 'new') %}
+    <label for="{{ upload_id }}">{{ t('content.upload') }}</label>
+    {{ file_input(upload_id, accept='.torrent,application/x-bittorrent', data_content_upload=true) }}
     <div class="actions">
       <button type="button" class="ghost" data-content-magnet title="{{ t('content.magnet_hint') }}">{{ t('content.magnet_load') }}</button>
       <button type="button" class="ghost" data-content-fresh hidden>{{ t('content.fresh_load') }}</button>
