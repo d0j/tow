@@ -20,16 +20,16 @@
   {%- if topic.last_error_class == 'frozen' and topic.tracker %}<p class="sub"><a href="/sites?open={{ topic.tracker|urlencode }}#site-row-{{ topic.tracker|urlencode }}">{{ t('home.topic.open_site', site=site_title(topic.tracker)) }}</a></p>
   {%- elif topic.last_error_class == 'qbit' %}<p class="sub"><a href="/settings?open=clients">{{ t('home.topic.client_settings') }}</a></p>{% endif %}{% endif %}
   {% if topic.site_retry_at %}<p class="sub">{{ tm('site_access.retry_at', at=topic.site_retry_raw|short_time) }}</p>{% endif %}
-  {% if topic.torrent_tone == 'warn' and topic.last_error and topic.last_error_class != 'frozen' %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
-  {% if topic.sign_in_href %}<p><a class="btn" href="{{ topic.sign_in_href }}"{{ fix_attrs('sign_in', topic.id) }}>{{ t('home.topic.sign_in') }}</a></p>{% endif %}
+  {% if topic.torrent_tone == 'warn' and topic.last_error and topic.last_error_class != 'frozen' %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" class="ghost" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
+  {% if topic.sign_in_href %}<p><a class="btn ghost" href="{{ topic.sign_in_href }}"{{ fix_attrs('sign_in', topic.id) }}>{{ t('home.topic.sign_in') }}</a></p>{% endif %}
   {% if topic.replaces_revision %}
   <form method="post" action="/topics/{{ topic.id|urlencode }}/replace-revision" data-confirm="{{ t('home.topic.replace_confirm') }}">
-    <button type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('home.topic.replace') }}</button>
+    <button type="submit" class="ghost" data-busy-label="{{ t('common.busy.checking') }}">{{ t('home.topic.replace') }}</button>
   </form>
   {% endif %}
   {% if topic.adoptable %}
   <form method="post" action="/topics/{{ topic.id|urlencode }}/adopt" data-confirm="{{ t('home.topic.adopt_confirm') }}">
-    <button type="submit">{{ t('home.topic.adopt') }}</button>
+    <button type="submit" class="ghost">{{ t('home.topic.adopt') }}</button>
   </form>
   {% endif %}
   {#- The fields below say the selection and the mode; only what they cannot say is said here. -#}
@@ -66,10 +66,11 @@
   <form id="stop-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/pause" hidden></form>
   <p class="sub">{{ t('home.topic.season_done', done=topic.download_summary.completed, total=topic.download_summary.expected) }} <button class="ghost sm" type="submit" form="stop-{{ topic.id }}">{{ t('home.topic.stop_watching') }}</button></p>
   {% endif %}
-  <form id="del-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/delete" data-confirm="{{ t('home.topic.delete_confirm') }}" hidden></form>
+  <form id="del-{{ topic.id }}" method="post" action="/topics/{{ topic.id|urlencode }}/delete" data-confirm="{{ t('home.topic.delete_confirm') }}" data-confirm-label="{{ t('home.topic.delete') }}" data-confirm-danger hidden></form>
   <div class="edit-actions">
     <button type="submit" form="ed-{{ topic.id }}">{{ t('home.topic.save') }}</button>
     {% if standalone %}<a class="btn ghost" href="/">{{ t('home.cancel') }}</a>{% else %}<button class="ghost" type="button" data-close-details formnovalidate>{{ t('home.cancel') }}</button>{% endif %}
-    <button class="danger" type="submit" form="del-{{ topic.id }}" title="{{ t('home.topic.delete_title') }}">{{ t('home.topic.delete') }}</button>
+    {#- One solid button per panel (Save); the delete is quiet and confirmed (app.js towConfirm). -#}
+    <button class="ghost danger" type="submit" form="del-{{ topic.id }}" title="{{ t('home.topic.delete_title') }}">{{ t('home.topic.delete') }}</button>
   </div>
 </div>

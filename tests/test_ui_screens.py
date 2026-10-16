@@ -630,3 +630,33 @@ def test_sites_show_a_sign_in_pill_only_when_it_says_something(client):
     assert pills("nnmclub") == []
     assert "Вход не нужен" not in page.get_text()
     assert "Вход не задан" not in page.get_text()
+
+
+def _solid(scope) -> list[str]:
+    """The solid (primary) buttons and button links of a part of a page (square icons aside)."""
+    controls = scope.select("button:not(.ico), a.btn")
+    return [c.get_text(" ", strip=True) for c in controls if "ghost" not in (c.get("class") or [])]
+
+
+def test_edit_panels_have_one_primary_and_a_quiet_confirmed_delete(client):
+    """1.32.1 V2/UI:C1: a topic's and a site's panel had a solid Save, solid fix buttons and a solid
+    red Delete. Save is the one solid button now; Delete is ghost-danger, and its form names the
+    confirm button's words and marks it destructive for the shared confirmation dialog."""
+    from tow.store import save_state
+
+    url = "https://rutracker.org/forum/viewtopic.php?t=1234567"
+    topic = {"id": "t1", "title": "Show", "url": url, "save_path": "M:/TV", "hash": "a" * 40}
+    save_state({"topics": [{**topic, "last_ok": False, "last_error": "sign-in", "last_error_class": "tracker_auth"}]})
+    panel = BeautifulSoup(client.get("/topics/t1/edit-panel").text, "html.parser")
+    assert _solid(panel) == ["Сохранить"]
+    delete = panel.select_one('button[form="del-t1"]')
+    assert delete["class"] == ["ghost", "danger"]
+    form = panel.select_one("form#del-t1")
+    assert (form["data-confirm-label"], form.has_attr("data-confirm-danger")) == ("Убрать из TOW", True)
+    assert form["data-confirm"]
+    row = BeautifulSoup(client.get("/sites?open=rutor").text, "html.parser").select_one("#site-row-rutor .edit-panel")
+    assert _solid(row) == ["Сохранить"]
+    delete = row.select_one('button[form="del-site-rutor"]')
+    assert delete["class"] == ["ghost", "danger"]
+    form = row.select_one("form#del-site-rutor")
+    assert (form["data-confirm-label"], form.has_attr("data-confirm-danger")) == ("Удалить", True)

@@ -191,11 +191,11 @@
             </div>
           </details>
         </form>
-        <form id="del-site-{{ name }}" method="post" action="/sites/{{ name|urlencode }}/delete" data-confirm="{{ t('sites.delete_confirm') }}" hidden></form>
+        <form id="del-site-{{ name }}" method="post" action="/sites/{{ name|urlencode }}/delete" data-confirm="{{ t('sites.delete_confirm') }}" data-confirm-label="{{ t('sites.delete') }}" data-confirm-danger hidden></form>
         <div class="edit-actions">
           <button type="submit" form="ed-site-{{ name }}">{{ t('sites.save') }}</button>
           <button class="ghost" type="button" data-close-details formnovalidate>{{ t('sites.cancel') }}</button>
-          <button class="danger" type="submit" form="del-site-{{ name }}">{{ t('sites.delete') }}</button>
+          <button class="ghost danger" type="submit" form="del-site-{{ name }}">{{ t('sites.delete') }}</button>
         </div>
       </div>
     </details>
