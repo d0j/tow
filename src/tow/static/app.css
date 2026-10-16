@@ -1229,6 +1229,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .check-results { padding: .8rem; margin-bottom: .6rem; scroll-margin-top: var(--land-top); }
 .check-results-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
 .check-results h2 { margin-top: 0; font-size: 1.05rem; } /* as every card and dialog title */
+.check-results h2 .sub { font-weight: 400; } /* the run's time beside the title is not bold */
 .check-result-list { list-style: none; padding: 0; }
 .check-result-row { display: flex; flex-wrap: wrap; gap: .3rem .6rem; margin: .5rem 0; overflow-wrap: anywhere; }
 .check-result-row > :last-child { flex: 1 1 20rem; }
