@@ -263,7 +263,7 @@ def test_a_check_waiting_too_long_for_the_lock_ends_as_not_run(client, monkeypat
     assert attempts == [["b"]] * 9 + [["c"]]
     first, last = seen
     assert first[0]["status"] == "queued"
-    assert first[0]["progress"].startswith("Ждёт завершения другой проверки (с ")
+    assert first[0]["progress"].startswith("ждёт завершения другой проверки (с ")
     assert last[0]["progress"] == first[0]["progress"]  # the wall clock was put back: the start stays
     assert first[0]["progress"] in first[1]
     ended = _status(client, job)
@@ -294,7 +294,7 @@ def test_a_long_running_check_says_since_when_and_keeps_its_lane(client, monkeyp
     monkeypatch.setattr("tow.web.services.run_check", check)
     job = check_jobs.submit(topic_id="b", apply=True, lang="ru", perform=check_actions.perform_check)[0]["id"]
     consumers[0].run()
-    assert seen["status"]["progress"].startswith(f"Идёт проверка с {began}.")
+    assert seen["status"]["progress"].startswith(f"идёт проверка с {began}.")
     assert seen["status"]["progress"] in seen["page"]
     assert (seen["behind"]["status"], seen["behind"]["position"]) == ("queued", 2)
     assert calls == [["b"], ["c"]]
@@ -675,7 +675,8 @@ def test_the_following_page_of_a_finished_check_says_it_finished(client, monkeyp
     job = _job(client.post("/check", data={"mode": "apply"}, follow_redirects=False))
     consumers[0].run()
     note = BeautifulSoup(client.get(f"/?check_job={job}").text, "html.parser").select_one("#check-activity")
-    assert "Проверка завершена." in note.get_text()
+    # The end of "<subject> — <result>", so in lower case (1.32 QA L6: "… — Проверка в очереди").
+    assert " — проверка завершена." in note.get_text()
     assert "перезапущен" not in note.get_text()
     assert note.select_one(f'a[href="/?check_result={job}#check-result"]')
     assert not note.select_one("form")  # nothing left to cancel
@@ -946,3 +947,18 @@ def test_the_action_ids_kept_are_bounded(consumers):
     assert len(check_jobs.ACTIONS) == check_jobs.MAX_ACTIONS
     assert f"click-{check_jobs.MAX_ACTIONS + 49}" in check_jobs.ACTIONS  # the newest are kept
     assert "click-0" not in check_jobs.ACTIONS
+
+
+def test_a_waiting_checks_words_follow_its_subject_in_lower_case():
+    """1.32 QA L6: "Северное сияние — Проверка в очереди: позиция 1." had a capital after the dash
+    (a finished one said "— новая версия"). The words are the end of "<subject> — <result>"; on
+    their own (Check all) they are said as a sentence."""
+    from tow.web.messages import message_text
+    from tow.web.views import check_progress
+
+    queued = check_progress({"status": "queued", "position": 1})
+    assert queued.startswith("проверка в очереди: позиция 1.")
+    assert message_text({"subject": "Северное сияние", "text": queued}).startswith(
+        "Северное сияние — проверка в очереди"
+    )
+    assert message_text({"subject": "", "text": queued}).startswith("Проверка в очереди")
