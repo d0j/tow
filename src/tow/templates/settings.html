@@ -327,6 +327,9 @@
                   <div class="field">
                     <label for="lan-hint">{{ t('settings.access.hint_label') }}</label>
                     <input id="lan-hint" name="hint" type="text" class="w-m" maxlength="{{ hint_max }}" value="{{ lan_hint }}" autocomplete="off" aria-describedby="lan-hint-help">
+                    {#- Shown by app.js before a new reminder alone is sent (QA Q6): the server refuses it
+                        here, and the refusal would bring back the saved one. -#}
+                    {% if access_local %}<p class="field-error" id="lan-hint-error" role="alert" hidden>{{ t('web.password.hint_needs_new') | sentence }}</p>{% endif %}
                   </div>
                 </div>
                 <p class="field-hint"><span id="lan-password-hint">{{ t('settings.access.password_hint') }}</span> <span id="lan-hint-help">{{ t('settings.access.hint_help') }}</span></p>

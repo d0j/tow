@@ -64,7 +64,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   Undo takes both back); ticking alone opens nothing.
 - The password is typed once on the web (Settings and the first start); its eye shows what was typed. The computer
   running TOW no longer asks for the current password; another device still does. On this computer a new reminder
-  needs a new password with it (keeping or clearing the reminder needs none). `tow password` still asks twice.
+  needs a new password with it (keeping or clearing the reminder needs none); without one the page says so under the
+  reminder before saving and keeps what was typed. `tow password` still asks twice.
 - Shorter texts across Settings and the first start: "Add client" is one folded line, and a backup folder always says
   where the copies go ("Default: …").
 - Language is three buttons (Auto, Русский, English) in one segmented control like the theme's, and each saves at

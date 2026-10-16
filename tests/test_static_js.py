@@ -315,6 +315,17 @@ def test_a_saved_language_puts_the_focus_back_on_its_segment():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_new_reminder_without_a_new_password_is_held_with_what_was_typed():
+    """§2 (QA Q6): the server refuses a new reminder without a new password on this computer, and
+    the page came back with the saved one. The page says so under the reminder before sending and
+    keeps the typed text; kept, cleared or with a new password it goes."""
+    verdict = _verdict("reminder_needs_password.mjs")
+    keys = ("newReminderAloneIsHeld", "withANewPasswordItGoes", "keptOrClearedGoes")
+    assert verdict == dict.fromkeys(keys, True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_the_updates_card_writes_its_times_by_the_one_rule():
     verdict = _verdict("update_times.mjs")
     assert verdict == {"timesByTheOneRule": True, "olderServerKeepsItsLabel": True}
