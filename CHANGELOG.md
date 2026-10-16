@@ -140,6 +140,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   version on; an older record stays unknown after a move until the next nightly backup or restore point.
 - On Windows in a language other than English, the watchdog no longer reports every restart as a shutdown: when
   Windows names the kind in its own language, the message says the computer was shut down or restarted.
+- The Windows start, stop and setup files work in a folder whose path has `%`, `^` or `!` (for example
+  `TOW 50%`), also when delayed expansion is turned on for the command prompt. The installer refuses only a folder
+  Windows itself cannot start a file from (two `%`, two `!`, or a `^` with a `!`) before it writes anything.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

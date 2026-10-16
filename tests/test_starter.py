@@ -344,7 +344,7 @@ def test_the_update_itself_starts_tow_while_it_holds_its_lock(monkeypatch):
 def test_the_start_scripts_refuse_an_interrupted_update_before_preparing_anything():
     windows = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
     refusal = windows.index("if defined TOW_CUT exit /b 3")
-    assert windows.index('call "%~dp0tow-env.cmd"') < refusal < windows.index("tow-setup.cmd")
+    assert windows.index('call "%%~dp0tow-env.cmd"') < refusal < windows.index("tow-setup.cmd")
     assert "$env:TOW_ROOT" in windows  # the path never inside the command
     posix = (ROOT / "scripts" / "tow-start").read_text(encoding="utf-8")
     refusal = posix.index("if interrupted; then")
@@ -425,7 +425,7 @@ def test_the_windows_start_script_warns_of_a_long_folder_without_long_paths(tmp_
     text = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
     lines = [line for line in text.splitlines() if "TOW_LONG" in line and not line.startswith("rem ")]
     assert len(lines) == 4
-    assert text.index("if defined TOW_LONG echo") < text.index('call "%~dp0tow-setup.cmd"')  # before setup
+    assert text.index("if defined TOW_LONG echo") < text.index('call "%%~dp0tow-setup.cmd"')  # before setup
     for name, long in (("TOW", False), ("T" * max(1, 112 - len(str(tmp_path))), True)):
         root = tmp_path / name
         assert (len(str(root)) > 110) is long
@@ -497,11 +497,11 @@ def test_the_windows_start_script_prepares_offline_first_then_online():
     text = (ROOT / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
     assert text.isascii()
     assert not any(line.startswith(":") for line in text.splitlines())  # no labels in an LF file
-    assert 'call "%~dp0tow-env.cmd"' in text
+    assert 'call "%%~dp0tow-env.cmd"' in text
     offline = text.index('set "UV_OFFLINE=1"')
-    first = text.index('call "%~dp0tow-setup.cmd"', offline)
+    first = text.index('call "%%~dp0tow-setup.cmd"', offline)
     cleared = text.index('set "UV_OFFLINE="', first)
-    second = text.index('call "%~dp0tow-setup.cmd"', cleared)
+    second = text.index('call "%%~dp0tow-setup.cmd"', cleared)
     assert offline < first < cleared < second < text.index('"%TOW_EXE%" start %*')
     assert "Unblock-File" in text
     assert "$env:TOW_HERE" in text  # the path never inside the command

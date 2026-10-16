@@ -55,8 +55,8 @@ def test_the_root_files_are_ascii_crlf_and_quote_every_path(name):
 
 def test_start_runs_the_apps_start_script_and_stop_the_launcher():
     # The logic lives in app\scripts (it updates with the code); the root files only call it.
-    assert 'call "%~dp0app\\scripts\\tow-start.cmd" %*' in bundle.START_CMD
-    assert 'call "%~dp0app\\scripts\\tow.cmd" stop' in bundle.STOP_CMD
+    assert 'call "%%~dp0app\\scripts\\tow-start.cmd" %*' in bundle.START_CMD
+    assert 'call "%%~dp0app\\scripts\\tow.cmd" stop' in bundle.STOP_CMD
     assert '"%TOW_UPDATE%" --ref "%TOW_REF%"' in bundle.UPDATE_CMD
     assert "runtime\\update.py" in bundle.UPDATE_CMD
     assert (ROOT / "scripts" / "tow-start.cmd").is_file()
