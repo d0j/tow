@@ -461,7 +461,8 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
         return;
       }
       if (action && data.accepted) {
-        // Accepted: this tab follows it; the page stays.
+        // Accepted: this tab follows it; the page stays. The other tabs show it waiting too.
+        window.towSync?.hint?.();
         window.towChecks.acknowledge(action, data);
         // Only while it is still followed: a result polling has shown already stays the last word.
         if (data.message && window.towChecks.pending?.(action) !== false) showMessage(data.message);
@@ -477,6 +478,8 @@ const submitPostForm = async (form, submitter, preparedBody = null) => {
     if (action) window.towChecks.forget(action); // answered with a page (a refusal, a full queue)
     if (form.dataset.returnTarget) nextUrl.hash = form.dataset.returnTarget;
     rememberFocus(form, nextUrl);
+    // Done (or refused, which changes nothing - asking costs one poll): the other tabs look now.
+    window.towSync?.hint?.();
     window.location.assign(nextUrl);
   } catch (error) {
     restoreForm(form, submitter);
@@ -702,10 +705,27 @@ document.querySelectorAll("dialog.credential-prompt[open]").forEach((dialog) => 
 
 // A message after an action, its Undo and the header's recent messages are messages.js's.
 
-// One /health.json poll serves the header countdown and every personal timer. Each reader says
-// when it next needs fresh data (null: not now); one answer updates them all. A hidden tab
-// never polls; showing it again asks at once when a reader is waiting.
+// One poll serves the header countdown, every personal timer, "Needs attention" and TOW's zone.
+// With sync.js (every signed-in page) it is /sync.json's: each answer (a 304 too) hands every
+// reader what /health.json said, from the areas the page has; a failed one hands null. Without
+// it, /health.json's own: each reader says when it next needs fresh data (null: not now); one
+// answer updates them all. A hidden tab never polls; showing it again asks at once.
 const healthPoll = (() => {
+  const synced = typeof window !== "undefined" ? window.towSync : null;
+  if (synced?.onPoll) {
+    const listening = [];
+    synced.onPoll((_, ok) => {
+      const data = ok ? synced.health() : null;
+      listening.forEach((reader) => {
+        try {
+          reader.receive(data);
+        } catch {
+          // one failed view never stops the others; the next answer is its next try
+        }
+      });
+    });
+    return { add: (reader) => { listening.push(reader); }, plan: () => {}, now: () => synced.now() };
+  }
   const readers = [];
   const failedUntil = new Map();
   let timer = 0;
@@ -862,11 +882,19 @@ const initRow = (row) => {
     el.addEventListener("click", (e) => e.stopPropagation());
   });
 };
-window.towRows = { health: () => healthPoll.now(), replaced: (_old, row) => initRow(row) };
+// ``prepare``: a row sync.js has put in (another device's change); ``timers``: the rows changed,
+// the personal timers are looked for again.
+window.towRows = {
+  health: () => healthPoll.now(),
+  replaced: (_old, row) => initRow(row),
+  prepare: (row) => { initRow(row); towTime.prepare(row); },
+  timers: () => {},
+};
 
-const topicTimerNodes = Array.from(document.querySelectorAll("[data-topic-timer]"));
-if (topicTimerNodes.length) {
-  let serverNow = Number(topicTimerNodes[0].dataset.timerNow) * 1000;
+let topicTimerNodes = Array.from(document.querySelectorAll("[data-topic-timer]"));
+// Home keeps its timers going even without one now: a row drawn again may bring one.
+if (topicTimerNodes.length || (window.towSync && document.getElementById("topics"))) {
+  let serverNow = topicTimerNodes.length ? Number(topicTimerNodes[0].dataset.timerNow) * 1000 : Date.now();
   let sampledAt = performance.now();
   let timersDue = Date.now();
   let failedPolls = 0;
@@ -910,11 +938,12 @@ if (topicTimerNodes.length) {
       if (node.isConnected) drawTimer(node, now);
     }
   };
+  let watcher = null;
   if (onScreen) {
     // Timers that come into view are drawn once the scroll pauses (or at the next tick): drawing
     // them on every scroll frame cost a layout per frame.
     let arrived = 0;
-    const watcher = new IntersectionObserver((entries) => {
+    watcher = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) onScreen.add(entry.target);
         else onScreen.delete(entry.target);
@@ -924,6 +953,20 @@ if (topicTimerNodes.length) {
     });
     topicTimerNodes.forEach((node) => watcher.observe(node));
   }
+  // Rows came, went or were drawn again (sync.js): the timers are the page's ones now.
+  window.towRows.timers = () => {
+    const now = Array.from(document.querySelectorAll("[data-topic-timer]"));
+    for (const node of topicTimerNodes) {
+      if (node.isConnected) continue;
+      watcher?.unobserve(node);
+      onScreen?.delete(node);
+      drawn.delete(node);
+    }
+    const known = new Set(topicTimerNodes);
+    now.filter((node) => !known.has(node)).forEach((node) => watcher?.observe(node));
+    topicTimerNodes = now;
+    tickTimers();
+  };
   healthPoll.add({
     due: () => timersDue,
     shown: () => timersDue !== null,
@@ -1245,14 +1288,20 @@ if (settingsPage) {
         // message's kind tells it from "saved", and it is shown as the server worded it.
         const data = (response.headers.get("content-type") || "").includes("application/json") ? await response.json() : {};
         if (mine !== sequence) return;
+        delete form.dataset.saving; // the poll's theme is this choice's now
+        window.towSync?.hint?.();
         if (data.flash && data.flash.kind !== "ok") showMessage(data.flash);
         // One message for the theme: quick moves update it, they do not pile up.
         else showMessage({ id: "theme-saved", kind: "ok", text: t("js.settings.theme_saved", { theme: label }) }, { replace: true });
       } catch {
-        if (mine === sequence) unconfirmed(form);
+        if (mine !== sequence) return;
+        delete form.dataset.saving;
+        unconfirmed(form);
       }
     };
     form.addEventListener("change", (event) => {
+      // While the choice is on its way, the poll does not put the saved theme back (sync.js).
+      form.dataset.saving = "1";
       const value = event.target.value;
       if (value === "light" || value === "dark") document.documentElement.dataset.theme = value;
       else delete document.documentElement.dataset.theme;
@@ -1422,9 +1471,9 @@ const initChoiceMenu = (select, name) => {
   const picker = document.getElementById(`${name}-picker`);
   const toggle = document.getElementById(`${name}-toggle`);
   const menu = document.getElementById(`${name}-menu`);
-  if (!select || !picker || !toggle || !menu) return;
-  const items = [...menu.querySelectorAll("[data-choice-value]")];
-  if (!items.length) return;
+  if (!select || !picker || !toggle || !menu) return null;
+  let items = [...menu.querySelectorAll("[data-choice-value]")];
+  if (!items.length) return null;
   const sync = () => {
     items.forEach((item) => item.setAttribute("aria-checked", String(item.dataset.choiceValue === select.value)));
     const current = items.find((item) => item.dataset.choiceValue === select.value) || items[0];
@@ -1485,6 +1534,8 @@ const initChoiceMenu = (select, name) => {
   sync();
   select.hidden = true;
   picker.hidden = false;
+  // An option added later (a site another device's topic brought): the menu knows it.
+  return { reread: () => { items = [...menu.querySelectorAll("[data-choice-value]")]; sync(); } };
 };
 const q = document.getElementById("q");
 if (q) {
@@ -1528,8 +1579,8 @@ if (q) {
   if (trackerSelect) {
     trackerSelect.value = [...trackerSelect.options].some((option) => option.value === tracker) ? tracker : "";
     tracker = trackerSelect.value;
-    initChoiceMenu(trackerSelect, "tracker");
   }
+  const trackerMenu = trackerSelect ? initChoiceMenu(trackerSelect, "tracker") : null;
   if (tools) tools.hidden = originalOrder.length < 2 && !tracker;
 
   const highlight = (el, tokens) => {
@@ -1580,7 +1631,11 @@ if (q) {
 
   // Only what changes is written: a row's hidden state when it turns, a text's marks when its
   // words differ from the ones it shows (a hidden row shows none).
-  const announce = () => {
+  // ``keep`` (the rows another device changed, sync.js): a row the owner works in that is shown
+  // stays shown - a filter applied again never hides the row being edited.
+  const kept = (el) => Boolean(window.towSync?.protectedRow?.(el));
+  let deferred = false; // a row kept in sight or an order kept waiting for the owner
+  const announce = (keep = false) => {
     const tokens = fold(q.value).split(/\s+/).filter(Boolean);
     const words = tokens.join(" ");
     let shown = 0;
@@ -1591,6 +1646,10 @@ if (q) {
       if (visible && filter === "new") visible = tone(el) === "new";
       if (visible && filter === "paused") visible = el.classList.contains("is-paused");
       if (visible && tracker) visible = el.dataset.tracker === tracker;
+      if (!visible && keep && !el.hidden && kept(el)) {
+        visible = true;
+        deferred = true;
+      }
       if (el.hidden === visible) el.hidden = !visible;
       if (visible) shown += 1;
       const want = visible ? words : "";
@@ -1615,7 +1674,8 @@ if (q) {
   // P1: the rows move only when the order changes: re-appending 2000 rows in the order they
   // already had cost a full layout (~1.2 s) on every load.
   const byName = new Intl.Collator("ru");
-  const sortRows = () => {
+  // ``keep``: while the owner works in a row, the rows wait for their new order (refresh again).
+  const sortRows = (keep = false) => {
     if (!list || !sortSelect) return;
     const mode = sortSelect.value;
     const rows = [...originalOrder];
@@ -1624,6 +1684,10 @@ if (q) {
     if (mode === "status") rows.sort((a, b) => rank[tone(a)] - rank[tone(b)]);
     const now = list.querySelectorAll(":scope > .row-wrap");
     if (rows.length === now.length && rows.every((row, index) => row === now[index])) return;
+    if (keep && [...now].some(kept)) {
+      deferred = true;
+      return;
+    }
     list.append(...rows);
   };
 
@@ -1702,6 +1766,61 @@ if (q) {
     marked.set(row, [...row.querySelectorAll("[data-hl]")]);
     announce();
   };
+  // Rows another device added, removed, changed or moved (sync.js): the list's order (``order``,
+  // the server's ids; the owner's own sort on top), the search's words, the status filter's tones,
+  // the site choices and "nothing matches" are the page's rows again, all at once.
+  const refreshList = ({ order = null, keep = true } = {}) => {
+    if (!list) return;
+    deferred = false;
+    const rows = [...list.querySelectorAll(":scope > .row-wrap")];
+    if (order) {
+      const position = new Map(order.map((id, index) => [`row-${id}`, index]));
+      const placed = rows.filter((row) => position.has(row.id)).sort((a, b) => position.get(a.id) - position.get(b.id));
+      // A row the server no longer has, kept under the owner's hands, stays where it was.
+      rows.forEach((row, index) => { if (!position.has(row.id)) placed.splice(Math.min(index, placed.length), 0, row); });
+      originalOrder.splice(0, originalOrder.length, ...placed);
+    } else {
+      const known = new Set(originalOrder);
+      originalOrder.splice(0, originalOrder.length, ...originalOrder.filter((row) => row.isConnected && row.parentNode === list), ...rows.filter((row) => !known.has(row)));
+    }
+    for (const el of [...haystacks.keys()]) {
+      if (el.isConnected) continue;
+      haystacks.delete(el);
+      marked.delete(el);
+      tones.delete(el);
+    }
+    searchable.splice(0, searchable.length, ...document.querySelectorAll("[data-q]"));
+    searchable.forEach((el) => {
+      if (haystacks.has(el)) return;
+      haystacks.set(el, fold(el.dataset.q));
+      marked.set(el, [...el.querySelectorAll("[data-hl]")]);
+    });
+    if (trackerSelect) {
+      const offered = new Set([...trackerSelect.options].map((option) => option.value));
+      const menu = document.getElementById("tracker-menu");
+      const sample = menu?.querySelector("[data-choice-value]:not([data-choice-value=''])") || menu?.querySelector("[data-choice-value]");
+      rows.forEach((row) => {
+        const name = row.dataset.tracker || "";
+        if (!name || offered.has(name)) return;
+        offered.add(name);
+        const title = row.querySelector(".topic-tracker")?.title || name;
+        trackerSelect.append(new Option(title, name));
+        if (sample) {
+          const item = sample.cloneNode(true);
+          item.dataset.choiceValue = name;
+          item.title = title;
+          item.setAttribute("aria-checked", "false");
+          item.querySelector("span").textContent = title;
+          menu.append(item);
+        }
+      });
+      trackerMenu?.reread();
+    }
+    if (tools) tools.hidden = originalOrder.length < 2 && !tracker;
+    sortRows(keep);
+    announce(keep);
+  };
+  window.towList = { refresh: refreshList, pending: () => deferred };
 }
 
 const paintLog = (body, rows) => {

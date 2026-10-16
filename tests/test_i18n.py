@@ -515,8 +515,9 @@ def test_app_js_texts_are_built_once_per_language():
     i18n.reload()
     first = js_texts()
     assert first
-    # The scripts' own texts, the secret fields' eye and the time words; values under "_" are not keys.
-    assert all(key.startswith(("js.", "web.secret.", "time.", "_")) for key in first)
+    # The scripts' own texts, the secret fields' eye, the time words and the header's state words
+    # (sync.js writes them when a tone changes); values under "_" are not keys.
+    assert all(key.startswith(("js.", "web.secret.", "time.", "base.header.", "web.header.", "_")) for key in first)
     misses = i18n._prefixed.cache_info().misses
     first["js.extra"] = "a caller's change"
     assert js_texts() == {key: value for key, value in first.items() if key != "js.extra"}

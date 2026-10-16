@@ -1344,6 +1344,12 @@
       "legacy_retired": "Recent messages are now the same on every device. The earlier list of this tab is no longer kept.",
       "this_tab": "This tab",
       "not_saved": "Could not save. Try again."
+    },
+    "sync": {
+      "row_changed": "This topic was changed on another device or by TOW. Its new values show once you close it.",
+      "row_removed": "This topic was removed on another device. Saving it will not bring it back.",
+      "updated": "TOW was updated to {version}. Reload the page.",
+      "reload_language": "The language was changed. Reload the page."
     }
   },
   "locations": {

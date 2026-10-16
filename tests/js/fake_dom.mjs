@@ -6,14 +6,14 @@ const kebab = (name) => name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCas
 
 const parseCompound = (text) => {
   const part = { tag: "", id: "", classes: [], attrs: [], hover: /:hover\b/.test(text) };
-  const re = /([a-zA-Z][\w-]*)|#([\w-]+)|\.([\w-]+)|\[([\w-]+)(?:="?([^"\]]*)"?)?\]/g;
+  const re = /([a-zA-Z][\w-]*)|#([\w-]+)|\.([\w-]+)|\[([\w-]+)(?:([$^]?)=["']?([^"'\]]*)["']?)?\]/g;
   let match;
   const plain = text.replace(/:hover\b/g, "");
   while ((match = re.exec(plain))) {
     if (match[1]) part.tag = match[1].toLowerCase();
     else if (match[2]) part.id = match[2];
     else if (match[3]) part.classes.push(match[3]);
-    else part.attrs.push([match[4], match[5]]);
+    else part.attrs.push([match[4], match[6], match[5] || ""]);
   }
   return part;
 };
@@ -23,9 +23,12 @@ const matchesCompound = (node, part) => {
   if (part.id && node.id !== part.id) return false;
   if (part.hover && !node.hovered) return false; // :hover - an element the test puts the pointer on
   if (part.classes.some((name) => !node.classList.contains(name))) return false;
-  return part.attrs.every(([name, value]) => {
+  return part.attrs.every(([name, value, how]) => {
     const actual = node.getAttribute(name);
-    return actual !== null && (value === undefined || actual === value);
+    if (actual === null || value === undefined) return actual !== null;
+    if (how === "$") return actual.endsWith(value); // [attr$=value]
+    if (how === "^") return actual.startsWith(value); // [attr^=value]
+    return actual === value;
   });
 };
 const matchesSelector = (node, selector) => selector.split(",").some((alternative) => {

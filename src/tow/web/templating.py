@@ -50,6 +50,7 @@ def _static_asset_version() -> str:
         "updates.js",
         "content.css",
         "content.js",
+        "sync.js",
     ):
         path = STATIC_DIR / name
         if path.is_file():
@@ -278,6 +279,15 @@ def _site_titles() -> dict[str, str]:
     return _context.memo("site_titles", build)
 
 
+def row_hash(row: Mapping[str, Any]) -> str:
+    """A Home row's ``data-row-hash``: the same digest /sync.json's topics area names for it
+    (``tow.web.sync.row_hash``), so a page that opens knows which of its rows are current."""
+    from tow.web import sync
+
+    tracker = row.get("tracker")
+    return sync.row_hash(row, site_title=site_title(tracker) if tracker else "")
+
+
 def network_session(request: Request) -> bool:
     """This page was opened from another device with a session: there is something to sign out
     of (this computer needs no password, so it has none)."""
@@ -303,7 +313,8 @@ def _languages() -> list[dict[str, str]]:
 
 def js_texts(*, before_sign_in: bool = False) -> dict[str, str]:
     """The ``js.*`` texts of app.js in the current language (base.html hands them over as JSON),
-    the secret fields' eye (``web.secret.*``), the time words (``time.*``), and - not catalog
+    the secret fields' eye (``web.secret.*``), the time words (``time.*``), the header's state
+    words (``base.header.*``, ``web.header.*``: sync.js writes them when a tone changes), and - not catalog
     keys - the language's date pattern (``_datetime``) and TOW's zone for ``towTime``: its name
     when known (``_tz_name``, "" else) and its UTC offset in minutes now (``_tz_now``).
     ``before_sign_in`` (the sign-in and first-start pages, which load app.js for the eye alone):
@@ -314,6 +325,8 @@ def js_texts(*, before_sign_in: bool = False) -> dict[str, str]:
         **i18n.texts_with_prefix("js."),
         **i18n.texts_with_prefix("web.secret."),
         **i18n.texts_with_prefix("time."),
+        **i18n.texts_with_prefix("base.header."),
+        **i18n.texts_with_prefix("web.header."),
         "_datetime": i18n.datetime_pattern(),
         "_tz_name": zone_name(),
         "_tz_now": str(zone_minutes()),
@@ -411,6 +424,7 @@ def configure(templates: Jinja2Templates = TEMPLATES) -> None:
     env["login_help"] = login_help
     env["network_session"] = network_session
     env["site_title"] = site_title
+    env["row_hash"] = row_hash
     env["client_name"] = client_name
     env["fix_attrs"] = fix_attrs
     env["fix_open"] = fix_open
