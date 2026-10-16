@@ -337,25 +337,31 @@ def test_english_is_the_default_and_the_browser_decides(monkeypatch):
 
 
 def _language_select(page: str) -> str:
-    return page.split('id="language-choice"', 1)[1].split("</select>", 1)[0]
+    """The language's choice (L1, 1.32.1): one submit button per value, Auto first."""
+    return page.split('action="/settings/language"', 1)[1].split("</form>", 1)[0]
 
 
 def _selected_language(page: str) -> tuple[str, str]:
     import html
 
-    value, label = re.search(r'<option value="([^"]+)" selected>([^<]*)</option>', _language_select(page)).groups()
+    value, label = re.search(
+        r'<button type="submit" name="language" value="([^"]+)" aria-pressed="true"[^>]*>([^<]*)</button>',
+        _language_select(page),
+    ).groups()
     return value, html.unescape(label)
 
 
-def test_language_is_one_list_with_automatic_first():
+def test_language_is_one_choice_with_automatic_first():
     import html
 
     from tow.web import app
 
     _set_language("auto")
     page = TestClient(app).get("/settings", headers={"Accept-Language": "ru"}).text
-    values = re.findall(r'<option value="([^"]+)"', _language_select(page))
+    values = re.findall(r'<button type="submit" name="language" value="([^"]+)"', _language_select(page))
     assert values == ["auto", *i18n.codes()]
+    assert len(re.findall(r'aria-pressed="true"', _language_select(page))) == 1
+    assert "<select" not in _language_select(page)
     assert 'type="checkbox"' not in page.split('id="acc-language"', 1)[1].split("</details>", 1)[0]
     assert i18n.translate("settings.language.messages_note_auto", "ru") in html.unescape(page)
     _set_language("ru")
@@ -1233,9 +1239,6 @@ def test_qa10_wording_says_what_it_means():
         assert "«TOW»" in t(key, "ru", where="TOW")
         assert "account (TOW)" not in t(key, "en", where="TOW")
     assert "это не подтверждает" not in t("doctor.sites_note", "ru")
-    assert "ручные действия" not in t("settings.backups.automatic_hint", "ru")
-    assert "«Сделать копию сейчас»" in t("settings.backups.automatic_hint", "ru")
-    assert "manual actions" not in t("settings.backups.automatic_hint", "en")
     locales = Path(i18n.__file__).parent / "locales"
     assert "состояние TOW" not in (locales / "ru.json").read_text(encoding="utf-8")
     assert "TOW state" not in (locales / "en.json").read_text(encoding="utf-8")

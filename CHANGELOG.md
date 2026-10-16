@@ -94,11 +94,31 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On Diagnostics the torrent client's card has a heading like the other cards.
 ### Changed
 
+- Settings → Network access is one compact card: the box "Open TOW from other devices" and, once a password is
+  set, a single line "Password set · Change" that unfolds the password and its reminder side by side. Without a
+  password, ticking the box shows the password field, and "Save and enable" saves the password and opens access
+  together (one Undo takes both back); ticking alone opens nothing.
+- The password is typed once on the web (Settings and the first start); its eye shows what was typed. The
+  computer running TOW no longer asks for the current password; another device still does. On this computer a
+  new reminder needs a new password with it (keeping or clearing the reminder needs none). `tow password` still
+  asks twice.
+- Shorter texts across Settings and the first start; a saved password or token shows a "saved" tag in its label
+  and "Leave empty to keep" in its field, with one note per form instead of a sentence under every field.
+- Language is three buttons (Auto, Русский, English), each saves at once; the theme's label says it applies on
+  every device.
+- "Add client" is one folded line; Restore buttons are no longer red; a backup folder always says where the
+  copies go ("Default: …"); the TOW file is chosen with a "Choose a file" button in the page's language;
+  examples in empty fields start with "e.g.".
+- Every restore confirmation says that network access and its password stay unchanged.
 - Site access: a saved connection is removed by its own Remove button (with a confirmation), and the order field
   shows only when there are two or more connections.
+- The sign-in page no longer shows the computer's name and local address under "Forgot your password?", and
+  says "Wrong password" right below the field; the first start shows a refused field's reason below that field.
 
 ### Fixed
 
+- The backup deletion page showed the copy's time in raw form ("16.10.2026 11:00:02 UTC+03:00"); it uses the
+  short time like every other page, and Delete comes before Cancel.
 - Settings → Updates no longer repeats "Automatic update checks are off" under the unticked box; a check asked by
   hand still says its result.
 

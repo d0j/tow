@@ -5,14 +5,15 @@ the password in ``routes_password``."""
 
 from __future__ import annotations
 
+import contextlib
 import copy
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from tow import access, i18n, store_transaction, undo
-from tow.auth import MAX_HINT_LENGTH, password_hint
+from tow.auth import MAX_HINT_LENGTH, AuthConfigurationError, password_hint
 from tow.bind import network_bind
 from tow.clients.view import cards as client_cards
 from tow.config import (
@@ -34,7 +35,7 @@ from tow.web.messages import flash_redirect, request_flash
 from tow.web.site_store import save_together, settings_undo
 from tow.web.templating import TEMPLATES
 from tow.web.text import format_bytes, t
-from tow.web.views import backup_view, client_notes, flash_ttl_sec, issue_notes, service_view
+from tow.web.views import backup_view, client_notes, flash_ttl_sec, issue_notes, repeated_password, service_view
 
 router = APIRouter()
 
@@ -191,32 +192,73 @@ def settings_theme(theme: str = Form("")) -> Response:
     dependencies=[access.require_local("/settings?open=access", "web.settings.access_local_only")],
 )
 @services.locked_state_mutation
-def settings_access(allow_lan: str = Form("")) -> Response:
-    """Network access on or off, on this PC only; the network always needs the password. The
-    password itself is set on the password card (/settings/password, with its reminder)."""
+def settings_access(
+    allow_lan: Annotated[str, Form()] = "",
+    lan_password: Annotated[str, Form()] = "",
+    lan_password2: Annotated[str | None, Depends(repeated_password)] = None,
+    hint: Annotated[str, Form()] = "",
+) -> Response:
+    """Network access on or off, on this PC only; the network always needs the password. With a
+    password set the box saves alone. Without one, "Save and enable" sends the box with the new
+    password and its reminder: both are saved together, with one Undo, or neither (F1)."""
     cfg = services.load_config()
     old_bind = str(cfg.get("bind") or "127.0.0.1")
     old_allow_lan = as_bool(cfg.get("allow_lan"))
     enabled = as_bool(allow_lan)
+    secrets: dict[str, Any] | None = None
+    record: dict[str, Any] | None = None
     if enabled:
         try:
-            existing_secrets = services.load_secrets()
+            secrets = services.load_secrets()
         except SecretStoreError:
-            existing_secrets = {}
-        if not access.password_is_set(existing_secrets):
+            if lan_password:  # never a password written over passwords and tokens that cannot be read
+                return flash_redirect("/settings?open=access", "web.password.store_unavailable", "err")
+            secrets = {}
+        if access.password_is_set(secrets):
+            if lan_password:  # a page opened before the password was set (another window)
+                return flash_redirect("/settings?open=access", "setup.already_set", "warn")
+        elif not lan_password:
             return flash_redirect("/settings?open=access", "web.settings.set_password_first", "warn")
+        else:
+            try:
+                record = access.web_record(lan_password, lan_password2, hint)
+            except AuthConfigurationError as exc:
+                return flash_redirect("/settings?open=access", exc, "err")
     cfg["allow_lan"] = enabled
     cfg["bind"] = network_bind(old_bind) if enabled else "127.0.0.1"
+    if record is not None:
+        cfg["setup_done"] = True  # the first-start page is done from now on
     state = services.load_state()
 
     def write(txn: StoreTransaction) -> None:
-        undo.stamp(state, "settings_access", txn=txn, old_bind=old_bind, old_allow_lan=old_allow_lan)
+        if record is None:
+            undo.stamp(state, "settings_access", txn=txn, old_bind=old_bind, old_allow_lan=old_allow_lan)
+        else:
+            assert secrets is not None
+            undo.stamp(
+                state,
+                "settings_access",
+                txn=txn,
+                snapshot=secrets,
+                old_bind=old_bind,
+                old_allow_lan=old_allow_lan,
+                secret_scope=[access.RECORD_KEY],
+            )
+            txn.save_secrets({**copy.deepcopy(secrets), access.RECORD_KEY: record})
         txn.save_config(cfg)
         txn.save_state(state)
 
     if refused := save_together("/settings?open=access", write):
         return refused
+    if record is not None:
+        with contextlib.suppress(OSError):  # the first password: no device signed in with an earlier one
+            services.sign_out_everywhere()
+        services.log_event(
+            "settings_password", changed="password", hint=bool(record.get("hint")), where="local", how="manual"
+        )
     services.log_event("settings_access", allow_lan=enabled, bind=cfg["bind"], how="manual")
+    if record is not None:
+        return flash_redirect("/settings?open=access", "web.password.saved_and_enabled", "ok")
     # Off works at once (the middleware refuses the network by the config); on needs a restart.
     return flash_redirect(
         "/settings?open=access", "web.settings.access_saved" if enabled else "web.settings.access_closed", "ok"

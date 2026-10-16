@@ -12,7 +12,7 @@ import contextlib
 import copy
 from typing import Any
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from tow import __version__, access, undo
@@ -32,18 +32,19 @@ from tow.web.messages import flash_redirect
 from tow.web.site_store import save_together
 from tow.web.templating import TEMPLATES
 from tow.web.text import t
-from tow.web.views import first_run
+from tow.web.views import first_run, repeated_password
 
 router = APIRouter()
 
 
-# The field a refused first start is about, by its reason's key (the reminder, a password).
+# The field a refused first start is about, by its reason's key (the reminder, the password;
+# a repeat that differs comes only from an older page, which had the second field).
 _SETUP_FIELDS = {
     "auth.hint_too_long": "lan-hint",
     "auth.hint_needs_password": "lan-hint",
     "auth.hint_reveals_password": "lan-hint",
     "auth.password_too_short": "lan-password",
-    "web.password.differ": "lan-password2",
+    "web.password.differ": "lan-password",
 }
 
 
@@ -85,7 +86,7 @@ def setup_save(
     request: Request,
     action: str = Form("save"),
     lan_password: str = Form(""),
-    lan_password2: str = Form(""),
+    lan_password2: str | None = Depends(repeated_password),
     hint: str = Form(""),
     allow_lan: str = Form(""),
 ) -> Response:
@@ -104,7 +105,7 @@ def setup_save(
             return flash_redirect("/settings?open=access", "setup.already_set", "warn")
         return RedirectResponse("/settings?open=access", status_code=303)
     try:
-        record = access.new_record(lan_password, lan_password2, hint)
+        record = access.web_record(lan_password, lan_password2, hint)
         secrets = services.load_secrets()
     except AuthConfigurationError as exc:
         return _setup_page(request, exc, status_code=400, hint=hint, allow_lan=lan)
@@ -129,49 +130,59 @@ def _back(message: Any, kind: str = "ok", /, **params: Any) -> RedirectResponse:
     return flash_redirect("/settings?open=access", message, kind, **params)
 
 
+def _refused(message: Any, kind: str = "err", /, **params: Any) -> RedirectResponse:
+    """Back to Settings with the password form open again (it is folded once a password is set)."""
+    return flash_redirect("/settings?open=access&card=password", message, kind, **params)
+
+
 @router.post("/settings/password")
 @services.locked_state_mutation
 def settings_password(
     request: Request,
     current_password: str = Form(""),
     lan_password: str = Form(""),
-    lan_password2: str = Form(""),
+    lan_password2: str | None = Depends(repeated_password),
     hint: str = Form(""),
 ) -> Response:
     local = access.is_local(request)
     try:
         secrets = services.load_secrets()
     except SecretStoreError:
-        return _back("web.password.store_unavailable", "err")
+        return _refused("web.password.store_unavailable")
     record = access.password_record(secrets)
-    # The current password, checked: from the network always; on this computer it is typed
-    # only to change the reminder alone, which is compared with it.
+    # The current password, checked: from the network always. This computer resets a forgotten
+    # one without it (its form has no such field); an older page may still send it there to
+    # change the reminder alone, which is then compared with it.
     current = ""
     if not local:
         if record is None:
             return _back("web.settings.access_local_only", "err")
         peer = request.client.host if request.client else "unknown"
         if wait := services.login_throttle.attempt(peer):  # counted before the check, as at sign-in
-            return _back("web.login.too_many", "err", sec=wait)
+            return _refused("web.login.too_many", sec=wait)
         with services.login_throttle.verification:
             valid = lan_password_matches(current_password, record)
         if not valid:
-            return _back("web.password.current_wrong", "err")
+            return _refused("web.password.current_wrong")
         services.login_throttle.success(peer)
         current = current_password
     elif current_password and record is not None and not (lan_password or lan_password2):
         if not lan_password_matches(current_password, record):
-            return _back("web.password.current_wrong", "err")
+            return _refused("web.password.current_wrong")
         current = current_password
     try:
         if lan_password or lan_password2:
-            new_record, changed = access.new_record(lan_password, lan_password2, hint), "password"
+            new_record, changed = access.web_record(lan_password, lan_password2, hint), "password"
         elif record is not None:
             new_record, changed = with_hint(record, hint, password=current), "hint"
         else:
-            return _back("web.settings.set_password_first", "warn")
+            return _refused("web.settings.set_password_first", "warn")
     except AuthConfigurationError as exc:
-        return _back(exc, "err")
+        if exc.code == "auth.hint_needs_password" and local:
+            # A new public reminder is checked against the password it must not reveal: on this
+            # computer that is a new one typed with it (keeping or clearing it needs none).
+            return _refused("web.password.hint_needs_new")
+        return _refused(exc)
     if new_record == record:
         return _back("web.common.no_changes")  # the prefilled reminder sent back as it was
     cfg = services.load_config()

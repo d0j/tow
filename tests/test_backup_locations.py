@@ -272,7 +272,7 @@ def test_a_night_restore_says_what_happens_to_network_access(night):
     save_config(cfg)
     name = Path(create_snapshot()["snapshot"]).name
     page = _client().get("/settings").text
-    assert "Доступ по сети и его пароль останутся текущими." in page  # in the restore confirmation
+    assert "Доступ по сети и его пароль не изменятся." in page  # in the restore confirmation
     done = _client().post(f"/settings/backup/night/{name}/restore", follow_redirects=False)
     assert load_config()["allow_lan"] is True
     assert _flash(done).endswith("; доступ по сети остался как был")

@@ -4,7 +4,8 @@
   that signed in with the password is the owner (owner's decision, 01.10.2026).
 - The password record is the ``lan_auth`` entry of the encrypted secrets (PBKDF2, with an
   optional reminder). Setting it - the first-start page, Settings, ``tow password`` - goes
-  through ``new_record`` and ``save_password``; a new password signs every device out.
+  through ``new_record`` (``web_record`` for the one-field web forms) and ``save_password``; a
+  new password signs every device out.
 - An external access key (``TOW_LAN_AUTH_TOKEN``, a file named by ``TOW_LAN_AUTH_TOKEN_FILE``, else
   ``data/lan-auth.token``) is an explicit alternative for an install that has no password record at all. It is never a
   fallback: a damaged password record, or secrets that cannot be read, refuse every device on
@@ -87,9 +88,19 @@ def credential(secrets: dict[str, Any] | None) -> Credential:
 
 
 def new_record(password: str, repeat: str, hint: str = "") -> dict[str, Any]:
-    """A checked password record with its reminder (both typed fields must agree)."""
+    """A checked password record with its reminder (both typed fields must agree): ``tow
+    password`` asks twice, the terminal shows nothing of what was typed."""
     if password != repeat:
         raise AuthConfigurationError("web.password.differ")
+    return auth.lan_password_record(password, hint)
+
+
+def web_record(password: str, repeat: str | None, hint: str = "") -> dict[str, Any]:
+    """A checked password record from a web form: one field since 1.32.1 (its eye shows what was
+    typed). ``repeat`` is None when the form has no second field; a form that still sends one (an
+    older page) must agree with it - an empty one too."""
+    if repeat is not None:
+        return new_record(password, repeat, hint)
     return auth.lan_password_record(password, hint)
 
 

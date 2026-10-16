@@ -72,7 +72,12 @@ def test_matching_actions_are_compact_and_closed(copies, category, language):
     row = card.select_one(".restore-point-row")
     url = _url(copies, category)
     assert row.select_one(f'form[action="{url}/check"]')
-    assert row.select_one(f'form[action="{url}/restore"]')
+    restore = row.select_one(f'form[action="{url}/restore"]')
+    # T1-t: every restore confirmation ends with what stays (network access and its password).
+    stays = {"ru": "Доступ по сети и его пароль не изменятся.", "en": "Network access and its password stay unchanged."}
+    assert restore["data-confirm"].endswith(stays[language])
+    assert restore.has_attr("data-confirm-danger")
+    assert restore.select_one("button")["class"] == ["ghost"]
     assert row.select_one(f'a[href="{url}/delete"]')
     assert card.select_one(".backup-inventory > summary").get_text(strip=True)
     assert page.select_one("#backup-days")["value"] == "7"
@@ -308,3 +313,16 @@ def test_empty_manual_archive_is_deletable_but_not_restorable_and_does_not_break
     assert row.select_one('button[type="submit"]').has_attr("disabled")
     assert all(button.has_attr("disabled") for button in row.select("button"))
     assert "Пустой архив" in row.get_text()
+
+
+@pytest.mark.parametrize("category", ["point", "night"])
+def test_the_delete_page_shows_the_time_by_the_one_rule_and_delete_first(copies, category):
+    page = BeautifulSoup(_client().get(_url(copies, category) + "/delete").text, "html.parser")
+
+    title = page.select_one("#copy-title")
+    assert title.select_one("time[data-short][datetime]") is not None
+    assert "UTC" not in title.get_text()  # was the raw "16.10.2026 11:00:02 UTC+03:00"
+    actions = page.select_one(".backup-delete-confirm form").find_all(["button", "a"])
+    assert actions[0].name == "button"
+    assert actions[0]["class"] == ["ghost", "danger"]
+    assert actions[1]["href"] == "/settings?open=transfer#acc-transfer"

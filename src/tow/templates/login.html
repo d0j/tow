@@ -20,7 +20,9 @@
       {% endif %}
       {#- A sign-in that ended says so above the field, as a note (not a line of the lead). -#}
       {% if again %}<div role="status">{{ note(t('web.login.again')) }}</div>{% endif %}
-      {% if error %}<p class="form-error" id="login-error" role="alert">{{ error }}</p>{% endif %}
+      {#- A wrong password is said right below its field (AU1); a reason about no field (too many
+          attempts, the sign-in file) above the form. -#}
+      {% if error and not field_error %}<p class="form-error" id="login-error" role="alert">{{ error }}</p>{% endif %}
       {% if not enabled %}
       {#- Sign-in is off: only this computer reaches TOW, and it needs no password - no form, the way in. -#}
       <p><a class="btn" href="/">{{ t('login.open_tow') }}</a></p>
@@ -31,6 +33,7 @@
         <div class="field">
           <label for="lan-password">{{ label }}</label>
           <span class="secret"><input id="lan-password" class="w-m" name="password" type="password" autocomplete="current-password" required{% if error %} aria-invalid="true" aria-describedby="login-error"{% endif %} {% if not configured %}disabled{% else %}autofocus{% endif %}>{{ reveal('lan-password', label) }}</span>
+          {% if error and field_error %}<p class="field-error" id="login-error" role="alert">{{ error }}</p>{% endif %}
         </div>
         <div class="settings-actions"><button type="submit" {% if not configured %}disabled{% endif %}>{{ t('login.submit') }}</button></div>
       </form>
@@ -39,7 +42,7 @@
       <details class="technical-details" id="forgot-password"{% if error %} open{% endif %}>
         <summary>{{ t('login.forgot') }}</summary>
         {% if help.hint %}<p>{{ t('login.hint') }} <b>{{ help.hint }}</b></p>{% else %}<p>{{ t('login.no_hint') }}</p>{% endif %}
-        <p>{{ t('login.reset_how', machine=help.machine, url=help.url) }}</p>
+        <p>{{ t('login.reset_how') }}</p>
         <p class="action-hint">{{ t('login.reset_cli') }} <code>{{ os_launcher() }} password</code></p>
       </details>
       {% endif %}

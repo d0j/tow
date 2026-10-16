@@ -89,7 +89,7 @@ def _delete_confirmation(request: Request, kind: str, identifier: str) -> Respon
             if kind == "night"
             else services.restore_point_delete_view(identifier)
         )
-        created = format_ui_timestamp(str(view["created_at"]))
+        format_ui_timestamp(str(view["created_at"]))  # a copy without a readable time is refused
     except SnapshotError, RestorePointError, OSError, ValueError:
         return _backup_redirect("web.backup.delete_failed", "err")
     return TEMPLATES.TemplateResponse(
@@ -98,7 +98,7 @@ def _delete_confirmation(request: Request, kind: str, identifier: str) -> Respon
         {
             "title": t("settings.backups.delete_title"),
             "copy_title": t("settings.backups.night_title" if kind == "night" else "settings.backups.manual_title"),
-            "created": created,
+            "created_at": str(view["created_at"]),  # shown by the one time rule (short_time)
             "revision": view["revision"],
             "action": request.url.path,
         },

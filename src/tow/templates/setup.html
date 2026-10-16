@@ -7,8 +7,10 @@
   {% from "_icons.html" import sprite %}
   {% from "_secret.html" import reveal %}
   {{ sprite() }}
-  {#- A refused field: marked, and described by the reason above the form. -#}
+  {#- A refused field: marked, described by its reason right below it (AU1); a reason that is about
+      no field (the passwords and tokens cannot be opened) stays above the form. -#}
   {% macro bad(field, hint='') %}{% if error_field == field %} aria-invalid="true" aria-describedby="setup-error{{ ' ' ~ hint if hint }}"{% elif hint %} aria-describedby="{{ hint }}"{% endif %}{% endmacro %}
+  {% macro reason(field) %}{% if error and error_field == field %}<p class="field-error" id="setup-error" role="alert">{{ error|sentence }}</p>{% endif %}{% endmacro %}
   <main class="auth-shell">
     <section class="card auth-card auth-card-wide" aria-labelledby="setup-title">
       <h1 id="setup-title">{{ t('setup.heading') }}</h1>
@@ -16,7 +18,7 @@
       {#- The one question of this page first; the password only for a yes (1.32). -#}
       <h2 class="add-title">{{ t('setup.access_title') }}</h2>
       <p class="sub">{{ t('setup.intro') }}</p>
-      {% if error %}<p class="form-error" id="setup-error" role="alert">{{ error|sentence }}</p>{% endif %}
+      {% if error and not error_field %}<p class="form-error" id="setup-error" role="alert">{{ error|sentence }}</p>{% endif %}
       {#- Sent as a form (data-native-submit): app.js is here for the eyes only. novalidate: without
           app.js a hidden short password must not block Start; the server checks the choice. -#}
       <form method="post" action="/setup" class="form-grid setup-form" data-native-submit novalidate>
@@ -27,25 +29,21 @@
         </div>
         {#- Shown once the box is ticked (CSS) and disabled while it is clear (app.js), so a hidden
             password is neither sent nor checked; the server takes a clear box as "this computer
-            only" whatever comes with it. -#}
+            only" whatever comes with it. One password field (1.32.1): its eye shows what was typed. -#}
         <div class="form-grid lan-password" data-enabled-by="allow-lan">
           <div class="field-row">
             <div class="field">
               <label for="lan-password">{{ t('settings.access.password') }}</label>
               <span class="secret"><input id="lan-password" class="w-m" name="lan_password" type="password" autocomplete="new-password" minlength="8"{{ bad('lan-password', 'lan-password-hint') }}>{{ reveal('lan-password', t('settings.access.password')) }}</span>
+              {{ reason('lan-password') }}
             </div>
             <div class="field">
-              <label for="lan-password2">{{ t('settings.access.repeat_password') }}</label>
-              <span class="secret"><input id="lan-password2" class="w-m" name="lan_password2" type="password" autocomplete="new-password" minlength="8"{{ bad('lan-password2') }}>{{ reveal('lan-password2', t('settings.access.repeat_password')) }}</span>
+              <label for="lan-hint">{{ t('settings.access.hint_label') }}</label>
+              <input id="lan-hint" class="w-m" name="hint" type="text" maxlength="{{ hint_max }}" autocomplete="off" value="{{ hint }}"{{ bad('lan-hint', 'lan-hint-help') }}>
+              {{ reason('lan-hint') }}
             </div>
           </div>
-          <p class="field-hint" id="lan-password-hint">{{ t('settings.access.password_hint') }}</p>
-          <div class="field">
-            <label for="lan-hint">{{ t('settings.access.hint_label') }}</label>
-            <input id="lan-hint" class="w-l" name="hint" type="text" maxlength="{{ hint_max }}" autocomplete="off" value="{{ hint }}"{{ bad('lan-hint', 'lan-hint-help') }}>
-            <p class="field-hint" id="lan-hint-help">{{ t('settings.access.hint_help') }}</p>
-          </div>
-          <p class="action-hint">{{ t('setup.reset_note') }}</p>
+          <p class="field-hint"><span id="lan-password-hint">{{ t('settings.access.password_hint') }}</span> <span id="lan-hint-help">{{ t('settings.access.hint_help') }}</span></p>
         </div>
         <div class="settings-actions">
           <button type="submit" name="action" value="save">{{ t('setup.save') }}</button>

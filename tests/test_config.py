@@ -465,13 +465,14 @@ def test_the_example_config_states_the_bounds_the_code_uses():
     assert f"(0..{HISTORY_MAX_ITEMS})" in text
 
 
-def test_the_checks_card_says_when_a_new_interval_applies():
+def test_the_checks_card_says_a_topics_own_interval_stays():
+    # T1-n (1.32.1): one short line; "a new value applies within a minute" was cut as noise.
     from fastapi.testclient import TestClient
 
     from tow.web import app
 
     page = TestClient(app).get("/settings").text
-    assert "Новое значение действует в течение минуты" in page
+    assert "Раздачи со своим интервалом проверяются по нему." in page
 
 
 def test_the_example_config_states_when_release_discovery_runs():

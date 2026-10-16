@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from helpers import flash_kind, flash_of, flash_record, open_network, wait_for_check_job
 
 from tow import store_transaction
-from tow.auth import SESSION_COOKIE
+from tow.auth import SESSION_COOKIE, password_hint
 from tow.clock import iso_now
 from tow.config import load_config, save_config
 from tow.log import read_events
@@ -884,12 +884,25 @@ def test_settings_access_keeps_a_network_address_written_in_the_config(client):
     assert (cfg["bind"], cfg["allow_lan"]) == ("192.168.1.5", True)
 
 
-def test_settings_access_ignores_a_password_field(client):
-    # Older pages posted lan_password here and the reminder was silently dropped; now ignored.
-    client.post("/settings/access", data={"allow_lan": "1", "lan_password": LAN_PASSWORD}, follow_redirects=False)
+def test_settings_access_saves_a_first_password_with_its_reminder(client):
+    # 1.32.1 (F1): without a password, "Save and enable" sends the box, the password and its
+    # reminder here; all three are saved together (an older page's password alone dropped the
+    # reminder; it was then ignored).
+    client.post(
+        "/settings/access",
+        data={"allow_lan": "1", "lan_password": LAN_PASSWORD, "hint": "the usual"},
+        follow_redirects=False,
+    )
+
+    assert password_hint(load_secrets()["lan_auth"]) == "the usual"
+    assert load_config()["allow_lan"] is True
+
+
+def test_settings_access_never_opens_the_network_without_a_password(client):
+    client.post("/settings/access", data={"allow_lan": "1", "hint": "the usual"}, follow_redirects=False)
 
     assert "lan_auth" not in load_secrets()
-    assert load_config()["allow_lan"] is False  # no password yet: the network stays closed
+    assert load_config()["allow_lan"] is False
 
 
 def test_settings_access_undo_keeps_everything_when_config_write_fails(monkeypatch, client):

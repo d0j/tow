@@ -33,12 +33,12 @@ def test_settings_explains_global_and_personal_timers(language, custom_minutes):
     if language == "ru":
         assert '<span class="pill mut">2 ч</span>' in interval
         assert '<label for="interval_min">Проверять раздачи каждые</label>' in interval
-        assert "Раздачи с личным таймером проверяются по нему." in interval
+        assert "Раздачи со своим интервалом проверяются по нему." in interval
         assert "Общий таймер" not in interval
     else:
         assert '<span class="pill mut">2 h</span>' in interval
         assert '<label for="interval_min">Check topics every</label>' in interval
-        assert "Topics with a personal timer keep it." in interval
+        assert "Topics with their own interval keep using it." in interval
         assert "Global timer" not in interval
 
 
@@ -65,10 +65,13 @@ def test_settings_sections_follow_the_owners_order_and_language_holds_the_theme(
     assert 'action="/settings/language"' in appearance
     assert 'action="/settings/theme"' in appearance
     assert 'id="acc-theme"' in appearance  # #acc-theme still lands here
-    assert "<legend>Тема</legend>" in appearance  # each control keeps its own visible label
-    assert '<label for="language-choice">Язык</label>' in appearance
-    # Without scripts both are saved by a button: the language's own, the theme's in <noscript>.
-    assert appearance.count('<button type="submit">') == 2
+    # Each control keeps its own visible label; the theme's says its scope (T1-s, no hint below).
+    assert "<legend>Тема (для всех устройств)</legend>" in appearance
+    assert "<legend>Язык</legend>" in appearance
+    # Without scripts both are saved by a button: the language by its own choice (L1: one submit
+    # button per language), the theme's in <noscript>.
+    assert appearance.count('<button type="submit" name="language"') == 3
+    assert appearance.count('<button type="submit">') == 1
     for name in ("language", "theme"):
         opened = client.get(f"/settings?open={name}").text
         assert " open" in re.search(r'<details[^>]+id="acc-language"[^>]*>', opened).group()
@@ -132,7 +135,9 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert "uv run --frozen tow import" not in page
     assert "Сохранённых копий нет</span>" in page
     assert 'action="/settings/restore-points"' in page
-    assert "Хранятся 10 последних. Восстановление не меняет доступ по сети." in page
+    assert "Хранятся 10 последних копий." in page
+    # T1-t: every restore confirmation says that network access and its password stay.
+    assert "Доступ по сети и его пароль не изменятся." in page.split('id="backup-file"', 1)[1]
     assert ">Сохранить файл</button>" in page
     assert ">Проверить</button>" in page
     assert ">Восстановить</button>" in page
@@ -366,7 +371,7 @@ def test_settings_fields_are_as_wide_as_what_they_hold():
         return found.group(1) if found else ""
 
     widths = {
-        "q_host-client-0": "w-l",
+        "q_host-client-0": "w-m",
         "q_port-client-0": "w-xs",
         "q_user-client-0": "w-m",
         "q_pass-client-0": "w-m",
@@ -380,24 +385,24 @@ def test_settings_fields_are_as_wide_as_what_they_hold():
         "interval_min": "w-xs",
         "flash_ttl_min": "w-xs",
         "lan-password": "w-m",
-        "lan-password2": "w-m",
-        "lan-hint": "w-l",
+        "lan-hint": "w-m",
         "backup-days": "w-xs",
         "backup-path-night": "w-xl",
-        "language-choice": "w-l",
-        "protection-timeout": "w-xs",
+        "protection-timeout": "w-2xs",
+        "protection-interval": "w-xs",
+        "protection-attempts": "w-2xs",
     }
     for field_id, width in widths.items():
         assert width in classes(field_id).split(), (field_id, classes(field_id))
     clients = page.split('id="acc-clients"', 1)[1].split('id="acc-bots"', 1)[0]
     assert 'class="settings-form form-grid"' in clients
-    assert '<div class="field-row keep">' in clients  # the address and its port, on a phone too
+    # F4: the rows wrap by their fields' widths; the address and its port stay one row on their own.
+    assert "field-row keep" not in page
     access = page.split('id="acc-access"', 1)[1].split('id="acc-transfer"', 1)[0]
-    new_password = access.split('<div class="field-row">', 1)[1].split(
-        '<div class="field">\n                  <label for="lan-hint"', 1
-    )[0]
-    assert 'id="lan-password"' in new_password
-    assert 'id="lan-password2"' in new_password
+    row = access.split('<div class="field-row">', 1)[1].split("</div>\n              </div>", 1)[0]
+    assert 'id="lan-password"' in row
+    assert 'id="lan-hint"' in row
+    assert 'id="lan-password2"' not in page
 
 
 def _tag(page: str, field_id: str) -> str:
@@ -405,9 +410,10 @@ def _tag(page: str, field_id: str) -> str:
 
 
 def test_a_secret_field_says_saved_only_when_a_secret_is_saved():
-    """A client with no password saved said "Empty — keep as is": there was nothing to keep. A
-    saved password or token is said by a persistent hint the field is described by; a field with
-    nothing saved has none, and no field carries the instruction in its placeholder."""
+    """A client with no password saved said "Empty — keep as is": there was nothing to keep. S1
+    (1.32.1): a saved password or token is a "saved" tag in its label, "Leave empty to keep" in
+    its field and one note per form, all of which the field is described by; a field with nothing
+    saved has none of them."""
     from tow.store import save_secrets
 
     save_secrets(
@@ -419,20 +425,26 @@ def test_a_secret_field_says_saved_only_when_a_secret_is_saved():
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     client.post("/settings/client/add", data={"kind": "transmission"})
     page = client.get("/settings").text
-    assert "Пусто — не менять" not in page
-    assert "Сохранён</span>" not in page  # no green "Saved" pill beside a label
-    kept = "Сохранён · оставьте пустым, чтобы не менять"
+    assert "Сохранён · оставьте пустым, чтобы не менять" not in page  # the sentence under each field
     saved = _tag(page, "q_pass-client-0")
-    assert 'aria-describedby="q_pass-client-0-saved"' in saved
-    assert f'<p class="field-hint" id="q_pass-client-0-saved">{kept}</p>' in page
+    assert 'aria-describedby="q_pass-client-0-saved client-keep-client-0"' in saved
+    assert 'placeholder="Пусто — не менять"' in saved
+    assert re.search(
+        r'<label for="q_pass-client-0">[^<]*<span class="saved-tag" id="q_pass-client-0-saved">сохранён</span></label>',
+        page,
+    )
+    assert page.count('id="client-keep-client-0"') == 1
+    assert "Оставьте пароли и ключи пустыми, чтобы не менять." in page
     new = _tag(page, "q_pass-client-1")  # Transmission, just added: nothing saved
     assert "aria-describedby" not in new
     assert "placeholder" not in new
     assert 'id="q_pass-client-1-saved"' not in page
-    assert 'aria-describedby="nf-telegram-token-saved"' in _tag(page, "nf-telegram-token")
-    assert "placeholder" not in _tag(page, "nf-telegram-token")  # a format there read as the saved value
+    token = _tag(page, "nf-telegram-token")
+    assert 'aria-describedby="nf-telegram-token-saved notifier-keep-telegram"' in token
+    assert 'placeholder="Пусто — не менять"' in token  # never the format: it read as the saved value
     assert "aria-describedby" not in _tag(page, "nf-discord-webhook_url")  # not connected
-    assert 'placeholder="https://discord.com/api/webhooks/…"' in _tag(page, "nf-discord-webhook_url")
+    # PH1: a format is an example, said so.
+    assert 'placeholder="Напр. https://discord.com/api/webhooks/…"' in _tag(page, "nf-discord-webhook_url")
 
 
 def test_secret_fields_have_an_eye_and_the_right_autofill():
@@ -452,7 +464,7 @@ def test_secret_fields_have_an_eye_and_the_right_autofill():
         assert 'autocapitalize="off"' in tag
     assert 'autocomplete="new-password"' in _tag(page, "lan-password")
     assert "new-password" not in page.split('id="acc-access"', 1)[0]  # only TOW's own password
-    for field_id in ("q_pass-client-0", "nf-telegram-token", "nf-discord-webhook_url", "lan-password", "lan-password2"):
+    for field_id in ("q_pass-client-0", "nf-telegram-token", "nf-discord-webhook_url", "lan-password"):
         assert re.search(
             rf'<span class="secret"><input id="{field_id}"[^>]*><button type="button" class="ico reveal" '
             rf'data-reveal="{field_id}"[^>]* aria-controls="{field_id}" aria-pressed="false"',
@@ -480,8 +492,8 @@ def test_settings_say_each_thing_once_and_the_guide_keeps_the_long_texts():
     assert "Installed: TOW" not in page.split('id="acc-updates"', 1)[1].split('id="acc-service"', 1)[0]
     assert "TOW tries ordinary mirrors first" not in page  # how it works: the guide
     # Kept, briefly: what a remote reader can see, and that the network needs the password.
-    assert "Anyone who opens the sign-in page can read it — never include the password." in page
-    assert "Turning it on takes effect after TOW restarts; turning it off works at once." in page
+    assert "Public on the sign-in page. Do not include the password." in page
+    assert "On after restarting TOW; off immediately." in page
     guide = client.get("/settings/help").text
     for key in ("guide_hint", "sequence", "guide_step_install", "guide_step_address", "guide_step_enable"):
         assert str(escape(translate(f"protection_ui.{key}", "en"))) in guide, key
@@ -513,8 +525,7 @@ def test_settings_pills_say_each_state_once_and_main_is_a_role(monkeypatch):
     spare = clients.split('id="client-spare"', 1)[1].split("</summary>", 1)[0]
     assert '<span class="pill warn">Не настроен</span>' in spare
     access = page.split('id="acc-access"', 1)[1].split('id="acc-transfer"', 1)[0]
-    network = access.split('id="network-card"', 1)[1]
-    assert 'class="pill' not in network.split("</div>", 1)[0]  # the section's pill says it
+    assert 'class="pill' not in access.split("</summary>", 1)[1]  # the section's pill says it (§4.5)
 
 
 def test_the_messengers_pill_names_them_and_is_green_only_once_each_worked():
@@ -568,3 +579,103 @@ def test_a_theme_choice_updates_the_theme_pill_not_the_languages():
     js = (Path(__file__).parents[1] / "src" / "tow" / "static" / "app.js").read_text(encoding="utf-8")
     block = js[js.index("// Settings → Theme:") : js.index('window.addEventListener("beforeunload"')]
     assert 'querySelector(":scope > summary [data-theme-pill]")' in block
+
+
+# --------------------------------------------------------------------------- 1.32.1: Network access (F1)
+
+
+def _access_section(page: str) -> str:
+    return page.split('id="acc-access"', 1)[1].split('id="acc-transfer"', 1)[0]
+
+
+def _with_lan_password(allow_lan: bool = True) -> None:
+    from tow.auth import lan_password_record
+    from tow.config import load_config, save_config
+    from tow.store import load_secrets, save_secrets
+
+    secrets = load_secrets()
+    secrets["lan_auth"] = lan_password_record("old-horse-battery", "лошадь")
+    save_secrets(secrets)
+    cfg = load_config()
+    cfg.update(allow_lan=allow_lan, bind="0.0.0.0" if allow_lan else "127.0.0.1")
+    save_config(cfg)
+
+
+def test_network_access_at_rest_is_one_line_for_the_password_and_the_box():
+    """F1 + §4.5: one card without headings or pills of its own; with a password set it shows the
+    box (saved alone) and "Password set · Change" - no password field until it is unfolded, no
+    repeat field and no current password on this computer, and fewer words."""
+    from bs4 import BeautifulSoup
+
+    _with_lan_password()
+    page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
+    access = BeautifulSoup(_access_section(page), "html.parser")
+    assert len(access.select(".integration-card")) == 1
+    assert access.select("h2") == []
+    box = access.select_one("#allow-lan")
+    assert box.has_attr("checked")
+    assert box.has_attr("data-auto-submit-control")
+    assert box.find_parent("form").has_attr("data-auto-submit")
+    assert access.select_one("#allow-lan-hint").get_text() == "Включение — после перезапуска TOW; выключение — сразу."
+    change = access.select_one("details#password-change")
+    assert not change.has_attr("open")
+    assert change.select_one("summary").get_text(strip=True) == "Пароль задан · Сменить"
+    for field in access.select('input[type="password"]'):
+        assert field.find_parent("details", id="password-change") is not None  # folded at rest
+    assert access.select_one('[name="current_password"]') is None
+    assert access.select_one('[name="lan_password2"]') is None
+    assert access.select_one("#lan-hint")["value"] == "лошадь"
+    assert "w-m" in access.select_one("#lan-hint")["class"]
+    sign_out = access.select_one('button[form="sign-out-everywhere"]')
+    assert sign_out["class"] == ["ghost"]
+    assert sign_out["title"] == "Выход на всех устройствах, вошедших по сети; пароль не меняется."
+    words = access.get_text(" ", strip=True)
+    for gone in ("Tailscale", "Только чтобы сменить одну подсказку", "Сначала задайте пароль выше", "Повторите пароль"):
+        assert gone not in words
+    assert "После смены пароля другие устройства войдут заново." in words
+
+
+def test_a_refused_password_change_comes_back_with_the_form_open():
+    _with_lan_password()
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    refused = client.post("/settings/password", data={"lan_password": "short"}, follow_redirects=False)
+
+    assert refused.headers["location"].startswith("/settings?open=access&card=password")
+    page = client.get(refused.headers["location"]).text
+    assert re.search(r'<details class="[^"]*" id="password-change" open>', page)
+
+
+def test_another_device_sees_the_current_password_and_never_the_box(monkeypatch):
+    from bs4 import BeautifulSoup
+
+    from tow.auth import issue_session, lan_password_session_key
+    from tow.store import load_secrets
+
+    _with_lan_password()
+    record = load_secrets()["lan_auth"]
+    lan = TestClient(
+        app,
+        client=("192.168.1.7", 50000),
+        headers={"Origin": "http://127.0.0.1"},
+        cookies={"tow_session": issue_session(lan_password_session_key(record))},
+    )
+    access = BeautifulSoup(_access_section(lan.get("/settings").text), "html.parser")
+    assert access.select_one("#allow-lan") is None
+    assert access.select_one('form[action="/settings/access"]') is None
+    assert "только на компьютере с TOW" in access.get_text()
+    current = access.select_one('[name="current_password"]')
+    assert current.has_attr("required")
+    assert current.find_parent("details", id="password-change") is not None
+
+
+def test_the_add_client_form_is_folded_behind_one_line():
+    """CL1: a select and a solid button under the clients, always; now one line "Add client" -
+    open only while there is no client at all."""
+    from bs4 import BeautifulSoup
+
+    page = BeautifulSoup(TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text, "html.parser")
+    toggle = page.select_one("#acc-clients details.client-add-toggle")
+    assert toggle.select_one("summary").get_text(strip=True) == "Добавить клиент"
+    assert toggle.select_one('form[action="/settings/client/add"]') is not None
+    assert not toggle.has_attr("open")  # the example config has a client (not set up yet): still folded

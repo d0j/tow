@@ -76,6 +76,11 @@ def _access():
     return lambda: routes_settings.settings_access(allow_lan="1")
 
 
+def _first_enable():
+    save_secrets({"telegram": {"token": "kept"}})
+    return lambda: routes_settings.settings_access(allow_lan="1", lan_password=PASSWORD, hint="")
+
+
 def _password():
     save_secrets({"telegram": {"token": "kept"}})
     return lambda: routes_password.settings_password(
@@ -129,6 +134,7 @@ SAVES = {
     "client add": (_client_add, 4),
     "client login": (_client_login, 3),
     "network access": (_access, 3),
+    "first enable": (_first_enable, 4),
     "password": (_password, 3),
     "check interval": (_interval, 4),
     "first start": (_first_start, 2),

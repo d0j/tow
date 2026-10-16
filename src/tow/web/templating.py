@@ -8,7 +8,6 @@ the templates their globals.
 from __future__ import annotations
 
 import hashlib
-import socket
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,7 +23,7 @@ from tow import __version__, access, i18n, paths, platform, undo
 from tow.auth import SESSION_COOKIE, password_hint
 from tow.clients.factory import client_name
 from tow.clock import parse_timestamp
-from tow.config import interval_sec_of, port_of
+from tow.config import interval_sec_of
 from tow.issues import Fix
 from tow.jsonish import as_dict
 from tow.log import check_error_label
@@ -257,10 +256,10 @@ def messages_namespace(request: Request) -> str:
 
 
 def login_help() -> dict[str, str]:
-    """What the sign-in page says under "Forgot your password?"."""
+    """What the sign-in page says under "Forgot your password?": the owner's reminder alone - the
+    computer's name and its local address are nothing to show anyone on the network (AU2)."""
     record = (_context.secrets_or_none() or {}).get(access.RECORD_KEY)
-    port = port_of(_context.config())
-    return {"hint": password_hint(record), "machine": socket.gethostname(), "url": f"http://127.0.0.1:{port}"}
+    return {"hint": password_hint(record)}
 
 
 def site_title(name: object) -> str:

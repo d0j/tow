@@ -333,19 +333,20 @@ def _first_start():
 def test_a_refused_first_start_keeps_what_was_typed_but_the_passwords(client):
     """A refused first start cleared every field and unticked the box; the reason stood above
     the form in lower case. The reminder and the box come back (never a password), the reason is
-    a sentence and the field it is about is marked."""
+    a sentence and the field it is about is marked - and said right below it (AU1, 1.32.1)."""
     _first_start()
-    data = {"lan_password": "river-lamp-9", "lan_password2": "river-lamp-9", "hint": "river-lamp-9!", "allow_lan": "1"}
+    data = {"lan_password": "river-lamp-9", "hint": "river-lamp-9!", "allow_lan": "1"}
     refused = client.post("/setup", data=data)
     assert refused.status_code == 400
     page = BeautifulSoup(refused.text, "html.parser")
     assert page.select_one("#lan-hint")["value"] == "river-lamp-9!"
     assert page.select_one("#allow-lan").has_attr("checked")
-    for field in ("#lan-password", "#lan-password2"):
-        assert not page.select_one(field).has_attr("value")
+    assert not page.select_one("#lan-password").has_attr("value")
+    assert page.select_one("#lan-password2") is None
     assert page.select_one("#lan-hint")["aria-invalid"] == "true"
-    error = page.select_one("#setup-error").get_text()
-    assert error[:1].isupper()
+    error = page.select_one("#setup-error")
+    assert error.get_text()[:1].isupper()
+    assert error.find_previous_sibling("input")["id"] == "lan-hint"  # below its field, not above the form
     assert "setup-error" in page.select_one("#lan-hint")["aria-describedby"]
 
 
@@ -361,8 +362,8 @@ def test_first_start_asks_about_other_devices_first(client):
     order = [node["id"] for node in form.select("input[id]")]
     assert order.index("allow-lan") < order.index("lan-password") < order.index("lan-hint")
     assert not form.select("input[required]")
-    for field in ("lan-password", "lan-password2"):
-        assert page.select_one(f'button.reveal[data-reveal="{field}"]') is not None
+    assert page.select_one('button.reveal[data-reveal="lan-password"]') is not None
+    assert page.select_one("#lan-password2") is None  # 1.32.1: one field, its eye shows what was typed
     started = client.post("/setup", data={"action": "save"}, follow_redirects=False)
     assert (started.status_code, started.headers["location"].split("?")[0]) == (303, "/")
     assert load_config()["setup_done"] is True
@@ -408,6 +409,10 @@ def test_the_sign_in_page_has_the_eye_and_still_posts_a_form():
     assert "web.secret.show" in page.select_one("script#tow-i18n").get_text()
     wrong = BeautifulSoup(lan.post("/login", data={"password": "nope-nope-1"}).text, "html.parser")
     assert wrong.select_one("#lan-password")["aria-invalid"] == "true"
+    # AU1: "wrong password" right below the field it is about.
+    error = wrong.select_one("#login-error")
+    assert "field-error" in error["class"]
+    assert error.find_previous_sibling(class_="secret").select_one("#lan-password") is not None
 
 
 def test_first_start_without_javascript_is_never_blocked_by_a_hidden_password(client):

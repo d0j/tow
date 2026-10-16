@@ -635,8 +635,8 @@ def test_settings_pills_say_what_is_set_up(client):
     assert '<span class="pill mut">Не подключены</span>' in _summary(page, "bots")
     assert '<span class="pill mut">12 ч</span>' in _summary(page, "intervals")  # 720 min
     # Local only: no password is no warning.
-    card = page[page.index('id="password-card"') : page.index("</article>", page.index('id="password-card"'))]
-    assert '<span class="pill mut">' in card
+    assert '<span class="pill mut">' in _summary(page, "access")
+    assert 'class="pill warn"' not in page.split('id="acc-access"', 1)[1].split('id="acc-transfer"', 1)[0]
     # One backups pill (the summary), not the same pill again in the night card.
     night = page[page.index('id="backup-night"') : page.index("</article>", page.index('id="backup-night"'))]
     assert 'class="pill' not in night.split("</div>", 2)[0] + night.split("</div>", 2)[1]
@@ -658,7 +658,7 @@ def test_check_interval_and_undo_time_are_separate_fields_with_hints(client):
     ]
     assert 'class="field-grid"' not in form
     assert 'aria-describedby="interval-hint"' in form
-    assert "Раздачи с личным таймером проверяются по нему." in form
+    assert "Раздачи со своим интервалом проверяются по нему." in form
     assert 'id="undo-hint"' not in form  # "Show “Undo” for" says it; the hint repeated the label
 
 
