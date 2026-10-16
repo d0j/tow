@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from tow.paths import in_root
 from tow.platform import is_plain_dir, is_plain_file
 
 # This install's own settings, never the restored copy's (a nightly backup or a restore point):
@@ -48,6 +49,20 @@ def inventory_digest(names: list[str]) -> str:
         digest.update(name.encode("utf-8"))
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def observed_in(state: dict[str, Any], location: Path, resolved: str) -> bool:
+    """Whether a cleanup record describes ``location`` (``resolved``: its full path): the same
+    full path, or the same folder of the install (``location_in_root``, written since 1.32.1),
+    which still names it after the documented move or copy of the install. A record of an
+    older version has the full path only: after a move it stays unknown until the next
+    observation. A ``location_in_root`` that is neither text nor None is a damaged record."""
+    bound = state.get("location_in_root")
+    if bound is not None and not isinstance(bound, str):
+        raise ValueError("invalid cleanup location")
+    if state.get("location") == resolved:
+        return True
+    return bound is not None and bound == in_root(location)
 
 
 def added_names(recorded: Any, digest: Any, observed: list[str]) -> set[str]:

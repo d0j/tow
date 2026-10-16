@@ -23,6 +23,7 @@ from tow.backup_retention import MIB, copy_time, retained_copies, retention_sett
 from tow.config import load_config
 from tow.i18n import t
 from tow.log import locked_log_path, log_event, owner_language
+from tow.paths import in_root
 from tow.snapshots.errors import SnapshotError, reason
 from tow.snapshots.location import PREFIX, backup_root, snapshot_folders, snapshot_path
 from tow.snapshots.manifest import (
@@ -77,11 +78,17 @@ def create_snapshot(*, how: str = "auto") -> dict[str, Any]:
         with persistence_lock():  # creation, read-back and pruning cannot race another copy
             result = _create_snapshot(how=how, proven=proven)
             location = Path(result["snapshot"]).parent
-            fields: dict[str, Any] = {"location": str(location), "cleanup_inventory": None, "cleanup_names": None}
+            fields: dict[str, Any] = {
+                "location": str(location),
+                "location_in_root": None,
+                "cleanup_inventory": None,
+                "cleanup_names": None,
+            }
             # A diagnostic failure cannot invalidate a verified copy. A missing binding
             # remains unknown, rather than binding an earlier result to a later copy.
             with contextlib.suppress(OSError, ValueError, UnicodeError):
                 fields["location"] = str(location.resolve())
+                fields["location_in_root"] = in_root(location)  # survives a move of the install
                 fields.update(cleanup_inventory(location))
             record_status(
                 last_ok_at=round(time.time(), 3),
@@ -158,6 +165,7 @@ def delete_snapshot(name: str, revision: str) -> dict[str, Any]:
                 record_status(
                     last_cleanup_pending=not removed or before["pending"],
                     location=str(path.parent.resolve()),
+                    location_in_root=in_root(path.parent),
                     **cleanup_inventory(path.parent),
                 )
         if not removed:

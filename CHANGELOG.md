@@ -131,6 +131,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   way, and `lsof`, which can hang on a lost network mount, is asked last and only while something does listen.
 - The daily clean-up of `data/tmp` removes only what TOW itself left there, never the files of a program TOW
   started (such as uv's lock files), which may still be in use after a day.
+- After the install folder is moved or copied as `docs/PORTABLE.md` describes, Settings and the watchdog keep the
+  cleanup result of the nightly backups and of the restore points in their default folders inside it, instead of
+  "Result unknown" and "Cleanup status is unknown" until the next copy. This works for results recorded from this
+  version on; an older record stays unknown after a move until the next nightly backup or restore point.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
