@@ -49,6 +49,10 @@ from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
 from tow.log import history_events, log_event, read_events, scrub_text
+from tow.messages_feed import MarkerRefused as MessageMarkerRefused
+from tow.messages_feed import feed as message_feed
+from tow.messages_feed import reconcile_update as reconcile_update_result
+from tow.messages_feed import render as render_message_feed
 from tow.mirrors import mirror_observations
 from tow.mirrors import note_signed_in as _note_signed_in
 from tow.mirrors import prefer_host as _prefer_host
@@ -123,11 +127,13 @@ from tow.undo import local_only as undo_local_only
 from tow.undo import stamped_here as undo_stamped_here
 from tow.undo import undo_label
 from tow.watchdog import last_problem as watchdog_problem
+from tow.web_update import finished_job as finished_web_update
 from tow.web_update import log_tail as web_update_log
 from tow.web_update import start as start_web_update
 from tow.web_update import status as web_update_status
 
 __all__ = [
+    "MessageMarkerRefused",
     "adopt_topic",
     "apply_undo",
     "await_relocation",
@@ -156,6 +162,7 @@ __all__ = [
     "doctor_report",
     "download_history_from_bytes",
     "export_portable_bundle",
+    "finished_web_update",
     "folder_free",
     "folder_write_problem",
     "forget_config_cache",
@@ -174,6 +181,7 @@ __all__ = [
     "locked_state_mutation",
     "log_event",
     "login_throttle",
+    "message_feed",
     "mirror_observations",
     "network_credential",
     "next_check_at",
@@ -188,10 +196,12 @@ __all__ = [
     "read_content",
     "read_events",
     "read_only_paths",
+    "reconcile_update_result",
     "record_check_failure",
     "recover_store_transaction",
     "release_cached",
     "release_status",
+    "render_message_feed",
     "request_restart",
     "reset_protection",
     "restore_from_point",

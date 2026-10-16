@@ -114,9 +114,11 @@ WINDOWS_DEVICE_RE = re.compile(r"(?i)(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9
 # The oldest release an install without git can go to: older update.py needs git.
 MINIMUM_ARCHIVE_TARGET = (1, 22, 0)
 # Never in an update snapshot: credentials, keys, browser profiles, sign-in sessions, locks,
-# the supervisor's run files, temporary files and the logs. A rollback leaves what the snapshot
-# leaves out as it is: the failed version's logs are what tells why it failed.
-SKIP_FILES = frozenset({"lan-auth.token", "master.key", "sessions.json"})
+# the supervisor's run files, temporary files and the logs; nor how far Recent messages are read
+# and cleared (ui.json: every device's markers, never put back over newer ones). A rollback
+# leaves what the snapshot leaves out as it is: the failed version's logs are what tells why it
+# failed.
+SKIP_FILES = frozenset({"lan-auth.token", "master.key", "sessions.json", "ui.json"})
 SKIP_DIRS = frozenset({"browser-auth", "run", "tmp", "keys", "logs"})
 SNAPSHOT_RE = re.compile(r"^(?:update|data)-(\d{8}-\d{6})-before-")
 # The oldest version an install managed by `tow run` can go to: older ones have no supervisor.

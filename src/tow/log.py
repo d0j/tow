@@ -329,8 +329,9 @@ def export_event_projection(record: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def log_path() -> Path:
-    return data_dir() / "tow.jsonl"
+def log_path(*, create: bool = True) -> Path:
+    """``<data>/tow.jsonl``; ``create=False`` for a reader that must not create the folder."""
+    return data_dir(create=create) / "tow.jsonl"
 
 
 @contextmanager
@@ -406,17 +407,22 @@ def _rotate_if_needed(path: Path) -> None:
     rotate_files(path, BACKUPS)
 
 
-def log_event(kind: str, **fields: Any) -> bool:
+def append_event(kind: str, **fields: Any) -> str | None:
+    """Append one event; its ``event_id`` once it is in the log, None when the append failed.
+
+    The audit log is best-effort: a full disk or a file held open by a reader never aborts the
+    operation being logged (e.g. after a confirmed client add) - the caller's operation keeps its
+    own outcome, and Recent messages simply lack that entry (they never promise a lossless
+    history)."""
     ts = iso_now()
+    event_id = new_event_id()
     rec = {
         "ts": ts,
         "created_at": ts,
-        "event_id": new_event_id(),
+        "event_id": event_id,
         "kind": kind,
         **_redact(fields),
     }
-    # The audit log is best-effort: a full disk or a file held open by a reader
-    # must never abort the operation being logged (e.g. after a confirmed client add).
     try:
         path = log_path()
         # The log lock alone: no restore replaces the event log, so an event never waits
@@ -426,12 +432,18 @@ def log_event(kind: str, **fields: Any) -> bool:
                 _rotate_if_needed(path)
             except OSError as exc:
                 print(f"TOW log rotation skipped: {type(exc).__name__}", file=sys.stderr)
+            # One write of the whole line: a reader that sees no newline yet skips the line.
             with path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except Exception as exc:  # noqa: BLE001 - an unwritable log must not abort the logged operation
         print(f"TOW log write failed ({kind}): {type(exc).__name__}", file=sys.stderr)
-        return False
-    return True
+        return None
+    return event_id
+
+
+def log_event(kind: str, **fields: Any) -> bool:
+    """``append_event`` as the Boolean every caller (and the importer's API) relies on."""
+    return append_event(kind, **fields) is not None
 
 
 def read_events(*, limit: int = 80) -> list[dict[str, Any]]:

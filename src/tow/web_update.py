@@ -232,6 +232,21 @@ def status() -> dict[str, Any]:
     return result
 
 
+def finished_job() -> dict[str, Any] | None:
+    """The last web update's record once it ended (ok, refused, failed, rolled back or
+    recovered), read only: no lease probe, recovery or write. None while it runs, without a
+    job, and for a record that cannot be read (Settings says why)."""
+    try:
+        job = _read(_job_file())
+    except WebUpdateError:
+        return None
+    if job.get("status") not in _TERMINAL or not isinstance(job.get("id"), str) or not _JOB_ID.fullmatch(job["id"]):
+        return None
+    if job.get("status") in {"failed", "refused", "rolled_back"}:
+        job = _recover_completed(job, _updater_record(), False)
+    return job
+
+
 def _completed_job(job: dict[str, Any], updater: dict[str, Any]) -> dict[str, Any]:
     """A finished terminal recovery can unblock a dead job; GET itself writes nothing."""
     return _recover_completed(job, updater, _active(job))

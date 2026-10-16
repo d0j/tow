@@ -5,6 +5,14 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Changed
+
+- **Recent messages** are the same on every signed-in browser and computer: the list shows what TOW did and
+  found - downloads, failed and recovered checks, your saved changes, updates, watchdog and messenger problems,
+  also from scheduled checks and commands - up to 50 messages of the last seven days, and reading or clearing it
+  on one device does so on all. Each tab's own results stay under **This tab** and no longer count as unread; the
+  old per-tab list is removed once, with a notice.
+
 ### Fixed
 
 - Two devices editing the same topic, site or setting no longer undo each other's changes (a rename was put back

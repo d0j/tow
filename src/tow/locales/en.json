@@ -1340,7 +1340,10 @@
       "cancel": "Cancel waiting",
       "unconfirmed": "could not confirm the result: the answer did not arrive, and it may have been done. Reload the page to see before you try again",
       "reload": "Reload the page",
-      "open_page": "Open as a page"
+      "open_page": "Open as a page",
+      "legacy_retired": "Recent messages are now the same on every device. The earlier list of this tab is no longer kept.",
+      "this_tab": "This tab",
+      "not_saved": "Could not save. Try again."
     }
   },
   "locations": {
@@ -1518,7 +1521,11 @@
       "settings_save_fail": "settings not saved",
       "master_key_created": "master key created — back it up",
       "sessions_reset": "sign-ins reset: data/sessions.json was damaged, every device signs in again",
-      "settings_theme": "theme"
+      "settings_theme": "theme",
+      "check_recovered": "check works again",
+      "backup_recovered": "nightly backup works again",
+      "delivery_recovered": "messages are delivered again",
+      "settings_update_result": "TOW update finished"
     },
     "cls": {
       "quota": "daily limit",
@@ -1550,6 +1557,23 @@
     "check_error": {
       "secrets": "saved passwords and tokens cannot be opened",
       "no_detail": "the reason was not recorded; the details are in the files of data/logs"
+    },
+    "feed": {
+      "topics": {
+        "one": "{n} topic",
+        "other": "{n} topics"
+      },
+      "times": {
+        "one": "{n} time",
+        "other": "{n} times"
+      }
+    },
+    "update": {
+      "ok": "version {version} is installed",
+      "failed": "version {version} was not installed",
+      "refused": "the update to {version} was refused",
+      "rolled_back": "version {version} was rolled back, the previous one runs",
+      "recovered": "the previous version is back after {version}"
     }
   },
   "login": {
@@ -2388,7 +2412,9 @@
       "again": "Your sign-in on this device has ended (it expired or every device was signed out). Sign in again."
     },
     "message": {
-      "subject_result": "{subject} — {result}"
+      "subject_result": "{subject} — {result}",
+      "stale": "The list of messages changed meanwhile. It is shown anew.",
+      "not_saved": "Could not save that the messages are read. Try again."
     },
     "check": {
       "not_confirmed": "check not confirmed",

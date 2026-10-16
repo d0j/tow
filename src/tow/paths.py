@@ -246,6 +246,13 @@ def lan_auth_token_file() -> Path:
     return data_dir() / "lan-auth.token"
 
 
+def ui_state_path(*, create: bool = False) -> Path:
+    """``<data>/ui.json``: what every signed-in device shares about Recent messages (how far they
+    are read and cleared); cursor metadata only, never in a copy of the data. The folder is
+    created only on request: a page that only reads it creates nothing."""
+    return data_dir(create=create) / "ui.json"
+
+
 def _subdir(name: str) -> Path:
     p = data_dir() / name
     if _may_create():

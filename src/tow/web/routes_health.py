@@ -78,7 +78,10 @@ def updates_install(version: str = Form("")) -> Response:
         result = services.start_web_update(version)
     except WebUpdateError as exc:
         return JSONResponse({"ok": False, "error": _said(exc)}, status_code=409)
-    services.log_event("settings_update_started", target_version=result["target"], how="manual")
+    # The job's id is the operation id its result is logged with (tow.messages_feed.reconcile_update).
+    services.log_event(
+        "settings_update_started", operation_id=result.get("id"), target_version=result["target"], how="manual"
+    )
     return JSONResponse(result, status_code=202, headers={"Cache-Control": "no-store"})
 
 
