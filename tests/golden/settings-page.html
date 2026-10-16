@@ -53,6 +53,13 @@
   <nav aria-label="Sections">
     <a href="/" class="ico"  title="Home" aria-label="Home"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-home"/></svg></a>
     <a href="/sites" class="ico"  title="Sites" aria-label="Sites"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-globe"/></svg></a>
+    <details class="hdr-search">
+      <summary title="Search" aria-label="Search"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"/></svg></summary>
+      <label class="sr-only" for="q">Search</label>
+      <input id="q" type="search" placeholder="search…" autocomplete="off">
+      <span id="search-status" class="sr-only" aria-live="polite"></span>
+    </details>
+
     <button type="button" class="ico" id="log-open" title="Log" aria-label="Log" aria-haspopup="dialog"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-log"/></svg></button>
     <details class="attention-menu" id="current-problems" data-attention data-fingerprint="" hidden>
       <summary class="ico" data-attention-toggle aria-label="Current problems: 0" title="Current problems: 0"><svg class="i sm" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg><span class="attention-count" data-attention-count aria-hidden="true">0</span></summary>
