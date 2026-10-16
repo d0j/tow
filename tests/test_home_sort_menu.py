@@ -18,7 +18,7 @@ def test_sort_menu_has_labelled_radio_choices_and_native_backing(language):
     config["language"] = language
     save_config(config)
     page = TestClient(app).get("/").text
-    assert 'class="home-page"' in page
+    assert '<main id="main" aria-labelledby="page-title">' in page  # no Home-only top padding (1.32.3)
     assert '<select id="list-sort" class="w-m">' in page  # a select: the standard size (1.32.2)
     assert 'id="sort-picker" hidden' in page
     assert 'aria-haspopup="menu" aria-expanded="false" aria-controls="sort-menu"' in page
@@ -34,9 +34,11 @@ def test_sort_menu_has_labelled_radio_choices_and_native_backing(language):
 
 
 def test_home_spacing_does_not_change_other_pages():
-    assert 'class="home-page"' not in TestClient(app).get("/settings").text
+    # 1.32.3: Home has no top padding of its own any more: every page starts 9 px under the header.
+    assert 'class="home-page"' not in TestClient(app).get("/").text
     css = (STATIC / "app.css").read_text(encoding="utf-8")
-    assert ".home-page { padding-top: .45rem; }" in css
+    assert ".home-page" not in css
+    assert "padding-block: var(--sp-3);" in css
     assert "grid-template-columns: minmax(0, 1fr) auto;" in css
     assert ".list-filters { display: flex; flex-wrap: wrap;" in css
     assert ".sort-picker[hidden], .sort-menu[hidden] { display: none; }" in css

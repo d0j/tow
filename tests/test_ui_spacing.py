@@ -175,3 +175,36 @@ def test_settings_button_only_forms_and_empty_rows_take_no_place():
     settings = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
     fieldset = settings[settings.index('<fieldset class="theme-field" aria-describedby="language-note">') :]
     assert fieldset.index('id="language-note"') < fieldset.index("</fieldset>")
+
+
+def test_home_sites_dialogs_and_the_picker_on_the_scale():
+    """A top-level box is 12 px inside (the add and sign-in cards, dialogs, a message's sides, a row's
+    sides), a nested one 9 px (the edit panel's block, the picker); 6 px above and below a one-line
+    box (a message, a row). The edit panel was 6 px above and 16 px below its content."""
+    content = (STATIC / "content.css").read_text(encoding="utf-8")
+    messages = (STATIC / "messages.css").read_text(encoding="utf-8")
+    assert "padding: var(--sp-4);" in _rule(".card")
+    flash = _rule(".flash")
+    assert "padding: var(--sp-2) var(--sp-4)" in flash
+    assert "gap: var(--sp-2)" in flash
+    assert "margin-bottom: var(--sp-3)" in flash
+    assert "column-gap: var(--sp-2); row-gap: var(--sp-1)" in messages
+    assert "padding: var(--sp-3) var(--sp-4)" in _rule(".edit-panel")
+    row = _rule(".list-head, details.row-edit > summary")
+    assert "padding: var(--sp-2) var(--sp-4)" in row
+    assert "gap: var(--sp-1) var(--sp-4)" in row
+    ops = _rule(".row-wrap > .row-ops")
+    assert "top: var(--sp-2)" in ops
+    assert "right: var(--sp-4)" in ops  # at the row's padding edge
+    for dialog in (".credential-prompt[open]", "dialog.confirm"):
+        assert "padding: var(--sp-4)" in _rule(dialog), dialog
+        assert "2 * var(--gutter)" in _rule(dialog), dialog
+    assert "max-width: calc(46rem + 2 * var(--sp-4) + 2px)" in _rule("details#new.add.card")
+    assert "padding: var(--sp-3)" in _rule(".content-picker", content)
+    assert "min-block-size: 24px" in _rule(".content-file label, .content-folder label", content)
+    assert "padding" not in _rule(".content-file, .content-folder", content)
+    # 8 px a level of the tree.
+    steps = re.findall(r'\[data-depth="(\d)"\] \{ padding-inline-start: ([.\d]+)rem; \}', content)
+    assert [(int(d), 16 * float(v)) for d, v in steps] == [(d, 8.0 * d) for d in range(1, 9)]
+    assert "margin" not in _rule(".dot")
+    assert "padding-block: var(--sp-3);" in _rule("main")

@@ -99,8 +99,9 @@ def test_the_sign_in_card_fits_a_phone_and_its_field_is_a_standard_one():
     it. 1.32.2: its password is the standard 240 px of every password (1.32.1 made it fill the
     card, the one password of another width)."""
     assert not [selector for selector in _rules() if ".auth-form .secret" in selector]
-    small = _block("@media (max-width: 420px) {")
-    small_rules = _rules(small)
-    assert small_rules["main.auth-shell"].strip() == "padding: .5rem;"
-    assert small_rules[".card.auth-card"].strip() == "padding: .9rem;"
+    # 1.32.3: one gutter and one card padding on every phone (12 px each: the spacing scale), no
+    # small-phone override; at 360 px the card keeps 312 px for its content.
+    assert "@media (max-width: 420px) {" not in CSS
+    assert "padding: var(--gutter);" in _rules()["main.auth-shell"]
+    assert "padding: var(--sp-4);" in _rules()[".card"]
     assert "color: var(--bad)" in _rules()[".field-error"]
