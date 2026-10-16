@@ -118,7 +118,7 @@
     if (typeof target.replaceChildren === "function") target.replaceChildren(...pieces);
     else target.textContent = pieces.map((piece) => (typeof piece === "string" ? piece : piece.textContent)).join("");
   };
-  const render = (data) => {
+  const render = (data, manual = false) => {
     const available = data.available === true && /^\d+\.\d+\.\d+$/.test(data.latest || "");
     latest = available ? data.latest : "";
     if (command && /^\d+\.\d+\.\d+$/.test(data.latest || "")) {
@@ -138,7 +138,9 @@
         (data.ok ? t(data.comparable === false ? "js.releases.unknown_build" : "js.releases.current") : t("js.releases.unavailable"));
       if (available && !data.ok) said += " · " + t("js.releases.stale");
       let pieces = [said, ...stamps([stamp(data.checked_at, "js.releases.checked", data.checked_at_label, data.checked_at_time)])];
-      if (data.checks_enabled === false) pieces = [...(data.latest ? [...pieces, " · "] : []), t("js.releases.disabled")];
+      // U1: automatic checks off and nothing ever checked - the unticked box above says it all; a
+      // check asked by hand, a newer version or a past check's result are still said.
+      if (data.checks_enabled === false && !manual && !data.latest && !data.checked_at) pieces = [];
       put(status, pieces);
     }
   };
@@ -154,7 +156,7 @@
       });
       if (!response.ok) throw new Error("release check unavailable");
       const data = await response.json();
-      render(data);
+      render(data, manual);
     } catch {
       if (status) status.textContent = t("js.releases.unavailable");
     } finally {
