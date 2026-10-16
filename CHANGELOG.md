@@ -60,6 +60,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - The search icon is back in the header of Settings, where it finds a section by its words. 1.32.0 removed it saying
   it filtered nothing there; on Settings it did filter the sections.
+### Changed
+
+- Adding a topic and editing it on Home show the same fields in the same order: link, name, folder, client,
+  what to download. The name and the folder each get a wide row of their own, the rule field is one line that
+  grows, and a phone no longer capitalises or corrects links, folders and rules. The folder example reads
+  "e.g. D:\TV".
 
 ## [1.32.0] — 2026-10-16
 

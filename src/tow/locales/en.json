@@ -842,6 +842,7 @@
   "common": {
     "save": "Save",
     "details": "Details",
+    "example": "e.g. {example}",
     "busy": {
       "checking": "Checking…",
       "copying": "Making a copy…",
