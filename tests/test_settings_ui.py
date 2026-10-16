@@ -679,6 +679,8 @@ def test_the_add_client_form_is_folded_behind_one_line():
     assert toggle.select_one("summary").get_text(strip=True) == "Добавить клиент"
     assert toggle.select_one('form[action="/settings/client/add"]') is not None
     assert not toggle.has_attr("open")  # the example config has a client (not set up yet): still folded
+    # QA Q9: the field under "Добавить клиент" names what it asks, not the summary's words again.
+    assert toggle.select_one('label[for="client-add-kind"]').get_text(strip=True) == "Тип клиента"
 
 
 @pytest.mark.parametrize("language", ["ru", "en"])
