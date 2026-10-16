@@ -161,8 +161,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   start file, `tow.cmd setup` and the installer, also with long paths turned on: Windows cannot load programs from
   there. Before, setup failed deep inside, blamed "the packages" and went to the internet. A failed setup without
   the internet no longer blames the packages, and the installer no longer needs room for a staging folder.
-- Setting up or updating TOW, or running a TOW command before the first setup, no longer leaves uv's lock files in
-  the system's temporary folder: uv keeps them in the install's `runtime/uv-tmp`. Account-wide `UV_PYTHON`, `PYTHONHOME` and `PYTHONPATH` no longer reach an
+- Setting up or updating TOW, or running a TOW command before the first setup, no longer leaves uv's lock files in the
+  system's temporary folder: uv keeps them in the install's `runtime/uv-tmp`. Account-wide `UV_PYTHON`, `PYTHONHOME` and
+  `PYTHONPATH` no longer reach an
   install's Python or its setup (a development checkout keeps them).
 - An update of an install without git no longer unpacks TOW's tests (paths up to 140 characters), so it works in
   any folder the installers allow on Windows without long paths. Its code is no longer writable by the group on
@@ -182,92 +183,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   anything: before, every download failed as "has no SHA256SUMS" or "could not find the latest release".
 - `install.ps1` in Windows PowerShell 5.1 installs into a folder whose path has `[` or `]` (for example
   `D:\[x] TOW`): its download stopped with "Unable to find the specified file".
-### Changed
-
-- Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
-  or a host 240 px, a link or a folder up to 576 px), fields that belong together share a line whenever they fit
-  instead of only in a wide form, and on a phone every text field fills its line. A rule field starts as one line and
-  grows as you type.
-- Settings is one column in the middle of the page instead of the whole window; the buttons of a topic's or a site's
-  edit panel stay beside its form, with Delete next to Cancel as a quiet red outline; the add forms on Home and Sites
-  are as wide as their fields.
-- Fields stand out from grey cards; every checkbox has one size and the accent colour; every fold-out (How to connect,
-  Advanced, Technical details…) has the same arrow and a larger target; an intro above the cards runs as wide as the
-  fields; the Log and History read in the page's font; the sign-in field fills its card, also on a small phone.
-- Confirmations (remove a topic or a site, restore a backup, install an update, use a site's download limit…) open in
-  TOW's own window in the page's language, with the action on its button; for a destructive one Cancel is selected
-  first. Without JavaScript the pages ask as before.
-- Times in the Log are no longer a tab stop each: one “Full timestamps” button shows every time of the list with its
-  seconds and time zone, and the tab remembers the choice; a tap on a time still shows it.
-- The header no longer ends in a bare “—” while no check is scheduled: the countdown appears once there is one, and a
-  failed check is always shown.
-
-### Fixed
-
-- The search icon is back in the header of Settings, where it finds a section by its words. 1.32.0 removed it saying
-  it filtered nothing there; on Settings it did filter the sections.
-### Changed
-
-- Adding a topic and editing it on Home show the same fields in the same order: link, name, folder, client,
-  what to download. The name and the folder each get a wide row of their own, the rule field is one line that
-  grows, and a phone no longer capitalises or corrects links, folders and rules. The folder example reads
-  "e.g. D:\TV".
-- The hint under a topic's "Check every, min" names the interval an empty field uses: "Empty: use the global
-  interval (60 min)."
-- The torrent contents list is calmer: one **All files** box at the top of the tree (ticked, partly ticked or
-  clear) replaces **Select all files** and **Clear selection**, a torrent in a single folder opens it, and the
-  saved-copy note joins the one status line ("Files selected: 2 of 6 · 3 GB · saved copy, no download limit
-  used"). Its .torrent file is chosen with a "Choose a file" button in the page's language.
-- Sites no longer labels every row "No sign-in needed" or "Sign-in not set". A row says **Saved sign-in
-  details** when a login is stored, and **Sign-in required** (amber) only after a check or a probe saw the site
-  ask for it; otherwise it says nothing.
-- The Sites forms say less: the site code's label carries its rule ("Site code · a–z, 0–9, _") instead of a
-  sentence under the field, example placeholders start with "e.g.", the torrent file path says "Default:
-  /download/{id}" instead of showing it as a grey value, and a phone no longer capitalises or corrects addresses,
-  paths and patterns. A saved site password shows a "saved" tag in its label, "Leave empty to keep" in its field
-  and one note under the sign-in, as on Settings.
-- An opened topic or site has one solid button, **Save**; **Remove from TOW** and **Remove** are quiet red
-  outline buttons, and its other actions (Check access now, Sign in to the site, Adopt into TOW) are outline
-  buttons too.
-- The results of checking all topics show the run's time beside their title ("Results · 20:31") and one short line
-  instead of two sentences: "Results from this check. Current status is in each topic's row." The sign-in
-  dialog of a site says only "Stored encrypted." under the password.
-
-### Fixed
-
-- An opened topic on Home starts with its last event and its full date and time ("Last event: S02E03,
-  2026-10-16 11:00:02 UTC+03:00"): the row shows the time short, and a phone or a keyboard could not see
-  the full one. "Last successful check" lost its stray full stop.
-- On Diagnostics the torrent client's card has a heading like the other cards.
-### Changed
-
-- Settings → Network access is one compact card: the box "Open TOW from other devices" and, once a password is
-  set, a single line "Password set · Change" that unfolds the password and its reminder side by side. Without a
-  password, ticking the box shows the password field, and "Save and enable" saves the password and opens access
-  together (one Undo takes both back); ticking alone opens nothing.
-- The password is typed once on the web (Settings and the first start); its eye shows what was typed. The
-  computer running TOW no longer asks for the current password; another device still does. On this computer a
-  new reminder needs a new password with it (keeping or clearing the reminder needs none). `tow password` still
-  asks twice.
-- Shorter texts across Settings and the first start; a saved password or token shows a "saved" tag in its label
-  and "Leave empty to keep" in its field, with one note per form instead of a sentence under every field.
-- Language is three buttons (Auto, Русский, English), each saves at once; the theme's label says it applies on
-  every device.
-- "Add client" is one folded line; Restore buttons are no longer red; a backup folder always says where the
-  copies go ("Default: …"); the TOW file is chosen with a "Choose a file" button in the page's language;
-  examples in empty fields start with "e.g.".
-- Every restore confirmation says that network access and its password stay unchanged.
-- Site access: a saved connection is removed by its own Remove button (with a confirmation), and the order field
-  shows only when there are two or more connections.
-- The sign-in page no longer shows the computer's name and local address under "Forgot your password?", and
-  says "Wrong password" right below the field; the first start shows a refused field's reason below that field.
-
-### Fixed
-
-- The backup deletion page showed the copy's time in raw form ("16.10.2026 11:00:02 UTC+03:00"); it uses the
-  short time like every other page, and Delete comes before Cancel.
-- Settings → Updates no longer repeats "Automatic update checks are off" under the unticked box; a check asked by
-  hand still says its result.
 
 ## [1.32.0] — 2026-10-16
 
