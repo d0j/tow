@@ -2618,6 +2618,7 @@
       "login_host_not_mirror": "the sign-in address must be one of the mirrors",
       "name_taken": "name taken",
       "password_again": "new sign-in address — enter the site password again",
+      "saved_password_removed": "Saved. The stored password was removed: it was never entered for the new sign-in address; enter it again if you switch back to password sign-in.",
       "probe": "{answering} of {total} mirrors answer",
       "preferred": "main mirror",
       "no_mirror": "no such mirror",
