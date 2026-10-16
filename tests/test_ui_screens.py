@@ -690,3 +690,34 @@ def test_check_results_put_their_time_beside_the_title_and_say_less(client):
     assert not card.select("p.sub > time")  # no line of its own
     assert "Итоги этой проверки. Текущее состояние — в строке раздачи." in card.get_text()
     assert "Нажмите на раздачу" not in card.get_text()
+
+
+def test_diagnostics_cards_all_have_a_heading_and_a_bounded_text_column(client):
+    """1.32.1 DG1: the torrent client's card had a plain-text title while the others had headings,
+    and its notes ran 1360 px wide. Every card has an h2 now, and the page's content sits in one
+    wrapper whose paragraphs the stylesheet caps (``.doctor-page p``)."""
+    from tow.store import save_state
+
+    save_state({"doctor": {"probes": [], "qbit": "FAIL connection refused", "ok": False}})
+    page = BeautifulSoup(client.get("/doctor").text, "html.parser")
+    wrapper = page.select_one("main .doctor-page")
+    assert wrapper is not None
+    titles = [h.get_text(strip=True) for h in wrapper.select(".card > h2.section-title")]
+    assert titles[0] == "Торрент-клиент"
+    assert len(titles) == len(wrapper.select(".card:not(.stat)"))
+    assert not wrapper.select(".card:not(.stat) > .k")  # stat tiles keep their small label
+
+
+def test_history_lines_mark_their_time_and_keep_code_for_raw_errors(client):
+    """1.32.1 H6: History was monospace throughout. A line marks its time (``log-time``: even
+    figures in the page's font), the event is the only bold part, and only a raw error is code;
+    the list has an id the shared "Full timestamps" toggle can name."""
+    from tow.log import log_event
+
+    log_event("check_fail", topic_id="t1", error="qBittorrent: connection refused", error_class="qbit")
+    page = BeautifulSoup(client.get("/history").text, "html.parser")
+    box = page.select_one("#history-log.log-box")
+    line = box.select_one(".log-line")
+    assert line.select_one(".log-time > time[datetime]") is not None
+    assert len(line.find_all("b", recursive=False)) == 1
+    assert all(code.find_parent("details", class_="raw-error") for code in box.select("code"))
