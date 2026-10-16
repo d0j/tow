@@ -78,6 +78,23 @@ def pytest_collection_modifyitems(session, config, items):
         items[:] = [item for group in groups for item in group]
 
 
+# Tools every CI runner has (GitHub's images ship node and PowerShell 7; the gate itself runs in
+# pwsh). Missing on a runner, their tests would turn into skips nobody reads: on CI (CI=true) such
+# a skip fails the test, on a developer machine it stays a skip.
+_TOOL_MISSING = ("node is not installed", "PowerShell is not installed", "no pwsh on this machine")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    report = yield
+    if report.skipped and os.environ.get("CI") == "true":
+        reason = report.longrepr[2] if isinstance(report.longrepr, tuple) else str(report.longrepr or "")
+        if any(text in reason for text in _TOOL_MISSING):
+            report.outcome = "failed"
+            report.longrepr = f"{reason}: a CI runner has this tool, so this test must run there"
+    return report
+
+
 def _order_line(config) -> str:
     order = config.getoption("--test-order")
     if order == "random":
