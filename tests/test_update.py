@@ -652,6 +652,38 @@ def test_the_launchers_environment_is_the_updaters(install):
     assert updater.launcher_env(app, {}, uv="/opt/uv")[0] == "/opt/uv"
 
 
+def test_the_updater_clears_account_wide_python_settings_like_the_launchers(install):
+    # QA 16.10.2026: UV_PYTHON=3.12 of the whole account made setup install another Python, and
+    # PYTHONHOME/PYTHONPATH reached the install's Python. Offline mode stays the owner's choice.
+    given = {"UV_PYTHON": "3.12", "PYTHONHOME": "C:\\Other", "PYTHONPATH": "C:\\lib", "UV_OFFLINE": "1"}
+    _uv, env = updater.launcher_env(install["app"], given)
+    assert not {"UV_PYTHON", "PYTHONHOME", "PYTHONPATH"} & set(env)
+    assert env["UV_OFFLINE"] == "1"
+    windows = (SCRIPT.parent / "tow-env.cmd").read_text(encoding="utf-8")
+    posix = (SCRIPT.parent / "tow").read_text(encoding="utf-8")
+    for name in ("UV_PYTHON", "PYTHONHOME", "PYTHONPATH"):
+        assert f'if /i not "%TOW_ROOT%"=="%TOW_APP%" set "{name}="' in windows
+        assert f"    unset {name}\n" in posix
+    assert "unset UV_PYTHON PYTHONHOME PYTHONPATH" in (SCRIPT.parent / "tow-start").read_text(encoding="utf-8")
+
+
+def test_uv_of_an_update_keeps_its_temporary_files_inside_the_install(install, monkeypatch):
+    # QA 16.10.2026: every setup left a uv-<hash>.lock in the system TEMP. Not data/tmp either: TOW
+    # sweeps that daily, and a lock file removed while uv holds it is no lock (POSIX).
+    machine = updater.System(install["app"])
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(machine, "_run", lambda argv, **options: seen.update(argv=argv, **options) or (0, ""))
+    machine.uv_sync()
+    temp = install["root"] / "runtime" / "uv-tmp"
+    assert temp.is_dir()
+    assert {seen["env"][name] for name in ("TMP", "TEMP", "TMPDIR")} == {str(temp)}
+    assert machine.env.get("TMP") != str(temp)  # tow run, started with machine.env, keeps its own
+    (install["root"] / "runtime" / "uv-tmp").rmdir()
+    (install["root"] / "runtime" / "uv-tmp").write_text("not a folder", encoding="utf-8")
+    with pytest.raises(updater.UpdateError):
+        machine.uv_sync()
+
+
 def test_the_updater_runs_on_python_3_11():
     # deploy.ps1 may fall back to any Python 3.11+: no 3.14-only syntax (except A, B:).
     import ast

@@ -40,3 +40,8 @@ if /i not "%TOW_ROOT%"=="%TOW_APP%" set "UV_PYTHON_BIN_DIR=%TOW_ROOT%\runtime\bi
 if /i not "%TOW_ROOT%"=="%TOW_APP%" set "UV_CACHE_DIR=%TOW_ROOT%\runtime\cache"
 if /i not "%TOW_ROOT%"=="%TOW_APP%" set "UV_PROJECT_ENVIRONMENT=%TOW_APP%\.venv"
 if /i not "%TOW_ROOT%"=="%TOW_APP%" set "UV_MANAGED_PYTHON=1"
+rem Python settings of the whole account would give the install's own Python another Python, home or
+rem modules (a development checkout keeps them); the owner's UV_OFFLINE and the like stay.
+if /i not "%TOW_ROOT%"=="%TOW_APP%" set "UV_PYTHON="
+if /i not "%TOW_ROOT%"=="%TOW_APP%" set "PYTHONHOME="
+if /i not "%TOW_ROOT%"=="%TOW_APP%" set "PYTHONPATH="

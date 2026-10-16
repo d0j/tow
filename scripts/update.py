@@ -340,6 +340,10 @@ def launcher_env(
     root = app.parent
     runtime = root / "runtime"
     env = dict(os.environ if base is None else base)
+    # Python settings of the whole account would give the install's Python another Python, home or
+    # modules; the owner's UV_OFFLINE and the like stay (as in the launchers).
+    for name in ("UV_PYTHON", "PYTHONHOME", "PYTHONPATH"):
+        env.pop(name, None)
     env.update(
         {
             "TOW_ROOT": str(root),
@@ -467,8 +471,21 @@ class System:
             raise UpdateError(f"git {' '.join(args)} failed: {output.strip()[:300]}")
         return output.strip()
 
+    def uv_env(self) -> dict[str, str]:
+        """The launchers' environment, and uv's own temporary files (its lock files) inside the
+        install: runtime/uv-tmp, as setup gives it. Not data/tmp, which TOW sweeps daily (a lock
+        file removed while it is held is no lock), and not for ``tow run``, which has its own."""
+        temp = self.root / "runtime" / "uv-tmp"
+        try:
+            temp.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise UpdateError(f"cannot create {temp}: {exc.strerror or exc}") from exc
+        return {**self.env, "TMP": str(temp), "TEMP": str(temp), "TMPDIR": str(temp)}
+
     def uv_sync(self) -> None:
-        code, output = self._run([self.uv, "sync", "--frozen", "--no-dev"], cwd=self.app, env=self.env, timeout=1800)
+        code, output = self._run(
+            [self.uv, "sync", "--frozen", "--no-dev"], cwd=self.app, env=self.uv_env(), timeout=1800
+        )
         if code != 0:
             raise UpdateError(output.strip()[-300:] or f"exit code {code}")
 
