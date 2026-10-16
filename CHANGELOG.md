@@ -150,6 +150,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Setting up or updating TOW no longer leaves uv's lock files in the system's temporary folder: uv keeps them in
   the install's `runtime/uv-tmp`. Account-wide `UV_PYTHON`, `PYTHONHOME` and `PYTHONPATH` no longer reach an
   install's Python or its setup (a development checkout keeps them).
+- An update of an install without git no longer unpacks TOW's tests (paths up to 140 characters), so it works in
+  any folder the installers allow on Windows without long paths. Its code is no longer writable by the group on
+  Linux and macOS, and an archive with two names a Windows or macOS folder cannot tell apart is refused.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password

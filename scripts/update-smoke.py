@@ -168,6 +168,17 @@ def make_broken(source: Path, out: Path) -> Path:
     return out
 
 
+def installed_tree(target: dict[str, str], updater: Path) -> dict[str, str]:
+    """The files of ``target`` an updater puts into app/: an updater that leaves out what an
+    install never runs (``UNPACK_LEFT_OUT``, 1.32.1) does not unpack them; older ones unpack all."""
+    text = updater.read_text(encoding="utf-8")
+    match = re.search(r"^UNPACK_LEFT_OUT = \(([^)]*)\)", text, re.MULTILINE)
+    if match is None:
+        return dict(target)
+    left_out = tuple(re.findall(r'"([^"]+)"', match.group(1)))
+    return {name: digest for name, digest in target.items() if not name.startswith(left_out)}
+
+
 def tree_files(folder: Path) -> dict[str, str]:
     """Every file of an app folder with its SHA-256, without its environment and bytecode."""
     files = {}
@@ -408,26 +419,28 @@ class Smoke:
         self.check_rolled_back(code, previous_version, previous_app, kept)
 
         say(f"2. the installed {previous_version} updater installs {ref}")
+        by_previous = installed_tree(target, Path(installed[1]))
         code = self.update(installed, ref, good, health_timeout=180)
-        self.check_updated(code, target_version, target, kept)
+        self.check_updated(code, target_version, by_previous, kept)
 
         say(f"3. the updater of {ref} installs a broken {ref}")
         own = self.update_command(ref)
         expect(sha256(Path(own[1])) == target["scripts/update.py"], "`tow update` names another updater")
         code = self.update(own, ref, broken, health_timeout=60)
-        self.check_rolled_back(code, target_version, target, kept)
+        self.check_rolled_back(code, target_version, by_previous, kept)
+        by_target = installed_tree(target, Path(own[1]))
 
         say(f"4. the updater copy in runtime/ installs {ref}")
         copy = self.root / "runtime" / "update.py"
         expect(copy.is_file() and sha256(copy) == target["scripts/update.py"], "runtime/update.py is not this updater")
         code = self.update([own[0], str(copy)], ref, good, health_timeout=180)
-        self.check_updated(code, target_version, target, kept)
+        self.check_updated(code, target_version, by_target, kept)
 
         say(f"5. an update to {ref} cut off mid-switch: the start file refuses, the next update recovers")
         self.cut_off_switch(own, ref, good)
         self.check_start_refused()
         code = self.update([own[0], str(copy)], ref, good, health_timeout=180)
-        self.check_updated(code, target_version, target, kept)
+        self.check_updated(code, target_version, by_target, kept)
 
         code, _ = self.tow("stop")
         expect(code == 0 and self.wait(False, 90), "TOW still answers after `tow stop`")
