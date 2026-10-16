@@ -7,6 +7,7 @@ one, never half of one.
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
 import tempfile
@@ -95,6 +96,10 @@ def atomic_create_bytes(path: Path, content: bytes) -> None:
     _atomic_write_bytes(path, content, overwrite=False)
 
 
+# What a file system answers when it cannot fsync a folder at all.
+_FOLDER_SYNC_UNSUPPORTED = frozenset({errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP})
+
+
 def _atomic_write_bytes(path: Path, content: bytes, *, overwrite: bool) -> None:
     global _write_generation
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -124,6 +129,11 @@ def _atomic_write_bytes(path: Path, content: bytes, *, overwrite: bool) -> None:
             if directory_fd is not None:
                 try:
                     os.fsync(directory_fd)
+                except OSError as error:
+                    # The file is in place already: a file system that cannot flush a folder
+                    # (CIFS, 9p/drvfs, some FUSE) has not failed the write. Real I/O errors still do.
+                    if error.errno not in _FOLDER_SYNC_UNSUPPORTED:
+                        raise
                 finally:
                     os.close(directory_fd)
         finally:

@@ -115,6 +115,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   progress at the moment the next step was written: that write now waits a few seconds for the page.
 - On Linux and macOS, `nohup tow run &` keeps TOW running after the terminal or SSH session closes: TOW no longer
   replaces the ignored hangup with its own stop. Without `nohup`, closing the terminal still stops it cleanly.
+- On Linux and macOS, TOW's data or an export on a network share (CIFS), a WSL drive or some FUSE file systems no
+  longer reports a save that succeeded as failed when that file system cannot flush folders.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
