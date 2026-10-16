@@ -1135,7 +1135,8 @@
         "one": "{n} file",
         "other": "{n} files"
       },
-      "last_ok": "Last successful check: {at}.",
+      "last_ok": "Last successful check: {at}",
+      "last_event": "Last event: {event}, {at}",
       "last_error": "Last error: {error}",
       "last_error_at": "Last error ({at}): {error}",
       "replace_confirm": "Stop the previous version of this torrent in the torrent client (its files stay) and add the new one?",
