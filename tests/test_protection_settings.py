@@ -296,7 +296,7 @@ def test_site_access_help_is_open_and_control_hints_are_bound(monkeypatch, langu
     assert guide.find("a")["href"] == "/settings/help#site-access"
     assert not section.find(class_="protection-limits").has_attr("open")
     fields = section.find_all(attrs={"aria-describedby": True})
-    assert len(fields) == 8  # switch, the address of each card, three limits and reset action
+    assert len(fields) == 7  # the address of each card, three limits and reset action (T1-w: no switch hint)
     for control in fields:
         for ident in control["aria-describedby"].split():
             hints = page.find_all(id=ident)
@@ -470,3 +470,81 @@ def test_reset_oversized_record_refused(monkeypatch):
     monkeypatch.setattr(store, "_MAX_BYTES", 4)
     assert services.reset_protection() == "refused"
     assert path.read_bytes() == b"synthetic-record-over-test-bound"
+
+
+def test_a_saved_connection_is_removed_by_its_own_button_without_the_drafts():
+    client().post("/settings/protection", data=form())
+    page = BeautifulSoup(client().get("/settings?open=protection").text, "html.parser")
+    section = page.find(id="acc-protection")
+    assert section.find(attrs={"name": "provider_remove"}) is None  # no "remove on save" box
+    remove = section.find("form", id="protection-remove-first")
+    assert remove["action"] == "/settings/protection/remove"
+    assert remove.has_attr("data-confirm")
+    assert remove.has_attr("data-confirm-danger")
+    assert [field["name"] for field in remove.find_all("input")] == ["provider_id"]
+    assert section.find("button", attrs={"form": "protection-remove-first"})["class"] == ["ghost", "danger"]
+
+    response = client().post("/settings/protection/remove", data={"provider_id": "first"}, follow_redirects=False)
+
+    assert flash_kind(response.headers["location"]) == "ok"
+    providers = load_config()["protection"]["providers"]
+    assert [item["id"] for item in providers] == ["second"]
+
+
+def test_removing_the_last_enabled_connection_of_enabled_access_is_refused():
+    client().post(
+        "/settings/protection",
+        data=form(
+            provider_id=["first"],
+            provider_kind=["flaresolverr"],
+            provider_url=["http://127.0.0.1:8191"],
+            provider_order=["1"],
+            provider_enabled=["first"],
+        ),
+    )
+    before = config_path().read_bytes()
+
+    response = client().post("/settings/protection/remove", data={"provider_id": "first"}, follow_redirects=False)
+
+    assert flash_kind(response.headers["location"]) == "err"
+    assert config_path().read_bytes() == before
+
+
+def test_with_one_saved_connection_its_order_is_kept_but_not_shown():
+    client().post(
+        "/settings/protection",
+        data=form(
+            provider_id=["first"],
+            provider_kind=["flaresolverr"],
+            provider_url=["http://127.0.0.1:8191"],
+            provider_order=["1"],
+            provider_enabled=["first"],
+        ),
+    )
+    section = BeautifulSoup(client().get("/settings?open=protection").text, "html.parser").find(id="acc-protection")
+    main = section.find("form", action="/settings/protection")
+    orders = main.find_all(attrs={"name": "provider_order"})
+    assert len(orders) == len(main.find_all(attrs={"name": "provider_id"}))  # the route needs equal arrays
+    assert all(order["type"] == "hidden" for order in orders)
+    client().post("/settings/protection", data=form())
+    section = BeautifulSoup(client().get("/settings?open=protection").text, "html.parser").find(id="acc-protection")
+    assert section.find(id="protection-order-first")["type"] == "number"  # two saved: the order counts
+
+
+def test_removing_a_connection_is_for_this_computer_only(monkeypatch):
+    from tow.auth import SESSION_COOKIE, issue_session, lan_password_record, lan_password_session_key
+    from tow.store import save_secrets
+
+    client().post("/settings/protection", data=form())
+    open_network(monkeypatch)
+    record = lan_password_record("synthetic-password-long-enough")
+    save_secrets({"lan_auth": record})
+    remote = TestClient(
+        app,
+        base_url="http://192.168.1.2",
+        client=("192.168.1.3", 50000),
+        cookies={SESSION_COOKIE: issue_session(lan_password_session_key(record))},
+    )
+    remote.post("/settings/protection/remove", data={"provider_id": "first"}, follow_redirects=False)
+
+    assert [item["id"] for item in load_config()["protection"]["providers"]] == ["first", "second"]

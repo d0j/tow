@@ -92,6 +92,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   2026-10-16 11:00:02 UTC+03:00"): the row shows the time short, and a phone or a keyboard could not see
   the full one. "Last successful check" lost its stray full stop.
 - On Diagnostics the torrent client's card has a heading like the other cards.
+### Changed
+
+- Site access: a saved connection is removed by its own Remove button (with a confirmation), and the order field
+  shows only when there are two or more connections.
 
 ## [1.32.0] — 2026-10-16
 
