@@ -222,13 +222,15 @@ def port_owner(port: int) -> dict[str, Any] | None:
     return value if isinstance(value, dict) and value.get("pid") else None
 
 
-def _kernel32_with_last_error() -> Any:
-    """kernel32 whose calls keep their own last error (``ctypes.get_last_error``): through
-    ``windll`` another call in between may already have replaced it. AttributeError where there
-    is no Windows."""
-    if getattr(ctypes, "windll", None) is None or not hasattr(ctypes, "get_last_error"):
+def _kernel32_with_last_error() -> tuple[Any, Any]:
+    """kernel32 whose calls keep their own last error, and the reader of that error
+    (``ctypes.get_last_error``): through ``windll`` another call in between may already have
+    replaced it. AttributeError where there is no Windows (looked up by name, as in
+    ``compressed_file_size``: the type stubs know these only on Windows)."""
+    library, get_error = getattr(ctypes, "WinDLL", None), getattr(ctypes, "get_last_error", None)
+    if getattr(ctypes, "windll", None) is None or library is None or get_error is None:
         raise AttributeError("ctypes.windll")
-    return ctypes.WinDLL("kernel32", use_last_error=True)
+    return library("kernel32", use_last_error=True), get_error
 
 
 def process_alive(pid: int) -> bool:
@@ -239,7 +241,7 @@ def process_alive(pid: int) -> bool:
     may not be opened exists; a wait that fails proves nothing ended: both count as running."""
     try:
         pid = int(pid)
-        kernel32 = _kernel32_with_last_error()
+        kernel32, last_error = _kernel32_with_last_error()
     except AttributeError, OSError, TypeError, ValueError:
         return False
     if pid <= 0 or pid > 0xFFFFFFFF:
@@ -255,7 +257,7 @@ def process_alive(pid: int) -> bool:
         kernel32.CloseHandle.restype = wintypes.BOOL
     handle = kernel32.OpenProcess(_SYNCHRONIZE, False, pid)
     if not handle:
-        return ctypes.get_last_error() == _ERROR_ACCESS_DENIED  # ERROR_INVALID_PARAMETER: no such process
+        return bool(last_error() == _ERROR_ACCESS_DENIED)  # ERROR_INVALID_PARAMETER: no such process
     try:
         return bool(kernel32.WaitForSingleObject(handle, 0) != _WAIT_OBJECT_0)
     except OSError:
