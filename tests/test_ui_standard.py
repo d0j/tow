@@ -120,7 +120,7 @@ def test_one_form_layout_with_rows_that_wrap_by_the_forms_own_width():
     assert "gap: .1875rem" in _first(".form-grid .field")  # 3 px
     # The older "next field" margins (.field + .field, the compact Settings one) pushed the second
     # field of a row 11 px down (seen in a browser); in the form the gap alone spaces groups.
-    assert _first(".form-grid :is(.field, .field-grid) + .field.field").strip() == "margin-top: 0;"
+    assert _first(".form-grid .field + .field.field").strip() == "margin-top: 0;"
     assert "max-width: 68ch" in _first(".form-grid :is(.field-hint, .action-hint, .section-note, .check-field p)")
     # A panel's intro and notes end where its widest field ends (1.32 QA L1: 440 px beside 576 px).
     assert _first(".settings-panel > p, .support-note").strip() == "max-width: 36rem;"
@@ -166,7 +166,8 @@ def test_templates_do_not_style_buttons_inline():
 def test_site_access_fields_use_full_width_and_do_not_inherit_sibling_offsets():
     rules = dict(_rules(CSS))
     assert rules[".settings-form.compact-form.protection-form"].strip() == "max-width: none;"
-    assert rules[".settings-form.protection-form .field-grid > .field"].strip() == "margin-top: 0;"
+    # 1.32.1 (C6): the .field-grid rules went with the last template that used them.
+    assert ".field-grid" not in CSS
 
 
 def test_help_anchor_desktop_clearance_does_not_add_settings_card_layout():
@@ -300,7 +301,7 @@ def test_a_low_screen_keeps_its_height_for_the_page():
 def test_sign_in_and_first_start_buttons_keep_their_width_on_a_phone():
     """1.32 QA N2: Login's and Setup's buttons went full width on a phone (.settings-actions
     button), while Settings keeps them as wide as their words."""
-    phone = _block("@media (max-width: 720px) {\n  .row-two")
+    phone = _block("@media (max-width: 720px) {\n  /* F3")
     assert "width: auto" in _first(".auth-card .settings-actions button", phone)
     for page in ("login.html", "setup.html"):  # both cards hold their buttons in .settings-actions
         template = (ROOT / "src" / "tow" / "templates" / page).read_text(encoding="utf-8")
