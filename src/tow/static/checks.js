@@ -382,6 +382,7 @@
     const top = row.getBoundingClientRect().top;
     if (row.hidden) fresh.hidden = true;
     row.replaceWith(fresh);
+    window.towTime?.prepare?.(fresh);
     const shift = fresh.getBoundingClientRect().top - top;
     if (shift) window.scrollBy(0, shift);
     const again = action

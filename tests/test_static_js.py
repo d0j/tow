@@ -251,6 +251,13 @@ def test_fields_a_box_turns_off_are_disabled_with_it():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_short_times_full_time_opens_by_keyboard_and_by_a_tap():
+    verdict = _verdict("time_disclosure.mjs")
+    assert verdict == dict.fromkeys(("focusable", "focusShows", "escapeHides", "tapShowsAndHides", "laterTimes"), True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_the_updates_card_writes_its_times_by_the_one_rule():
     verdict = _verdict("update_times.mjs")
     assert verdict == {"timesByTheOneRule": True, "olderServerKeepsItsLabel": True}

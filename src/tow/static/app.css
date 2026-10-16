@@ -582,6 +582,17 @@ details.help[open] > summary { color: var(--acc); border-color: var(--acc2); }
   max-height: min(70vh, 28rem); overflow: auto;
 }
 .help-pop:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+/* A short time's full time on focus or a tap (app.js timeTip): one tip, placed by the script. */
+time[data-short][tabindex] { cursor: help; border-radius: 3px; }
+time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+.time-tip {
+  position: fixed; left: var(--tip-x, 0); top: var(--tip-y, 0); z-index: 40;
+  max-width: calc(100vw - 1rem);
+  background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .3rem .55rem; box-shadow: var(--shadow);
+  font-size: 12.5px; line-height: 1.35; white-space: nowrap; pointer-events: none;
+}
+.time-tip[hidden] { display: none; }
 .help-pop p { margin: .28rem 0; color: var(--fg); }
 .help-pop ul { margin: .2rem 0 .45rem; padding-left: 1.15rem; color: var(--mut); }
 .help-pop li { margin: .18rem 0; }
