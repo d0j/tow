@@ -59,6 +59,54 @@ RESULT_TTL = 3600
 LOCK_WAIT_SEC = 3900
 LOCK_RETRY_SEC = 1.0
 UNCHECKED_TTL = LOCK_WAIT_SEC + RESULT_TTL  # longer than any job waits and keeps its follow-up
+# Counts the changes of the jobs every page may show (tow.web.sync): a job made, started, put
+# back to wait for the check lock, cancelled, ended or forgotten - a check of every topic too.
+_GENERATION = 0
+
+
+def _changed() -> None:
+    """A job changed in a way pages show (the caller holds LOCK)."""
+    global _GENERATION
+    _GENERATION += 1
+
+
+def generation() -> int:
+    """The number of job changes pages show so far (``_changed``): equal numbers, same jobs."""
+    with LOCK:
+        return _GENERATION
+
+
+def snapshot() -> dict[str, Any]:
+    """Every job pages show, as data without the follow-ups: the ones that wait or run (each
+    lane's order: ``position``) and the ended ones still kept, with the ``generation`` they belong
+    to. A check of every topic has the ``topic_id`` "". Status words: queued, running, done,
+    failed; a job that has its result but has not ended yet still says running."""
+    with LOCK:
+        waiting = []
+        for key in PENDING:
+            job = JOBS[key]
+            lane = _lane(job["apply"])
+            waiting.append(
+                {
+                    "id": key,
+                    "topic_id": str(job.get("topic_id") or ""),
+                    "apply": bool(job["apply"]),
+                    "status": "queued" if job["status"] == "queued" else "running",
+                    "position": lane.index(key) + 1,
+                }
+            )
+        ended = [
+            {
+                "id": key,
+                "topic_id": str(job.get("topic_id") or ""),
+                "apply": bool(job["apply"]),
+                "status": "failed" if job["status"] == "failed" else "done",
+                "cancelled": bool(job.get("cancelled")),
+            }
+            for key, job in JOBS.items()
+            if key not in PENDING
+        ]
+        return {"generation": _GENERATION, "waiting": waiting, "ended": ended}
 
 
 def join_unchecked(site: str, member: object, saved_before: Any) -> None:
@@ -160,6 +208,7 @@ def _submit(
             if job.get("finished_at", now) + RESULT_TTL < now:
                 del JOBS[key]
                 FOLLOW_UPS.pop(key, None)
+                _changed()
         for known in [key for key, job_id in ACTIONS.items() if job_id not in JOBS]:
             del ACTIONS[known]
         if action and action in ACTIONS:
@@ -192,6 +241,7 @@ def _submit(
                 return None, False
             del JOBS[finished]
             FOLLOW_UPS.pop(finished, None)
+            _changed()
         job = {
             "id": uuid.uuid4().hex[:16],
             "topic_id": topic_id,
@@ -204,6 +254,7 @@ def _submit(
         }
         JOBS[job["id"]] = job
         PENDING.append(job["id"])
+        _changed()
         if action:
             _register(action, job["id"])
         if follow_up is not None:
@@ -217,6 +268,7 @@ def _submit(
                 del JOBS[job["id"]]
                 ACTIONS.pop(action, None)
                 FOLLOW_UPS.pop(job["id"], None)
+                _changed()
                 raise
         return get(job["id"]), True
 
@@ -247,6 +299,7 @@ def _consume(apply: bool, perform: Callable[[dict[str, Any]], None]) -> None:
             # Nothing stops a check that hangs (a second one would overlap its client writes):
             # the page says since when it runs instead, and the lane waits for it.
             job.update(status="running", running_since=time.time())
+            _changed()
         try:
             perform(job)
         except CheckBusyError:
@@ -280,6 +333,7 @@ def _waited_too_long(job: dict[str, Any]) -> bool:
             job["lock_timeout"] = True  # failed by _finish, once its follow-up has said its words
             return True
         job["status"] = "queued"
+        _changed()
         return False
 
 
@@ -332,6 +386,7 @@ def _finish(job: dict[str, Any]) -> None:
         # finished_at times the record's hour; the result page is dated by ended_at.
         job.update(finished_at=time.monotonic(), ended_at=time.time())
         PENDING.remove(job["id"])
+        _changed()
 
 
 def get(job_id: str) -> dict[str, Any] | None:
@@ -372,6 +427,7 @@ def cancel(job_id: str) -> bool:
         PENDING.remove(job_id)
         follow_up = FOLLOW_UPS.pop(job_id, None)
         job.update(status="failed", finished_at=time.monotonic(), ended_at=time.time(), cancelled=True)
+        _changed()
     words = drop(follow_up, str(job.get("lang") or ""))
     with LOCK:
         _said(job, words)

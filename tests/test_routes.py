@@ -128,6 +128,9 @@ ROUTES = frozenset(
         ("POST", "/setup"),
         ("POST", "/settings/password"),
         ("POST", "/settings/sessions/sign-out"),
+        ("GET", "/sync.json"),
+        ("GET", "/topics/rows"),
+        ("POST", "/topics/rows"),
     }
 )
 

@@ -183,6 +183,40 @@ def load_config() -> dict[str, Any]:
     return copy.deepcopy(result)
 
 
+def config_from_bytes(content: bytes) -> dict[str, Any]:
+    """``load_config``'s result from the bytes of config.yaml, for a reader that took the bytes
+    itself (one read, hashed and parsed): nothing is cached. Raises what ``load_config`` raises."""
+    from tow.yaml_guard import MAX_INPUT_BYTES
+
+    if len(content) > MAX_INPUT_BYTES:
+        raise YamlLimitError("yaml_limits.size")
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ConfigError("config_error.encoding") from exc
+    try:
+        data = load_yaml(text, loader=_SAFE_LOADER)
+    except YamlLimitError:
+        raise
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        line, column = (mark.line + 1, mark.column + 1) if mark is not None else (0, 0)
+        raise ConfigError("config_error.syntax", line=line, column=column) from exc
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise ConfigError("config_error.mapping")
+    return validated(data)
+
+
+def forget_cache() -> None:
+    """Parse config.yaml again at the next read: its content changed although its stamp did not."""
+    global _cache, _validated_cache
+    with _CACHE_LOCK:
+        _cache = None
+        _validated_cache = None
+
+
 def validated(raw: dict[str, Any]) -> dict[str, Any]:
     """``raw`` (config.yaml as parsed) with the defaults filled in and every value checked.
 

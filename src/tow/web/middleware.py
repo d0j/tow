@@ -38,6 +38,10 @@ _UPLOAD_LIMITS = {
 # 1 MiB spool size a file part someone adds stays in memory: nothing is written to data/tmp.
 FORM_REQUEST_LIMIT = 512 * 1024
 _PUBLIC_PATHS = {"/favicon.ico", "/healthz", "/login"}
+# What every open page polls and fetches to stay in step (tow.web.sync): read-only all the way -
+# no recovery, cleanup or folder made on their way, no wait for the site lock - and refused as
+# JSON (a script asked: never the sign-in page as "rows").
+SYNC_PATHS = frozenset({"/sync.json", "/topics/rows"})
 _SITE_HTTP_LOCK = asyncio.Lock()
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # Signing in has its own atomic throttle. Content previews never change topics or transfer
@@ -204,6 +208,8 @@ def _refusal(request: Request, cfg: dict[str, Any]) -> Response | None:
 
 def _wants_page(request: Request) -> bool:
     """A page or a form (posted by the browser or by app.js), not a fetch of JSON."""
+    if request.url.path in SYNC_PATHS:
+        return False
     if request.headers.get("x-tow-fetch") == "1":
         return True
     return not request.url.path.endswith(".json") and "text/html" in request.headers.get("accept", "").lower()
@@ -248,6 +254,14 @@ def _recover_before_dispatch(undo_cleanup: bool = True) -> None:
         services.cleanup_secret_undo()
 
 
+def _for_script(request: Request, response: Response) -> Response:
+    """A refusal of a synchronization request as JSON ({"ok": false, "error": words}), status kept."""
+    if request.url.path not in SYNC_PATHS or not isinstance(response, PlainTextResponse):
+        return response
+    words = bytes(response.body).decode("utf-8", "replace")
+    return JSONResponse({"ok": False, "error": words}, status_code=response.status_code)
+
+
 def _serialized(request: Request) -> bool:
     """Writes take the site lock one at a time; reads never wait for it.
 
@@ -262,6 +276,7 @@ def _serialized(request: Request) -> bool:
     return (
         request.method in _WRITE_METHODS
         and path not in _UNSERIALIZED_WRITES
+        and path not in SYNC_PATHS
         and _NETWORK_ACTIONS.fullmatch(path) is None
     )
 
@@ -306,12 +321,19 @@ def _response_headers(request: Request, response: Response) -> Response:
 
 
 async def secure(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    if request.url.path in SYNC_PATHS:
+        with services.read_only_paths():  # every thread of the request inherits it
+            return await _secure(request, call_next, sync=True)
+    return await _secure(request, call_next, sync=False)
+
+
+async def _secure(request: Request, call_next: Callable[[Request], Awaitable[Response]], *, sync: bool) -> Response:
     _context.begin()
     # Every file read runs in the thread pool: the event loop serves other requests meanwhile.
     cfg = await run_in_threadpool(_context.config)
     _use_request_language(request, cfg)  # here, not in a worker: it sets this request's language
     if (refused := _refusal(request, cfg)) is not None:
-        return _response_headers(request, refused)
+        return _response_headers(request, _for_script(request, refused))
     path = request.url.path
     signed_in = access.is_local(request)  # this PC needs no password
     if not signed_in and access.network_open(cfg) and not _is_public_path(path):
@@ -323,6 +345,8 @@ async def secure(request: Request, call_next: Callable[[Request], Awaitable[Resp
     static = path.startswith("/static/")
 
     async def dispatch() -> Response:
+        if sync:  # read-only: a recovery it finds waiting is answered 503 and run apart (tow.web.sync)
+            return await call_next(request)
         if not static:  # a static file reads no data: it needs no recovery
             try:
                 await run_in_threadpool(_recover_before_dispatch, path != "/healthz")

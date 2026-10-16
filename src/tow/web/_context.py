@@ -13,7 +13,8 @@ helper, a background thread) every call reads afresh.
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
@@ -26,16 +27,18 @@ class RequestContext:
     """Values read once per request, by name; and what the request's messages are about (its
     ``subject``: kept apart from the values, which a write during the request drops)."""
 
-    __slots__ = ("_generation", "_values", "subject")
+    __slots__ = ("_frozen", "_generation", "_values", "subject")
 
-    def __init__(self) -> None:
+    def __init__(self, values: Mapping[str, tuple[bool, Any]] | None = None) -> None:
         self._generation = services.write_generation()
-        self._values: dict[str, tuple[bool, Any]] = {}
+        self._values: dict[str, tuple[bool, Any]] = dict(values or {})
+        # Seeded with one snapshot (``seeded``): a write elsewhere never mixes another one in.
+        self._frozen = values is not None
         self.subject = ""
 
     def get(self, name: str, load: Callable[[], Any], *, keep_errors: tuple[type[BaseException], ...] = ()) -> Any:
         generation = services.write_generation()
-        if generation != self._generation:
+        if generation != self._generation and not self._frozen:
             self._values.clear()
             self._generation = generation
         if name not in self._values:
@@ -61,6 +64,19 @@ def begin() -> RequestContext:
 
 def current() -> RequestContext | None:
     return _CURRENT.get()
+
+
+@contextmanager
+def seeded(values: Mapping[str, tuple[bool, Any]]) -> Iterator[RequestContext]:
+    """Within the block, the readers below answer from ``values`` (name -> (ok, value or the
+    error raised again)) - one snapshot taken elsewhere (``tow.web.sync``) - and read only what
+    it lacks; a write meanwhile does not drop them. The request's own context comes back after."""
+    context = RequestContext(values)
+    token = _CURRENT.set(context)
+    try:
+        yield context
+    finally:
+        _CURRENT.reset(token)
 
 
 def use_subject(value: str) -> None:
@@ -97,6 +113,11 @@ def state(*, quarantine: bool = True) -> dict[str, Any]:
     return memo(
         "state", (lambda: services.load_state()) if quarantine else (lambda: services.load_state(quarantine=False))
     )
+
+
+def history() -> dict[str, Any]:
+    """A read-only snapshot of the download history."""
+    return memo("history", lambda: services.load_download_history())
 
 
 def secrets() -> dict[str, Any]:

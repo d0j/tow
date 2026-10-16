@@ -35,9 +35,11 @@ PURE: dict[str, set[str]] = {
         "require_local",
         "web_record",
     },
+    # SESSION_COOKIE: the name of the session cookie (a constant).
     "tow.auth": {
         "AuthConfigurationError",
         "MAX_HINT_LENGTH",
+        "SESSION_COOKIE",
         "lan_password_matches",
         "lan_password_session_key",
         "password_hint",
@@ -92,6 +94,8 @@ PURE: dict[str, set[str]] = {
     # the control that fixes it, the name of a set of issues and the worst severity among them, and
     # which of them need attention now (a filter); no I/O.
     "tow.issues": {"Fix", "Issue", "Snapshot", "attention", "fingerprint", "worst"},
+    # When scheduled checks count as late (a constant): the moment "Needs attention" changes by itself.
+    "tow.issues.kinds.check_stale": {"STALE_SLACK_SEC"},
     # datetime_pattern, format_datetime: how a language writes a date (its catalog's pattern); no I/O.
     "tow.i18n": {
         "AUTO",
@@ -165,14 +169,12 @@ HELPER_ALLOWED: dict[str, set[str]] = {
     "middleware": {
         "tow.access.credential",
         "tow.access.session_is_valid",
-        "tow.auth.SESSION_COOKIE",
         "tow.bind.origin_matches_request",
         "tow.i18n.remember_browser_language",
     },
     "site_form": {"tow.net_guard.is_public", "tow.trackers.generic.validate_tracker_regex"},
     "site_store": {"tow.store_transaction.transaction", "tow.undo.cleanup_needed"},
     "templating": {
-        "tow.auth.SESSION_COOKIE",
         "tow.i18n.texts_with_prefix",
         "tow.notifiers.summary",
         "tow.paths.launcher",

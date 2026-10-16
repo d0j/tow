@@ -42,6 +42,7 @@ from tow.web import (
     routes_service,
     routes_settings,
     routes_sites,
+    routes_sync,
     routes_topic_login,
     routes_topics,
     routes_undo,
@@ -58,6 +59,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     routes_health.router,
     routes_history.router,
     routes_home.router,
+    routes_sync.router,  # /topics/rows: before any /topics/{tid}
     routes_content.router,
     routes_topics.router,
     routes_topic_login.router,
