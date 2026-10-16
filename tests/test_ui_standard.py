@@ -200,7 +200,8 @@ def test_long_site_names_and_sign_in_pills_stay_in_their_columns():
     home = (Path(__file__).parents[1] / "src" / "tow" / "templates" / "_topic_row.html").read_text(encoding="utf-8")
     assert 'class="topic-tracker" data-label="{{ t(\'home.row.site\') }}" title="{{ site_title(topic.tracker)' in home
     sites = first(".list-head.sites, details.row-edit.sites > summary")
-    assert "minmax(10rem,1fr) 8rem 6.4rem" in sites
+    # 1.32.1 ST1: "Реквизиты сохранены" is 136 px in Chromium; 8 rem cut it to "Реквизиты сохран…".
+    assert "minmax(10rem,1fr) 9.5rem 6.4rem" in sites
     assert "justify-self: start" in first("details.row-edit.sites > summary > .pill")
 
 
