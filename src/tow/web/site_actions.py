@@ -163,9 +163,14 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
     except SiteNameTaken:
         return _edit_refused(name, typed, "web.sites.name_taken", field="new_name")
     stored_password = ((services.load_secrets().get("trackers") or {}).get(name) or {}).get("password")
+    forget_password = False
     if added_login_hosts and stored_password and not form.password.strip():
-        # A stored tracker password must never be posted to a host it was not entered for.
-        return _edit_refused(name, typed, "web.sites.password_again", "warn", field="password")
+        # A stored tracker password must never be posted to a host it was not entered for. With
+        # password sign-in the field is in view: typed again, or refused. Browser sign-in hides
+        # it and does not use the password: it is forgotten instead (the user name stays).
+        if not typed.browser_sign_in():
+            return _edit_refused(name, typed, "web.sites.password_again", "warn", field="password")
+        forget_password = True
     try:
         edit_site_paths(spec, form)
     except ValueError as exc:
@@ -189,6 +194,10 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
             limits[key] = limits.pop(name)
     old_secrets = services.load_secrets()
     new_secrets = _renamed_login(old_secrets, name, key, form)
+    if forget_password:
+        entry = (new_secrets.get("trackers") or {}).get(key)
+        if isinstance(entry, dict):
+            entry.pop("password", None)
     undo_fields = {
         "name": name,
         "spec": previous_spec,
@@ -199,7 +208,8 @@ def edit_site(name: str, form: SiteEdit) -> RedirectResponse:
     if refused := commit_site(new_config, new_state, new_secrets, undo_fields, site_snapshot(old_secrets, name)):
         return refused
     services.log_event("site_save", tracker=key, how="manual")
-    return RedirectResponse(_saved_location("web.common.saved", list(spec["fetch_hosts"])), status_code=303)
+    said = "web.sites.saved_password_removed" if forget_password else "web.common.saved"
+    return RedirectResponse(_saved_location(said, list(spec["fetch_hosts"])), status_code=303)
 
 
 def delete_site(name: str) -> RedirectResponse:

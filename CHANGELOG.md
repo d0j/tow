@@ -74,6 +74,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   backslashes, and a copied example did not work.
 - A site's password field no longer says “keep as is” when no password is saved; a saved one says
   “Saved · leave empty to keep”.
+- A site card with browser sign-in that gets a new sign-in address is saved instead of asking for the site
+  password in a field browser sign-in hides: the saved password is removed (it was never entered for that
+  address), the user name stays, and the message says to enter the password again on a return to password
+  sign-in.
 - A refused site name says the rule plainly (“Short name: small Latin letters, digits and _”), and for “new”
   or “guess” that TOW uses the name itself, instead of listing both in every refusal.
 - A refused first start keeps the reminder and the box (never the passwords), says why as a sentence and marks

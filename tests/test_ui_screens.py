@@ -195,6 +195,30 @@ def test_browser_sign_in_keeps_the_saved_login_whatever_the_hidden_fields_send(c
     assert load_secrets()["trackers"]["rutor"] == {"username": "typed-user", "password": "typed-pass"}
 
 
+def test_a_new_sign_in_address_with_browser_sign_in_forgets_the_saved_password(client):
+    """With browser sign-in chosen, a new sign-in address asked for the site password again - in a
+    field that browser sign-in hides and disables: the card could not be saved. It is saved now
+    and the saved password goes (it was never entered for that address, and browser sign-in does
+    not use it); the user name stays, and the message says so. With password sign-in the field is
+    in view and the refusal stays."""
+    from tow.store import load_secrets, save_secrets
+
+    secrets = load_secrets()
+    secrets.setdefault("trackers", {})["rutor"] = {"username": "kept-user", "password": "kept-pass"}
+    save_secrets(secrets)
+    data = {"fetch_hosts": "http://rutor.info", "login_hosts": "http://rutor.info", "login_hosts_present": "1"}
+    refused = client.post("/sites/rutor", data={**data, "browser_auth_present": "1"}, follow_redirects=False)
+    assert "field=password" in refused.headers["location"]
+    assert load_secrets()["trackers"]["rutor"]["password"] == "kept-pass"
+
+    browser = {**data, "browser_auth_present": "1", "browser_auth": "1"}
+    saved = client.post("/sites/rutor", data=browser, follow_redirects=False)
+    assert "field=password" not in saved.headers["location"]
+    assert load_secrets()["trackers"]["rutor"] == {"username": "kept-user"}
+    page = BeautifulSoup(client.get(saved.headers["location"]).text, "html.parser")
+    assert "Сохранённый пароль удалён" in page.select_one("#flash").get_text()
+
+
 def test_site_credentials_are_disabled_with_browser_sign_in_and_autofilled_per_site(client):
     """The fields a chosen browser sign-in hides are disabled with it (app.js, data-enabled-by),
     and each site's login is its own autofill section: a password manager keeps one per card."""
