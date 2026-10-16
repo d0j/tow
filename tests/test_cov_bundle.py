@@ -42,6 +42,7 @@ from tow.bundle import export as bundle_export
 from tow.bundle import importer as bundle_importer
 from tow.bundle import io as bundle_io
 from tow.bundle import schema as bundle_schema
+from tow.bundle.path_maps import apply_path_maps
 from tow.paths import config_path, data_dir, download_history_path, secrets_path, state_path
 from tow.store import (
     SecretStoreError,
@@ -940,6 +941,61 @@ def test_invalid_path_maps_are_rejected(values, match):
 def test_path_maps_are_trimmed_and_keep_equals_in_new_path():
     assert parse_path_maps([" C:/old = D:/new=1 "]) == [("C:/old", "D:/new=1")]
     assert parse_path_maps(None) == []
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "value", "expected"),
+    [
+        # A Windows folder moved to Linux or macOS: Windows case rules, the new system's separators.
+        ("D:\\Media", "/srv/media", "D:\\Media\\Show\\S01", "/srv/media/Show/S01"),
+        ("D:\\Media", "/srv/media", "d:\\media\\Film", "/srv/media/Film"),
+        ("D:\\Media", "/srv/media", "D:/Media\\Show/S01", "/srv/media/Show/S01"),
+        ("D:\\Media", "/srv/media", "D:\\MEDIA", "/srv/media"),
+        ("D:\\Media", "/srv/media", "d:\\media\\Ab\\CD", "/srv/media/Ab/CD"),  # the rest keeps its case
+        ("D:\\Фильмы", "/srv/f", "d:\\ФИЛЬМЫ\\Сериал А", "/srv/f/Сериал А"),
+        ("D:\\", "/mnt/d", "D:\\TV\\Show", "/mnt/d/TV/Show"),
+        ("D:\\", "/mnt/d", "d:\\", "/mnt/d/"),  # a trailing separator stays
+        ("\\\\NAS\\Share", "/mnt/nas", "\\\\nas\\share\\tv\\x", "/mnt/nas/tv/x"),
+        ("\\\\NAS\\Share", "/mnt/nas", "//nas/share/tv", "/mnt/nas/tv"),
+        # And back: POSIX case rules (exact), Windows separators.
+        ("/srv/media", "E:\\M", "/srv/media/a/b", "E:\\M\\a\\b"),
+        ("/srv/media", "E:\\M", "/srv/media", "E:\\M"),
+        ("/", "E:\\root", "/srv/media/a", "E:\\root\\srv\\media\\a"),
+        ("/srv/media", "/data", "/srv/media/a\\b", "/data/a\\b"),  # a backslash is a POSIX name's character
+        # Windows to Windows keeps the rest as written.
+        ("C:/old/", "E:/new/", "C:/old\\Show", "E:/new\\Show"),
+        ("C:/old/", "E:/new/", "C:/old/", "E:/new/"),
+    ],
+)
+def test_path_maps_cross_systems(old, new, value, expected):
+    mapped, warnings = apply_path_maps({"topics": [{"save_path": value}], "save_roots": [value]}, [(old, new)])
+    assert mapped["topics"][0]["save_path"] == expected
+    assert mapped["save_roots"] == [expected]
+    assert warnings == []
+
+
+@pytest.mark.parametrize(
+    ("old", "value"),
+    [
+        ("D:\\Media", "D:\\MediaX\\a"),
+        ("D:\\Media", "E:\\Media\\a"),
+        ("\\\\NAS\\Share", "\\\\nas\\shared\\x"),
+        ("\\\\NAS\\Share", "\\\\nas\\share-2\\x"),
+        ("/srv/media", "/srv/media2/x"),
+        ("/srv/media", "/SRV/media/x"),  # Linux tells case apart
+        ("/srv/media", "D:\\srv\\media"),
+    ],
+)
+def test_path_maps_match_whole_folders_only(old, value):
+    mapped, warnings = apply_path_maps({"topics": [{"save_path": value}]}, [(old, "/new")])
+    assert mapped["topics"][0]["save_path"] == value
+    assert warnings == [f"unmapped topic path: {value}"]
+
+
+def test_a_rooted_path_without_a_drive_is_not_below_a_drive_or_a_share():
+    for old, value in (("D:\\Media", "\\Media\\a"), ("\\\\NAS\\Share", "\\nas\\share\\x")):
+        mapped, _warnings = apply_path_maps({"topics": [{"save_path": value}]}, [(old, "/new")])
+        assert mapped["topics"][0]["save_path"] == value
 
 
 def test_invalid_path_map_aborts_import_before_any_write(tmp_path):
