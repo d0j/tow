@@ -26,6 +26,8 @@ import shutil
 import sys
 import tempfile
 import time
+from collections.abc import Iterator
+from contextvars import ContextVar
 from pathlib import Path
 
 _ROOT_ENV = "TOW_ROOT"
@@ -35,6 +37,23 @@ _CONFIG_ENV = "TOW_CONFIG"
 # Child processes (and libraries that read the environment) use the same temp folder.
 _TEMP_ENV = ("TMP", "TEMP", "TMPDIR")
 TEMP_MAX_AGE_SEC = 24 * 3600
+# A request that must only read (the web's synchronization poll): no folder is created for it.
+_READ_ONLY: ContextVar[bool] = ContextVar("tow_paths_read_only", default=False)
+
+
+@contextlib.contextmanager
+def read_only() -> Iterator[None]:
+    """Within this block (and the threads that copy its context) a folder of the install is named,
+    never created: what is missing stays missing and its readers find nothing."""
+    token = _READ_ONLY.set(True)
+    try:
+        yield
+    finally:
+        _READ_ONLY.reset(token)
+
+
+def _may_create() -> bool:
+    return not _READ_ONLY.get()
 
 
 def repo_root() -> Path:
@@ -153,7 +172,7 @@ def foreign_code() -> Path | None:
 
 def data_dir(*, create: bool = True) -> Path:
     p = _env_path(_RUNTIME_HOME_ENV, _LEGACY_RUNTIME_HOME_ENV) or root() / "data"
-    if create:
+    if create and _may_create():
         p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -229,7 +248,8 @@ def lan_auth_token_file() -> Path:
 
 def _subdir(name: str) -> Path:
     p = data_dir() / name
-    p.mkdir(parents=True, exist_ok=True)
+    if _may_create():
+        p.mkdir(parents=True, exist_ok=True)
     return p
 
 

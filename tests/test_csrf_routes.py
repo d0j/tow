@@ -22,7 +22,7 @@ from test_routes import ROUTES
 from tow.auth import SESSION_COOKIE, issue_session, lan_password_record, lan_password_session_key
 from tow.i18n import t
 from tow.store import save_secrets
-from tow.web import app, routes_clients
+from tow.web import app, middleware, routes_clients
 
 WRITES = ("POST", "PUT", "PATCH", "DELETE")
 SAMPLE = {
@@ -103,7 +103,9 @@ def _assert_refused(client: TestClient, origins: list[str | None], base: str) ->
             if origin is not None:
                 headers["Origin"] = origin
             answer = client.request(method, base + path, content=b"a=1", headers=headers, follow_redirects=False)
-            assert (answer.status_code, answer.text) == (403, forbidden), (method, path, origin)
+            # A synchronization fetch is refused as JSON with the same words (a script asked).
+            said = answer.json()["error"] if path in middleware.SYNC_PATHS else answer.text
+            assert (answer.status_code, said) == (403, forbidden), (method, path, origin)
             assert SESSION_COOKIE not in answer.cookies
 
 

@@ -33,7 +33,8 @@ from tow.check.space import folder_free
 from tow.check_outcomes import counts_of as check_outcome_counts
 from tow.check_outcomes import outcome_of as check_outcome
 from tow.clients.factory import from_secrets as client_from_secrets
-from tow.config import load_config
+from tow.config import config_from_bytes, load_config
+from tow.config import forget_cache as forget_config_cache
 from tow.config import save_config as _save_config
 from tow.content import metadata as content_metadata
 from tow.content import read as read_content
@@ -53,6 +54,7 @@ from tow.mirrors import note_signed_in as _note_signed_in
 from tow.mirrors import prefer_host as _prefer_host
 from tow.notifiers import test as test_notifier
 from tow.notify import short_series_title
+from tow.paths import read_only as read_only_paths
 from tow.protection.local_service import managed as _local_service_managed
 from tow.protection.providers import adapters as protection_adapters
 from tow.protection.providers import registry as protection_registry
@@ -60,6 +62,7 @@ from tow.protection.spec import validate_settings as validate_protection_setting
 from tow.protection.store import reset as _reset_protection
 from tow.protection.store import service_states as _protection_service_states
 from tow.ratelimit import LoginThrottle
+from tow.releases import cached as release_cached
 from tow.releases import release_status
 from tow.restore_points import (
     check_portable_bundle,
@@ -87,10 +90,13 @@ from tow.snapshots import status as snapshot_status
 from tow.storage.locks import CheckBusyError
 from tow.store import (
     StoreWriteError,
+    download_history_from_bytes,
+    forget_parsed,
     load_download_history,
     load_secrets,
     load_state,
     persistence_lock,
+    state_from_bytes,
     write_generation,
 )
 from tow.store import save_secrets as _save_secrets
@@ -100,11 +106,22 @@ from tow.store_transaction import recover as recover_store_transaction
 from tow.store_transaction import transaction as store_transaction
 from tow.supervisor import data_lost
 from tow.supervisor.layout import install_id, next_check_at, site_retry_status, topic_timer_status
+from tow.sync_sources import log_marker as sync_log_marker
+from tow.sync_sources import quarantined as sync_quarantined
+from tow.sync_sources import read as sync_read
+from tow.sync_sources import secrets_from_bytes
+from tow.sync_sources import source_paths as sync_source_paths
+from tow.sync_sources import stat_only as sync_stat
+from tow.sync_sources import supervisor_running as sync_supervisor_running
+from tow.sync_sources import transaction_pending as sync_transaction_pending
 from tow.title import guess_topic_title
 from tow.trackers.presets import defaults as tracker_site_defaults
 from tow.undo import apply as apply_undo
 from tow.undo import cleanup as cleanup_secret_undo
+from tow.undo import cleanup_needed as undo_cleanup_needed
+from tow.undo import local_only as undo_local_only
 from tow.undo import stamped_here as undo_stamped_here
+from tow.undo import undo_label
 from tow.watchdog import last_problem as watchdog_problem
 from tow.web_update import log_tail as web_update_log
 from tow.web_update import start as start_web_update
@@ -126,6 +143,7 @@ __all__ = [
     "client_owned_by_tow",
     "collect_issues",
     "commit_stores",
+    "config_from_bytes",
     "content_context_title",
     "content_metadata",
     "create_restore_point",
@@ -136,9 +154,12 @@ __all__ = [
     "diagnostic_details",
     "doctor_reason",
     "doctor_report",
+    "download_history_from_bytes",
     "export_portable_bundle",
     "folder_free",
     "folder_write_problem",
+    "forget_config_cache",
+    "forget_parsed",
     "free_bytes",
     "guess_site",
     "guess_topic_title",
@@ -166,8 +187,10 @@ __all__ = [
     "protection_settings_view",
     "read_content",
     "read_events",
+    "read_only_paths",
     "record_check_failure",
     "recover_store_transaction",
+    "release_cached",
     "release_status",
     "request_restart",
     "reset_protection",
@@ -181,6 +204,7 @@ __all__ = [
     "save_secrets",
     "save_state",
     "scrub_text",
+    "secrets_from_bytes",
     "service_status",
     "set_autostart",
     "set_session_cookie",
@@ -195,10 +219,21 @@ __all__ = [
     "snapshot_status",
     "stale_autostart",
     "start_web_update",
+    "state_from_bytes",
     "store_transaction",
+    "sync_log_marker",
+    "sync_quarantined",
+    "sync_read",
+    "sync_source_paths",
+    "sync_stat",
+    "sync_supervisor_running",
+    "sync_transaction_pending",
     "test_notifier",
     "topic_timer_status",
     "tracker_site_defaults",
+    "undo_cleanup_needed",
+    "undo_label",
+    "undo_local_only",
     "undo_stamped_here",
     "validate_protection_settings",
     "watchdog_problem",

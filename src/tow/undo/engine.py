@@ -102,6 +102,8 @@ class Kind:
     snapshot: Callable[[object, dict[str, Any]], bool] | None = None  # is this its snapshot?
     secrets_failed: Outcome | None = None
     failed: str = "web.undo.apply_failed"
+    # Only the computer running TOW may apply it now: (record, config, secrets, its snapshot).
+    local_only: Callable[[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None], bool] | None = None
 
 
 KINDS: dict[str, Kind] = {}  # filled by tow.undo.kinds
@@ -171,6 +173,19 @@ def undo_label(state: dict[str, Any] | None = None) -> str:
         return kind.label(record)
     except Exception:  # noqa: BLE001 - a label must never break a page; the generic label is shown
         return t("web.undo.last")
+
+
+def local_only(record: object, cfg: dict[str, Any], secrets: dict[str, Any]) -> bool:
+    """Only the computer running TOW may apply ``record`` with this config and these secrets: the
+    kind's own rule, the one ``apply`` refuses the network by (no rule: any signed-in device may).
+    A snapshot that cannot be read counts as local-only; ``apply`` decides in the end anyway."""
+    kind = KINDS.get(str(record.get("kind") or "")) if isinstance(record, dict) else None
+    if kind is None or kind.local_only is None or not isinstance(record, dict):
+        return False
+    try:
+        return kind.local_only(record, cfg, secrets, _load_snapshot(kind, record))
+    except Exception:  # noqa: BLE001 - unknown is not offered to the network; apply stays authoritative
+        return True
 
 
 # --------------------------------------------------------------------------- stamping

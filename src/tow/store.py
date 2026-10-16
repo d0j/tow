@@ -99,9 +99,11 @@ __all__ = [
     "decrypt_secrets_bytes",
     "delete_secret_undo",
     "derive_local_secret",
+    "download_history_from_bytes",
     "encrypt_secrets_bytes",
     "encrypted_secrets_path",
     "file_stamp",
+    "forget_parsed",
     "generate_master_key",
     "init_lock_file",
     "install_folders",
@@ -127,6 +129,7 @@ __all__ = [
     "save_state",
     "secret_store_status",
     "secret_undo_path",
+    "state_from_bytes",
     "state_schema_version",
     "validate_download_history_bytes",
     "validate_state_bytes",
@@ -355,13 +358,7 @@ def validate_download_history_bytes(content: bytes) -> None:
     _validated_json(content, _validate_history_container)
 
 
-def load_state(*, quarantine: bool = True) -> dict[str, Any]:
-    path = state_path()
-    stamp = file_stamp(path)
-    cached: dict[str, Any] | None = _parsed_copy(stamp)
-    if cached is not None:
-        return cached
-    data = load_json(path, {"topics": [], "mirrors": {}}, quarantine=quarantine, validate=_validate_state_container)
+def _state_as_read(data: dict[str, Any]) -> dict[str, Any]:
     version = state_schema_version(data)
     data.pop("schema_version", None)  # a file-format detail: callers see the topics, not it
     data = _migrate_state(data, version)
@@ -370,8 +367,48 @@ def load_state(*, quarantine: bool = True) -> dict[str, Any]:
     undo = data.get("undo")
     if isinstance(undo, dict) and "secrets" in undo:
         data.pop("undo", None)
+    return data
+
+
+def load_state(*, quarantine: bool = True) -> dict[str, Any]:
+    path = state_path()
+    stamp = file_stamp(path)
+    cached: dict[str, Any] | None = _parsed_copy(stamp)
+    if cached is not None:
+        return cached
+    data = load_json(path, {"topics": [], "mirrors": {}}, quarantine=quarantine, validate=_validate_state_container)
+    data = _state_as_read(data)
     _keep_parsed(path, stamp, data)
     return data
+
+
+def state_from_bytes(content: bytes | None) -> dict[str, Any]:
+    """The state as ``load_state`` returns it, from the bytes of state.json (None: no file) - for
+    a reader that took the bytes itself and must write nothing (no quarantine, no cache).
+    Raises ValueError (also UnicodeError, RecursionError) for bytes it cannot use."""
+    if content is None:
+        return _state_as_read({"topics": [], "mirrors": {}})
+    data = _validated_json(content, _validate_state_container)
+    return _state_as_read(data)
+
+
+def download_history_from_bytes(content: bytes | None) -> dict[str, Any]:
+    """The download history as ``load_download_history`` returns it, from its bytes (None: no file)."""
+    data: dict[str, Any] = (
+        {"schema_version": 1, "topics": {}}
+        if content is None
+        else _validated_json(content, _validate_history_container)
+    )
+    data.setdefault("schema_version", 1)
+    data.setdefault("topics", {})
+    return data
+
+
+def forget_parsed(path: Path) -> None:
+    """Drop the parsed copy of ``path``: its content changed although its stamp did not (a coarse
+    clock, a same-size rewrite in the same tick). The next read parses the file again."""
+    with _PARSED_LOCK:
+        _parsed.pop(str(path), None)
 
 
 def check_state_version() -> None:

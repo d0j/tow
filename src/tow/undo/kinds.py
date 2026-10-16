@@ -236,6 +236,22 @@ def _session_key(secrets: dict[str, Any]) -> str | None:
 _ACCESS = "/settings?open=access"
 
 
+def _access_local_only(
+    record: dict[str, Any], current: dict[str, Any], secrets_now: dict[str, Any], snapshot: dict[str, Any] | None
+) -> bool:
+    """The access undo only the computer running TOW may apply: one that would switch network
+    access on or off (or move it), or leave the network open without a password (``_access``
+    refuses the network by this rule; the poll offers the undo by it)."""
+    secrets = None
+    if snapshot is not None:
+        secrets = snapshots.restore_scoped(secrets_now, snapshot, record.get("secret_scope"))
+    allow_lan = bool(record.get("old_allow_lan"))
+    switches_access = str(record.get("old_bind") or "") != str(current.get("bind") or "") or allow_lan != bool(
+        current.get("allow_lan")
+    )
+    return switches_access or (allow_lan and _session_key(secrets_now if secrets is None else secrets) is None)
+
+
 def _access(ctx: Context) -> Restore:
     """Network access, or the password (a record stamped by the password card has its snapshot).
 
@@ -254,11 +270,7 @@ def _access(ctx: Context) -> Restore:
     secrets = None
     if ctx.snapshot is not None:
         secrets = snapshots.restore_scoped(secrets_now, ctx.snapshot, record.get("secret_scope"))
-    switches_access = config["bind"] != str(current.get("bind") or "") or config["allow_lan"] != bool(
-        current.get("allow_lan")
-    )
-    open_without_password = config["allow_lan"] and _session_key(secrets_now if secrets is None else secrets) is None
-    if not ctx.local and (switches_access or open_without_password):
+    if not ctx.local and _access_local_only(ctx.record, current, secrets_now, ctx.snapshot):
         raise Refused(Outcome("web.undo.access_local_only", "err", _ACCESS))
     event: dict[str, Any] = {"bind": config["bind"], "allow_lan": config["allow_lan"]}
     done = Outcome("web.undo.access_done", "ok", _ACCESS)
@@ -354,6 +366,7 @@ KINDS.update(
             target="/settings?open=access",
             snapshot=_store_snapshot,
             secrets_failed=Outcome("web.undo.password_failed", "err", "/settings?open=access"),
+            local_only=_access_local_only,
             failed="web.undo.access_failed",
         ),
         "settings_clients": Kind(

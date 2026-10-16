@@ -736,7 +736,7 @@ def global_interval_minutes(cfg: Mapping[str, Any]) -> int:
 def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
     cfg = _context.config()
     _context.trackers()  # a site whose link pattern is broken fails the page, as it always did
-    history = services.load_download_history()
+    history = _context.history()
     timers = services.topic_timer_status(dict(state))
     retries = services.site_retry_status(dict(state), cfg)
     rows = []
