@@ -505,3 +505,91 @@ def test_every_request_gets_its_own_deadline(trickling_mirror, monkeypatch):
             clock.now += thttp.MAX_REQUEST_SECONDS  # far past the previous request's deadline
             assert thttp.get_limited(c, "http://mirror.example/topic", max_bytes=1024).content == b"ok"
     assert len(streams) == 3
+
+
+class _RecordingStream(httpcore.NetworkStream):
+    """A connection that records the timeout of each operation it is given."""
+
+    def __init__(self, seen: list) -> None:
+        self.seen = seen
+
+    def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
+        self.seen.append(("read", timeout))
+        return b""
+
+    def write(self, buffer: bytes, timeout: float | None = None) -> None:
+        self.seen.append(("write", timeout))
+
+    def close(self) -> None:
+        return None
+
+    def start_tls(self, ssl_context, server_hostname=None, timeout=None):
+        self.seen.append(("start_tls", timeout))
+        return self
+
+    def get_extra_info(self, info: str):
+        return info
+
+
+class _RecordingBackend(httpcore.NetworkBackend):
+    def __init__(self) -> None:
+        self.seen: list = []
+
+    def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+        self.seen.append(("connect_tcp", timeout))
+        return _RecordingStream(self.seen)
+
+    def connect_unix_socket(self, path, timeout=None, socket_options=None):
+        self.seen.append(("connect_unix_socket", timeout))
+        return _RecordingStream(self.seen)
+
+    def sleep(self, seconds: float) -> None:
+        self.seen.append(("sleep", seconds))
+
+
+def test_every_socket_operation_gets_what_is_left_of_the_request_deadline(monkeypatch):
+    """The deadline backend itself (not only that it is installed): each connect, read, write and
+    TLS handshake gets the time left, the deadline's end refuses them, and without a deadline
+    the timeouts pass unchanged."""
+    from types import SimpleNamespace
+
+    clock = _Clock()
+    monkeypatch.setattr(thttp, "time", SimpleNamespace(monotonic=clock.monotonic))
+    wrapped = _RecordingBackend()
+    backend = thttp.RequestDeadlineBackend(wrapped)
+
+    token = thttp._REQUEST_DEADLINE.set(clock.now + 10)
+    try:
+        stream = backend.connect_tcp("mirror.example", 443, timeout=30)
+        clock.now += 4
+        stream.read(1024, timeout=20)
+        stream.write(b"x", timeout=None)
+        tls = stream.start_tls(None, "mirror.example", timeout=2)
+        assert tls.get_extra_info("server_addr") == "server_addr"
+        backend.connect_unix_socket("/run/x.sock", timeout=None)
+        backend.sleep(0.5)
+        assert wrapped.seen == [
+            ("connect_tcp", 10),
+            ("read", 6),
+            ("write", 6),
+            ("start_tls", 2),
+            ("connect_unix_socket", 6),
+            ("sleep", 0.5),
+        ]
+        clock.now += 6  # the deadline is reached
+        with pytest.raises(httpcore.ReadTimeout, match="budget exhausted"):
+            stream.read(1024, timeout=20)
+        with pytest.raises(httpcore.WriteTimeout, match="budget exhausted"):
+            stream.write(b"x", timeout=20)
+        with pytest.raises(httpcore.ConnectTimeout, match="budget exhausted"):
+            stream.start_tls(None, "mirror.example", timeout=20)
+        with pytest.raises(httpcore.ConnectTimeout, match="budget exhausted"):
+            backend.connect_tcp("mirror.example", 443, timeout=30)
+        with pytest.raises(httpcore.ConnectTimeout, match="budget exhausted"):
+            backend.connect_unix_socket("/run/x.sock", timeout=30)
+    finally:
+        thttp._REQUEST_DEADLINE.reset(token)
+    wrapped.seen.clear()
+    stream = backend.connect_tcp("mirror.example", 443, timeout=30)
+    stream.read(1024, timeout=None)
+    assert wrapped.seen == [("connect_tcp", 30), ("read", None)]
