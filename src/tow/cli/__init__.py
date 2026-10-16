@@ -22,7 +22,9 @@ from tow.cli.parser import build_parser
 
 def _utf8_console() -> None:
     """Russian texts and the em dash survive a redirected output or a cp1251/cp866 console: such
-    a stream writes UTF-8 (an interactive UTF-8 terminal is left as it is)."""
+    a stream writes UTF-8 (an interactive UTF-8 terminal is left as it is). A terminal with
+    another legacy encoding (a KOI8-R or ISO-8859 locale on Linux or macOS) keeps it - that is
+    what it shows - and a character it lacks becomes "?" instead of ending the command."""
     for stream in (sys.stdout, sys.stderr):
         encoding = (getattr(stream, "encoding", "") or "").lower().replace("-", "").replace("_", "")
         if encoding == "utf8" or not hasattr(stream, "reconfigure"):
@@ -33,6 +35,8 @@ def _utf8_console() -> None:
             interactive = False
         if not interactive or encoding.startswith("cp"):
             stream.reconfigure(encoding="utf-8", errors="replace")
+        else:
+            stream.reconfigure(errors="replace")
 
 
 def _build_parser() -> argparse.ArgumentParser:
