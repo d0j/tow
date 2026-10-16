@@ -158,4 +158,4 @@ def test_large_lists_scroll_and_long_names_do_not_resize_the_toolbar():
     # Parent width excludes the page scrollbar, unlike a 100vw-based limit.
     assert "max-width: min(19rem, 100%); max-height: min(20rem, 45dvh);" in css
     assert "max-height: min(20rem, 45dvh); overflow-y: auto;" in css
-    assert "max-width: min(19rem, calc(100vw - 1.5rem))" in css
+    assert "max-width: min(19rem, calc(100vw - 2 * var(--gutter)))" in css  # the page's gutters (1.32.3)

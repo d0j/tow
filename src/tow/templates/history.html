@@ -2,6 +2,7 @@
 {% from "_issue_notes.html" import issue_notes_at %}
 {% block body %}
 <h1 id="page-title">{{ t('history.title') }}</h1>
+<div class="stack-3">
 {{ issue_notes_at(notes, '') }}
 <div class="history-filter">
   <div class="chips" role="group" aria-label="{{ t('history.filter') }}">
@@ -30,4 +31,5 @@
 </div>
 {#- Said only when the list stops at its limit. -#}
 {% if rows|length >= history_limit %}<p class="sub">{{ t('history.note', n=history_limit) }}</p>{% endif %}
+</div>
 {% endblock %}

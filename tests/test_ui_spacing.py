@@ -208,3 +208,103 @@ def test_home_sites_dialogs_and_the_picker_on_the_scale():
     assert [(int(d), 16 * float(v)) for d, v in steps] == [(d, 8.0 * d) for d in range(1, 9)]
     assert "margin" not in _rule(".dot")
     assert "padding-block: var(--sp-3);" in _rule("main")
+
+
+# The spacing that is a component's own geometry, not a distance between blocks: selector, property,
+# the reason. Anything else in the four style sheets is 0, auto, a token or a calc() of tokens.
+EXCEPTIONS = {
+    ("app.css", "header.app", "padding-inline"): "the gutter, or the 90 rem page's own edge beside it",
+    ("app.css", ".hdr-sites", "padding-right"): "room for the strip's fading end (its mask)",
+    ("app.css", "input, textarea, select", "padding"): "a field's text centred by the field's height",
+    ("app.css", "textarea", "padding-block"): "a one-row rule field as tall as a field",
+    ("app.css", ".secret > input", "padding-right"): "room for the eye inside the field",
+    ("app.css", '.folder-input input[role="combobox"]', "padding-right"): "room for the folder button",
+    ("app.css", ".sr-only", "margin"): "the standard visually hidden pattern",
+    ("app.css", ".check-field input", "margin-top"): "the box on the words' first line",
+    ("app.css", ".check-field label", "margin"): "a one-line label's 24 px target taken back from its line",
+    ("app.css", ".check-field label", "padding"): "a one-line label's 24 px target",
+    ("app.css", ".notice > svg.i", "margin-top"): "the icon on the note's first line",
+    (
+        "app.css",
+        ":is(.technical-details, details.advanced, .backup-inventory, .backup-location) > summary::before",
+        "margin-inline-end",
+    ): "the chevron (.36rem) fills a 12 px slot",
+    ("app.css", ":is(.notifier-card, .client-card, .protection-card) > summary h2::before", "margin-inline-end"): (
+        "the chevron (.36rem) fills a 12 px slot, then 6 px"
+    ),
+    ("app.css", ".theme-choice", "gap"): "one segmented control (2 px seams)",
+    ("app.css", ".theme-choice", "padding"): "one segmented control (2 px rim)",
+    (
+        "app.css",
+        '.portable-import-form input[type="file"], .content-picker input[type="file"]',
+        "padding",
+    ): "the browser's file field as tall as a field, its button centred",
+    ("app.css", ".row-progress > a", "padding-block"): "a 24 px target over the progress words",
+    ("app.css", ".row-progress > a", "margin-block"): "the 24 px target taken back from the row",
+    ("app.css", ".attention-count", "padding"): "a counter badge on an icon",
+    (
+        "app.css",
+        (
+            "details.row-edit > summary > .topic-name, details.row-edit > summary > [data-hl], "
+            "details.row-edit.sites > summary > :first-child"
+        ),
+        "padding-right",
+    ): "a phone row's text keeps clear of its three icons",
+    ("app.css", "details.row-edit.sites > summary > .mirror-list", "padding-right"): "clear of the row's icons",
+    ("app.css", "body", "padding-bottom"): "room for the version at the page's end",
+    ("app.css", "#topics details.row-edit > summary > .dot", "margin-top"): "the dot on the name's first line",
+    ("app.css", ".follow-row > .check-label", "margin-top"): "level with the interval field beside it",
+    ("messages.css", ".msg-count", "padding"): "a counter badge on an icon",
+    ("updates.css", ".app-version", "padding"): "the version badge",
+    ("updates.css", "body:has(> .app-version)", "padding-bottom"): "room for the version at the page's end",
+} | {
+    ("content.css", f'.content-tree [data-depth="{depth}"]', "padding-inline-start"): "8 px a level of the tree"
+    for depth in range(1, 9)
+}
+SPACING = re.compile(
+    r"^(?:(?:margin|padding)(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?|gap|row-gap|column-gap)$"
+)
+
+
+def _declarations(css: str) -> list[tuple[str, str, str]]:
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    out, stack, buf = [], [], ""
+    for ch in css:
+        if ch == "{":
+            stack.append(" ".join(buf.split()))
+            buf = ""
+        elif ch == "}":
+            selector = stack.pop() if stack else ""
+            for declaration in buf.split(";"):
+                if ":" in declaration and not selector.startswith("@"):
+                    prop, value = declaration.split(":", 1)
+                    out.append((selector, prop.strip(), value.strip()))
+            buf = ""
+        else:
+            buf += ch
+    return out
+
+
+def _on_scale(value: str) -> bool:
+    value = re.sub(r"var\(--(?:sp-[1-5]|gutter)\)", "T", value)
+    if value == "inherit":
+        return True
+    parts = re.findall(r"calc\([^;]*?\)(?=\s|$)|\S+", value)
+    return all(part in ("0", "T", "auto") or re.fullmatch(r"calc\([T\d\s*+\-/()]*\)", part) for part in parts)
+
+
+def test_every_distance_is_on_the_scale_or_a_named_exception():
+    """No margin, padding or gap in the four style sheets but 0, auto, a token, a calc() of tokens or
+    a listed exception (a component's geometry, with its reason); every exception is still used."""
+    seen, off = set(), []
+    for name in ("app.css", "content.css", "messages.css", "updates.css"):
+        for selector, prop, value in _declarations((STATIC / name).read_text(encoding="utf-8")):
+            if not SPACING.match(prop) or _on_scale(value):
+                continue
+            key = (name, selector, prop)
+            if key in EXCEPTIONS:
+                seen.add(key)
+            else:
+                off.append(f"{name}: {selector} {{ {prop}: {value} }}")
+    assert not off, "\n".join(off)
+    assert seen == set(EXCEPTIONS), set(EXCEPTIONS) - seen

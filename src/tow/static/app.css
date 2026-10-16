@@ -104,7 +104,7 @@ a:hover { text-decoration: underline; }
 .skip {
   position: absolute; left: -999px;
 }
-.skip:focus { left: 8px; top: 8px; z-index: 20; background: var(--panel); padding: .4rem .7rem; }
+.skip:focus { left: var(--gutter); top: var(--sp-3); z-index: 20; background: var(--panel); padding: var(--sp-2) var(--sp-4); }
 /* The sections (left) and the controls (right) keep their width; the site strip in the middle
    takes what is left and scrolls (53 sites made the page 2096 px wide and pushed Settings off it). */
 header.app {
@@ -112,20 +112,20 @@ header.app {
   display: grid;
   grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
   align-items: center;
-  column-gap: .5rem;
-  padding: .22rem .7rem;
+  column-gap: var(--sp-2);
+  /* The page's gutter, and beside a 90 rem page the page's own edge: the header's icons and the
+     content start and end on one line at every width. */
+  padding-block: var(--sp-1);
+  padding-inline: max(var(--gutter), calc((100% - 90rem) / 2));
   background: var(--header-bg);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
 }
 nav {
-  display: flex; align-items: center; flex-wrap: nowrap; gap: .1rem;
+  display: flex; align-items: center; flex-wrap: nowrap; gap: var(--sp-1);
   justify-self: start;
 }
-nav a {
-  color: var(--nav-fg); margin: 0;
-  padding: .28rem; border-radius: 8px;
-}
+nav a { color: var(--nav-fg); border-radius: 8px; }
 /* M8: one header icon: a 32 px square tap target, the same colour in and out of <nav>;
    only the current section (.on) is highlighted. */
 header.app .ico {
@@ -138,11 +138,11 @@ header.app .ico svg { display: block; }
 header.app .ico.on, header.app .ico:hover, header.app .ico:focus-visible {
   background: var(--panel2); color: var(--nav-fg-hi); text-decoration: none; filter: none;
 }
-.hdr-right { display: flex; align-items: center; flex-wrap: nowrap; gap: .4rem; justify-self: end; min-width: 0; max-width: 100%; }
+.hdr-right { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--sp-2); justify-self: end; min-width: 0; max-width: 100%; }
 .hdr-controls { display: flex; align-items: center; gap: inherit; flex: 0 0 auto; }
 .hdr-controls > * { flex: 0 0 auto; }
 .hdr-sites {
-  justify-self: center; display: flex; align-items: center; flex-wrap: nowrap; gap: .7rem;
+  justify-self: center; display: flex; align-items: center; flex-wrap: nowrap; gap: var(--sp-4);
   min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: thin;
   padding-right: 2.5rem; mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
 }
@@ -163,8 +163,8 @@ header.app .ico.on, header.app .ico:hover, header.app .ico:focus-visible {
 .trk-ico:hover, .trk-ico:focus-visible { background: var(--panel2); text-decoration: none; }
 .trk-ico svg { display: block; }
 .hdr-svc {
-  display: flex; align-items: center; gap: .35rem;
-  padding-left: .6rem; margin-right: .15rem;
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding-left: var(--sp-3);
   border-left: 1px solid var(--line); min-width: 0;
 }
 .hdr-svc > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -177,7 +177,7 @@ header.app .ico.on, header.app .ico:hover, header.app .ico:focus-visible {
 .hdr-search > summary::-webkit-details-marker { display: none; }
 .hdr-search[open] > summary { background: var(--panel2); color: var(--nav-fg-hi); }
 .hdr-search input {
-  position: absolute; top: calc(100% + .3rem); left: 0; z-index: 12;
+  position: absolute; top: calc(100% + var(--sp-1)); left: 0; z-index: 12;
   width: 15rem; box-shadow: var(--shadow); /* the standard field (.w-m) */
 }
 a.plus { font-size: 1.35rem; font-weight: 600; line-height: 1; }
@@ -187,7 +187,7 @@ details#new:not([open]) {
 details#new:not([open]) > summary { display: none; }
 details#new[open] > summary { display: none; }
 main {
-  width: min(100% - clamp(1rem, 3vw, 2.5rem), 90rem);
+  width: min(100% - 2 * var(--gutter), 90rem);
   margin-inline: auto;
   padding-block: var(--sp-3); /* the header to the first block, the last block to the page's end: 9 px */
 }
@@ -317,7 +317,7 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
 .secret > button.ico.reveal[aria-pressed="true"] { color: var(--acc); }
 /* S1: a saved password or key says so in its label - a small grey tag, not a sentence under it. */
 .saved-tag {
-  display: inline-block; margin-left: .4rem; padding: 0 .4rem; border-radius: 999px;
+  display: inline-block; margin-left: var(--sp-2); padding: 0 var(--sp-2); border-radius: 999px;
   color: var(--mut); background: var(--panel2); border: 1px solid var(--line-soft);
   font-size: 11px; font-weight: 600; line-height: 1.45; vertical-align: 1px;
 }
@@ -459,7 +459,7 @@ details.row-edit.sites > summary > .pill { justify-self: start; max-width: 100%;
 .log-box { max-height: 18rem; overflow: auto; font: 13px/1.45 "Segoe UI", system-ui, sans-serif; }
 .log-line time { font-variant-numeric: tabular-nums; }
 .log-box:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
-.log-line { padding: .15rem 0; border-bottom: 1px solid var(--line); word-break: break-word; }
+.log-line { padding: var(--sp-1) 0; border-bottom: 1px solid var(--line); word-break: break-word; }
 /* The raw text of a network error, one click away from the words that say it. */
 .log-line details.raw-error { display: inline; color: var(--mut); font-size: 12px; }
 .log-line details.raw-error > summary { display: inline; color: var(--acc); }
@@ -477,11 +477,11 @@ dialog.log-pop[open] { display: flex; flex-direction: column; }
 dialog#download-pop { width: min(92vw, 40rem); }
 dialog.log-pop::backdrop { background: rgba(0,0,0,.55); }
 .log-pop-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: .55rem .9rem; border-bottom: 1px solid var(--line); font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line); font-weight: 600;
   flex: 0 0 auto;
 }
-dialog.log-pop .log-box { flex: 1 1 auto; max-height: none; min-height: 0; padding: .5rem 1rem 1rem; }
+dialog.log-pop .log-box { flex: 1 1 auto; max-height: none; min-height: 0; padding: var(--sp-3) var(--sp-4); }
 .list-head { color: var(--mut); font-size: 12px; border-bottom: 1px solid var(--line); }
 .empty-state {
   display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3);
@@ -521,18 +521,21 @@ details.advanced > summary { width: fit-content; color: var(--acc); font-size: 1
 .steps .step-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-weight: 600; }
 .steps .field-hint { display: block; margin-top: var(--sp-1); }
 .table { width: 100%; border-collapse: collapse; }
-.table th, .table td { text-align: left; padding: .5rem .45rem; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: top; }
+/* A table's cells: 6 px above and below, its columns 12 px apart, its first and last on the card's edges. */
+.table th, .table td { text-align: left; padding: var(--sp-2) var(--sp-4) var(--sp-2) 0; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: top; }
+.table :is(th, td):last-child { padding-right: 0; }
 .table td:nth-child(2) { min-width: 12rem; }
 .pill.pill-wrap { white-space: normal; overflow-wrap: anywhere; }
 /* M4: on a phone a table row becomes a small card: label, then value. */
 @media (max-width: 720px) {
   .table-stack thead { display: none; }
   .table-stack, .table-stack tbody, .table-stack tr, .table-stack td { display: block; width: 100%; }
-  .table-stack tr { position: relative; padding: .45rem 0; border-bottom: 1px solid var(--line); }
-  .table-stack td { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: .5rem; padding: .12rem 0; border: 0; min-width: 0; }
+  .table-stack tr { position: relative; padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+  .table-stack td { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--sp-4); padding: 0; border: 0; min-width: 0; }
   .table-stack td:nth-child(2) { min-width: 0; }
   .table-stack td[data-label]::before { content: attr(data-label); color: var(--mut); font-family: "Segoe UI", system-ui, sans-serif; }
-  .table-stack td.cell-dot { position: absolute; right: 0; top: .6rem; width: auto; display: block; }
+  /* The dot centred on the first line (13 px at 1.5) under the row's 6 px. */
+  .table-stack td.cell-dot { position: absolute; right: 0; top: calc(var(--sp-2) + (13px * 1.5 - 8px) / 2); width: auto; display: block; }
   .table-stack .pill { justify-self: start; }
 }
 .table td { overflow-wrap: anywhere; }
@@ -612,9 +615,9 @@ time[data-short][tabindex] { cursor: help; border-radius: 3px; }
 time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
 .time-tip {
   position: fixed; left: var(--tip-x, 0); top: var(--tip-y, 0); z-index: 40;
-  max-width: calc(100vw - 1rem);
+  max-width: calc(100vw - 2 * var(--sp-2));
   background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: .3rem .55rem; box-shadow: var(--shadow);
+  border-radius: var(--radius); padding: var(--sp-1) var(--sp-2); box-shadow: var(--shadow);
   font-size: 12.5px; line-height: 1.35; white-space: nowrap; pointer-events: none;
 }
 .time-tip[hidden] { display: none; }
@@ -835,7 +838,7 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   :root { --land-top: calc(var(--msg-top, 4.75rem) + var(--msg-h, 0px) + .75rem); } /* a two-row header */
   /* The site list takes the room the services leave (they keep their own width) and scrolls
      sideways; its end fades out, so a cut-off name never runs into the client's name. */
-  header.app { grid-template-columns: minmax(0, 1fr) minmax(0, max-content) auto; grid-template-areas: "nav nav right" "sites services clock"; row-gap: .1rem; }
+  header.app { grid-template-columns: minmax(0, 1fr) minmax(0, max-content) auto; grid-template-areas: "nav nav right" "sites services clock"; row-gap: var(--sp-1); }
   header.app nav { grid-area: nav; }
   .hdr-sites {
     grid-area: sites; min-width: 0; max-width: 100%; justify-self: stretch; overflow-x: auto; justify-content: flex-start;
@@ -843,7 +846,7 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   }
   .hdr-right { display: contents; }
   .hdr-controls { grid-area: right; justify-self: end; }
-  .hdr-svc { grid-area: services; max-width: 55vw; padding-left: .5rem; margin-right: 0; border-left: 1px solid var(--line); }
+  .hdr-svc { grid-area: services; max-width: 55vw; border-left: 1px solid var(--line); }
   .hdr-clock { grid-area: clock; justify-self: end; }
   .list-head { display: none; }
   .list-head, details.row-edit > summary,
@@ -1038,16 +1041,17 @@ svg.i.xs { width: .75rem; height: .75rem; stroke-width: 2.4; }
 .chip.on, .chip:hover { color: var(--fg); border-color: var(--acc2); background: var(--panel2); }
 .sort-picker { position: relative; }
 .sort-picker[hidden], .sort-menu[hidden] { display: none; }
-.sort-toggle.ico { width: 2.5rem; height: var(--btn-h); padding: 0; gap: .15rem; }
+.sort-toggle.ico { width: 2.5rem; height: var(--btn-h); padding: 0; gap: var(--sp-1); }
 .sort-toggle[aria-expanded="true"] { border-color: var(--acc2); background: var(--panel2); }
+/* A menu: 3 px under its button, 3 px inside; its rows touch (each a 26 px target with its own
+   highlight). */
 .sort-menu {
-  position: absolute; top: calc(100% + .25rem); right: 0; z-index: 9;
-  width: max-content; max-width: min(19rem, calc(100vw - 1.5rem));
-  padding: .25rem; border: 1px solid var(--line); border-radius: 8px;
+  position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 9;
+  width: max-content; max-width: min(19rem, calc(100vw - 2 * var(--gutter)));
+  display: grid; padding: var(--sp-1); border: 1px solid var(--line); border-radius: 8px;
   background: var(--panel); box-shadow: var(--shadow);
 }
 .sort-menu .sort-option { width: 100%; justify-content: start; text-align: left; border-color: transparent; }
-.sort-option + .sort-option { margin-top: .2rem; }
 .sort-option svg { flex-shrink: 0; }
 .sort-option:hover, .sort-option:focus-visible { background: var(--panel2); }
 .sort-selected { margin-left: auto; visibility: hidden; }
@@ -1068,10 +1072,12 @@ mark { background: rgba(240,180,41,.35); color: inherit; border-radius: 2px; }
 header.app .attention-menu > summary.ico { position: relative; color: var(--warn); list-style: none; }
 header.app .attention-menu.bad > summary.ico { color: var(--bad); }
 .attention-menu > summary::-webkit-details-marker { display: none; }
+/* The header's panels start on the page's edge (the header's padding), 3 px under the header. */
 .attention-panel {
-  position: absolute; top: calc(100% + .3rem); left: .7rem; z-index: 12;
-  box-sizing: border-box; width: min(28rem, calc(100% - 1.4rem)); max-height: min(26rem, 60dvh);
-  overflow: auto; overscroll-behavior: contain; padding: .7rem;
+  position: absolute; top: calc(100% + var(--sp-1)); left: max(var(--gutter), calc((100% - 90rem) / 2)); z-index: 12;
+  box-sizing: border-box; width: min(28rem, calc(100% - 2 * var(--gutter))); max-height: min(26rem, 60dvh);
+  display: grid; gap: var(--sp-2); line-height: 1.45;
+  overflow: auto; overscroll-behavior: contain; padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
   box-shadow: var(--shadow); font-size: 13px;
 }
@@ -1085,9 +1091,9 @@ header.app .attention-menu.bad > summary.ico { color: var(--bad); }
 .attention-link.bad::before { background: var(--bad); }
 /* Each item is a link to the problem: the whole line is the target (at least 32 px high), with
    a chevron saying it goes somewhere. */
-.attention-list { margin: .25rem 0 0; padding: 0; list-style: none; }
+.attention-list { padding: 0; list-style: none; }
 .attention-link {
-  display: flex; align-items: center; gap: .5rem; min-height: 2rem; padding: .3rem .4rem; border-radius: 6px;
+  display: flex; align-items: center; gap: var(--sp-2); min-height: 2rem; padding: var(--sp-1) var(--sp-2); border-radius: 6px;
   color: var(--acc); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-underline-offset: .18em;
 }
@@ -1103,15 +1109,15 @@ header.app .attention-menu.bad > summary.ico { color: var(--bad); }
 .attention-menu.bad .attention-count { background: var(--bad); }
 
 /* G7: history page */
-.history-filter { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; margin: .4rem 0 .7rem; }
+.history-filter { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); align-items: center; }
 .history-filter form { margin: 0; }
 .history-filter input { width: 100%; }
 .chip:hover, .chip:focus-visible { text-decoration: none; }
-.history-box { max-height: none; padding: .6rem .9rem; }
-.log-history-link { margin-left: auto; margin-right: .6rem; font-size: 12px; font-weight: 400; }
-.log-pop-head .log-full-times { margin-right: .5rem; font-weight: 400; white-space: nowrap; }
+.history-box { max-height: none; padding: var(--sp-3) var(--sp-4); }
+.log-history-link { margin-left: auto; font-size: 12px; font-weight: 400; }
+.log-pop-head .log-full-times { font-weight: 400; white-space: nowrap; }
 /* A phone: the head wraps whole parts (the button kept "Full timestamps" on one line). */
-.log-pop-head:has(.log-full-times) { flex-wrap: wrap; row-gap: .3rem; }
+.log-pop-head:has(.log-full-times) { flex-wrap: wrap; row-gap: var(--sp-1); }
 /* C5: a list's "Full timestamps" toggle shows when it is on. */
 button[data-full-times][aria-pressed="true"] { color: var(--fg); border-color: var(--acc2); background: var(--panel2); }
 
@@ -1133,8 +1139,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 @media (max-width: 480px) {
   /* Statuses and countdown occupy their own grid cells below the navigation. */
   .hdr-clock { line-height: 1; }
-  .hdr-right { gap: .25rem; }
-  .hdr-svc { gap: .2rem; }
   /* "Undo" shows as an arrow (its text stays for screen readers and in the tooltip). */
   .undo-ico { display: block; }
   .undo-btn .undo-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
@@ -1163,10 +1167,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
      badge only steps aside for controls; a phone has no free corner for it). */
   body { position: relative; padding-bottom: 2.2rem; }
   body > .app-version { position: absolute; }
-}
-@media (max-width: 374px) {
-  header.app { padding-inline: .35rem; }
-  header.app nav { gap: 0; }
 }
 
 /* Where a "Needs attention" link lands (#anchor, or ?spot= marked .landed by app.js): the spot
@@ -1224,8 +1224,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* The forms (.form-grid): a fieldset's fields 9 px apart like the form's own groups; the compact
    page's per-field margins do not add to that gap. */
 .settings-page .form-grid > fieldset { display: grid; gap: var(--sp-3); min-width: 0; }
-/* An intro line above the cards keeps clear of the first one. */
-.settings-panel > p:not(:last-child) { margin-bottom: .5rem; }
 /* Hints and notes outside a form keep a readable line too. */
 .settings-panel :is(.field-hint, .action-hint, .section-note, .check-field p, .notifier-steps ol) { max-width: 68ch; }
 /* A panel's intro and its notes run as wide as its widest field (.w-xl) rather than stopping at
@@ -1337,7 +1335,7 @@ details.advanced > .form-grid { margin-top: var(--sp-2); }
 .history-filter > form[role="search"] { flex: 0 1 15rem; }
 /* On a phone it takes a full line, as every field there does (it stopped at 296 of 374 px, QA Q11). */
 @media (max-width: 720px) { .history-filter > form[role="search"] { flex: 1 1 100%; } }
-.history-empty { margin: .15rem 0; color: var(--mut); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; }
+.history-empty { color: var(--mut); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; }
 /* First start: the password fields only for a yes to "open TOW from other devices" (without
    :has() they stay in view, and a password typed with the box clear is saved as before). */
 .setup-form:not(:has(#allow-lan:checked)) .lan-password { display: none; }

@@ -11,6 +11,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   their field, the groups of a form 9 px apart, the buttons 9 px under the last field on every screen (there were
   14 different gaps above them), a disclosure's text 6 px under its title. The browser's own blank lines under
   paragraphs and lists are gone (sign-in, Updates, Diagnostics, the guide), so every screen is shorter.
+- The header and the page share one edge: 12 px on a phone (the content stood 8 px from the edge and the header's
+  icons 11 px), up to 20 px on a wide screen, and the page's own edge beside its 1440 px column. Every box has
+  equal padding on both sides (a topic's or a site's edit panel had 6 px above and 16 px below), and every title
+  after an arrow starts 18 px from it, as a list's text after its number.
 
 ## [1.32.2] — 2026-10-16
 
