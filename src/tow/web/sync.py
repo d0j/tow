@@ -59,7 +59,9 @@ from tow.store import SecretStoreError
 from tow.web import _context, check_jobs, services
 
 SCHEMA = 1
-SAMPLE_SEC = 5.0
+# A file another process wrote (a scheduled check, the supervisor) reaches a page within one
+# poll (5 s) plus one sample: at most 6 s. A sample of 2,000 topics costs about 7 ms.
+SAMPLE_SEC = 1.0
 REV_HEX = 32  # 128 bits of the SHA-256
 AREAS = ("topics", "jobs", "header", "attention", "timers", "messages", "undo", "config", "version", "release", "page")
 PAGES = ("/", "/sites", "/settings", "/history")
