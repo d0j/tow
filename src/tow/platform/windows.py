@@ -39,8 +39,8 @@ CREATE_NEW_PROCESS_GROUP = 0x00000200
 CREATE_NEW_CONSOLE = 0x00000010
 CREATE_NO_WINDOW = 0x08000000
 CREATE_BREAKAWAY_FROM_JOB = 0x01000000
-_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-_STILL_ACTIVE = 259
+_SYNCHRONIZE = 0x00100000  # enough to wait for a process: the least any account is refused
+_WAIT_OBJECT_0 = 0
 _ERROR_ACCESS_DENIED = 5
 
 
@@ -222,28 +222,46 @@ def port_owner(port: int) -> dict[str, Any] | None:
     return value if isinstance(value, dict) and value.get("pid") else None
 
 
+def _kernel32_with_last_error() -> Any:
+    """kernel32 whose calls keep their own last error (``ctypes.get_last_error``): through
+    ``windll`` another call in between may already have replaced it. AttributeError where there
+    is no Windows."""
+    if getattr(ctypes, "windll", None) is None or not hasattr(ctypes, "get_last_error"):
+        raise AttributeError("ctypes.windll")
+    return ctypes.WinDLL("kernel32", use_last_error=True)
+
+
 def process_alive(pid: int) -> bool:
-    """Whether ``pid`` is running (never ``os.kill``: on Windows that terminates the process)."""
+    """Whether ``pid`` is running (never ``os.kill``: on Windows that terminates the process).
+
+    A zero-time wait on the process: signalled means it has ended, whatever its exit code (one
+    that ended with 259, STILL_ACTIVE, read as running for ever). Another account's process that
+    may not be opened exists; a wait that fails proves nothing ended: both count as running."""
     try:
         pid = int(pid)
-        kernel32 = _dll("kernel32")
-    except AttributeError, TypeError, ValueError:
+        kernel32 = _kernel32_with_last_error()
+    except AttributeError, OSError, TypeError, ValueError:
         return False
-    if pid <= 0:
+    if pid <= 0 or pid > 0xFFFFFFFF:
         return False
-    with contextlib.suppress(AttributeError):
-        kernel32.OpenProcess.restype = ctypes.c_void_p  # a HANDLE, not a C int
-    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    from ctypes import wintypes
+
+    with contextlib.suppress(AttributeError, TypeError):
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel32.CloseHandle.restype = wintypes.BOOL
+    handle = kernel32.OpenProcess(_SYNCHRONIZE, False, pid)
     if not handle:
-        # Another user's process cannot be opened, but it exists.
-        return bool(kernel32.GetLastError() == _ERROR_ACCESS_DENIED)
+        return ctypes.get_last_error() == _ERROR_ACCESS_DENIED  # ERROR_INVALID_PARAMETER: no such process
     try:
-        code = ctypes.c_ulong()
-        if not kernel32.GetExitCodeProcess(ctypes.c_void_p(handle), ctypes.byref(code)):
-            return False
-        return code.value == _STILL_ACTIVE
+        return bool(kernel32.WaitForSingleObject(handle, 0) != _WAIT_OBJECT_0)
+    except OSError:
+        return True
     finally:
-        kernel32.CloseHandle(ctypes.c_void_p(handle))
+        kernel32.CloseHandle(handle)
 
 
 def process_command(pid: int) -> str | None:
