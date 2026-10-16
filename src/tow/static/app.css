@@ -289,6 +289,13 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
 }
 .secret > button.ico.reveal:hover { color: var(--fg); background: var(--panel); filter: none; }
 .secret > button.ico.reveal[aria-pressed="true"] { color: var(--acc); }
+/* S1: a saved password or key says so in its label - a small grey tag, not a sentence under it. */
+.saved-tag {
+  display: inline-block; margin-left: .4rem; padding: 0 .4rem; border-radius: 999px;
+  color: var(--mut); background: var(--panel2); border: 1px solid var(--line-soft);
+  font-size: 11px; font-weight: 600; line-height: 1.45; vertical-align: 1px;
+}
+:is(.integration-card, .edit-panel) .saved-tag { background: var(--panel); }
 /* One form layout (Settings, Sites, the add and edit forms, dialogs): at most 46 rem wide, its
    groups (a .field: label, field, hint; a .field-row; a check field; the buttons) 9 px apart, a
    label 3 px above its field, help text at most 68 characters a line. The form is the container
