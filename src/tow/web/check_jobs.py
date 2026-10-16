@@ -34,6 +34,9 @@ FOLLOW_UPS: dict[str, FollowUp] = {}
 # The consumer of each lane, by the lane's ``apply``.
 _WORKERS: dict[bool, threading.Thread] = {}
 MAX_PENDING = 32  # per lane
+# Page action ids kept: one per click, and the clicks that share a waiting check all point at it
+# while it lives (an hour after it ends) - the oldest go first.
+MAX_ACTIONS = 256
 RESULT_TTL = 3600
 # How long a manual check waits for the check lock: a scheduled check's 3600-second maximum and
 # five minutes for its cleanup. Then it ends as not run; it is tried once a second until then.
@@ -80,7 +83,7 @@ def submit(
                 # The latest click is the owner's request: what it may re-add (``run_check``).
                 job["requested_at"] = time.time()
                 if action:
-                    ACTIONS[action] = job["id"]
+                    _register(action, job["id"])
                 if follow_up is not None:
                     FOLLOW_UPS[job["id"]] = follow_up
                 return get(job["id"]), False
@@ -109,7 +112,7 @@ def submit(
         JOBS[job["id"]] = job
         PENDING.append(job["id"])
         if action:
-            ACTIONS[action] = job["id"]
+            _register(action, job["id"])
         if follow_up is not None:
             FOLLOW_UPS[job["id"]] = follow_up
         worker = _WORKERS.get(apply)
@@ -123,6 +126,14 @@ def submit(
                 FOLLOW_UPS.pop(job["id"], None)
                 raise
         return get(job["id"]), True
+
+
+def _register(action: str, job_id: str) -> None:
+    """Remember the job of a page's action id (the caller holds LOCK); bounded by MAX_ACTIONS."""
+    ACTIONS.pop(action, None)
+    ACTIONS[action] = job_id
+    while len(ACTIONS) > MAX_ACTIONS:
+        del ACTIONS[next(iter(ACTIONS))]
 
 
 def _start(name: str, target: Callable[..., None], *args: Any) -> threading.Thread:
