@@ -12,6 +12,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Every field is one of three sizes on every screen: short for numbers (88 px), standard for passwords, names,
   tokens, keys, addresses and every list to choose from (240 px), long for links, folders, site paths and rules
   (576 px). The sign-in password, a Telegram token, a WhatsApp phone and the site paths had other widths.
+- Every password, token and key field is the same on every screen, sign-in and first start included: the same
+  size, the same eye, the same "saved" tag and "Leave empty to keep". Every label sits the same 3 px above its
+  field, and fields that share a line are the same 12 px apart (the site-access limits were spread over the card).
 
 ## [1.32.1] — 2026-10-16
 

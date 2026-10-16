@@ -631,7 +631,8 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
 .settings-form { display: grid; gap: .75rem; padding-top: .8rem; }
 .settings-form.compact-form { max-width: 42rem; }
 .settings-form fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-.field { display: grid; gap: .28rem; min-width: 0; }
+/* A label 3 px above its field on every screen (Settings had 2.6 px, a field outside a form 4.5). */
+.field { display: grid; gap: .1875rem; min-width: 0; }
 .field + .field { margin-top: .7rem; }
 /* One label style everywhere (the global one); a checkbox label reads as text. */
 .field label, .settings-form label { margin: 0; }
@@ -882,7 +883,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .settings-page-compact .service-restart h2,
 .settings-page-compact .backup-card h2 { font-size: 13.5px; }
 .settings-page-compact .settings-form { gap: .48rem; padding-top: .5rem; }
-.settings-page-compact .field { gap: .16rem; }
 .settings-page-compact .field + .field { margin-top: .5rem; }
 
 .settings-page-compact .check-field { padding: .32rem 0; }
@@ -1282,9 +1282,6 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
    share their line. */
 .protection-card .field-row > .field:has(.w-xs) { flex: 0 0 auto; }
 .protection-card .field-row > .field:has(.w-xs) > label { white-space: nowrap; }
-@container (min-width: 38rem) {
-  .protection-limits .field-row > .field { flex: 1 1 0; }
-}
 /* Version and updates: a section inside another reads as inside it. */
 .technical-details .technical-details { margin-left: 1rem; }
 /* == screens == */
