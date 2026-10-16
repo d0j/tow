@@ -90,6 +90,17 @@ refuse_interrupted() {
     fi
 }
 
+# uv's own temporary files (its lock files) stay inside an install: runtime/uv-tmp, which TOW never
+# sweeps (data/tmp is swept daily, and a lock file removed while it is held is no lock).
+uv_temp() {
+    [ "$TOW_ROOT" != "$TOW_APP" ] || return 0
+    mkdir -p "$TOW_ROOT/runtime/uv-tmp"
+    TMPDIR=$TOW_ROOT/runtime/uv-tmp
+    TMP=$TMPDIR
+    TEMP=$TMPDIR
+    export TMPDIR TMP TEMP
+}
+
 if [ "${1:-}" = setup ]; then
     refuse_interrupted
     shift
@@ -143,13 +154,7 @@ if [ "${1:-}" = setup ]; then
             esac
         fi
     done
-    # uv's own temporary files (its lock files) stay inside the install: runtime/uv-tmp, which TOW
-    # never sweeps (data/tmp is swept daily, and a lock file removed while it is held is no lock).
-    mkdir -p "$TOW_ROOT/runtime/uv-tmp"
-    TMPDIR=$TOW_ROOT/runtime/uv-tmp
-    TMP=$TMPDIR
-    TEMP=$TMPDIR
-    export TMPDIR TMP TEMP
+    uv_temp
     # The Python of .python-version, into runtime/python; no copies on PATH.
     "$uv" python install --no-bin
     "$uv" sync --frozen --no-dev
@@ -171,4 +176,5 @@ if [ -x "$TOW_APP/.venv/bin/tow" ]; then
 fi
 # Not set up yet: uv runs TOW from the locked environment.
 refuse_interrupted
+uv_temp
 exec "$uv" run --frozen --no-dev --project "$TOW_APP" tow "$@"
