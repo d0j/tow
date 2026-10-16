@@ -304,3 +304,51 @@ def home_redirect(
     if query:
         location += "?" + "&".join(query)
     return flash_redirect(location, message, kind, **params)
+
+
+# --- Recent messages: one list for every signed-in device (tow.messages_feed) -------------------
+#
+# The panel's list is the server's feed (``GET /messages.json``); read and cleared are shared
+# markers in data/ui.json (``POST /messages/read``, ``POST /messages/clear``). The strip above
+# stays this tab's feedback on its own action (``flash_redirect``): it never counts as unread.
+
+
+def _names() -> tuple[dict[str, str], dict[str, str]]:
+    """Topics and sites named as they are now (the History's indexes), once per request."""
+    from tow.log import index_event_titles, index_site_titles
+
+    def build() -> tuple[dict[str, str], dict[str, str]]:
+        return index_event_titles(_context.state().get("topics") or []), index_site_titles(_context.config())
+
+    return _context.memo("message_feed_names", build)
+
+
+def feed_payload(snapshot: Any = None, *, wait: float = 2.0) -> dict[str, Any]:
+    """The feed in this request's language, with its revision (``messages_revision``)."""
+    current = snapshot if snapshot is not None else services.message_feed().snapshot(wait=wait)
+    title_index, site_titles = _names()
+    return services.render_message_feed(
+        current.projection, lang=i18n.current(), title_index=title_index, site_titles=site_titles
+    )
+
+
+def messages_revision(*, wait: float = 0.0) -> str:
+    """The revision of Recent messages in the current language: an opaque SHA-256 token (128 bits)
+    of the whole feed - entries, words, read state - equal on every device that sees the same
+    list. For ``/sync.json``: it never waits for the log reader unless ``wait`` says so (the
+    reader refreshes in the background), never takes the log or the data lock, and changes
+    when an entry expires, without another event."""
+    return str(feed_payload(wait=wait)["revision"])
+
+
+def mark_messages(cursor: str, *, clear: bool) -> dict[str, Any]:
+    """Read (``clear``: and clear) the feed up to the displayed entry ``cursor`` for every device;
+    the new feed. Raises ``services.MessageMarkerRefused`` (a stale cursor) or OSError (the
+    markers could not be saved)."""
+    snapshot = services.message_feed().mark(cursor, clear=clear)
+    return feed_payload(snapshot)
+
+
+def reconcile_update_results() -> bool:
+    """The result of a finished web update in the feed, once per job (its operation id)."""
+    return bool(services.reconcile_update_result(services.finished_web_update()))

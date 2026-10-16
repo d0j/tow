@@ -1,9 +1,14 @@
-// Recent messages: the result of an action - a message the server left after a redirect, a
-// failure app.js met, a check's result - is shown once in the strip at the top of <main>, then
-// collapses into the header's message icon, coloured by the worst unread one, and stays in this
-// tab's history (sessionStorage). Every message goes through window.towMessages.showMessage(record).
+// Recent messages. The panel's list is the install's own (GET /messages.json): the same entries,
+// order and read state on every signed-in device; reading and clearing go to the server (POST
+// /messages/read, /messages/clear) for every device. The strip at the top of <main> is this tab's
+// feedback on its own action - a message the server left after a redirect, a failure app.js met,
+// a check's progress and result - shown once, then kept under "This tab" in the panel while the
+// page lives (memory only); it never counts as unread. Every strip message goes through
+// window.towMessages.showMessage(record); window.towMessages.refresh() asks the server again (the
+// panel opening, the tab shown again, and sync.js's poll call it). Earlier versions kept a list
+// per tab in sessionStorage: it is removed with one notice, never uploaded.
 // The words a screen reader says come only from the page's two empty live regions, once per
-// message: never again on a reload, from the history or from a countdown.
+// message: never again on a reload, from the list or from a countdown.
 (() => {
   const KINDS = ["ok", "info", "warn", "err"];
   // Time in the foreground before the strip collapses (paused while hovered, focused or hidden).
@@ -11,7 +16,10 @@
   const RANK = { info: 0, ok: 1, warn: 2, err: 3 };
   const LIMIT = 50;
   const MAX_AGE_MS = 24 * 3600 * 1000;
-  const PREFIX = "tow.messages.";
+  // What a tab keeps: the ids it has said (a reload never says one again), no words.
+  const PREFIX = "tow.announced.";
+  const LEGACY = "tow.messages."; // the per-tab history of 1.32 and older
+  const ANNOUNCED_LIMIT = 200;
 
   const clean = (value, max) => String(value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ")
     .trim().slice(0, max);
@@ -53,6 +61,7 @@
   } = {}) => {
     let memoryOnly = !storage;
     let hidden = false;
+    let announced = [];
     let active = null; // { id, left, holds, timer, since }
     const pending = []; // ids that wait for the strip while it is in use
     const words = new Map(); // id -> the unscrubbed words of a message shown now (never stored)
@@ -75,26 +84,33 @@
         announced: raw?.announced === true,
       };
     };
+    // This tab's messages live in memory; only the ids it has said are kept for the tab.
     const load = () => {
       if (memoryOnly) return [];
       try {
-        // Another install or another sign-in in this tab: its messages go.
+        // Another install or another sign-in in this tab: its ids go.
         for (const name of storage.keys()) if (name && name.startsWith(PREFIX) && name !== key) storage.remove(name);
         const data = JSON.parse(storage.get(key) || "null");
-        return Array.isArray(data?.items) ? data.items.slice(0, LIMIT).map((item) => normalize(item)) : [];
+        return Array.isArray(data?.ids) ? data.ids.slice(-ANNOUNCED_LIMIT).map((id) => clean(id, 80)) : [];
       } catch {
-        memoryOnly = true; // blocked or damaged: this page keeps its messages in memory
+        memoryOnly = true; // blocked or damaged: this page remembers in memory only
         return [];
       }
     };
-    let items = load();
+    announced = load();
+    let items = [];
     const save = () => {
       if (memoryOnly) return;
       try {
-        storage.set(key, JSON.stringify({ v: 1, items }));
+        storage.set(key, JSON.stringify({ v: 2, ids: announced.slice(-ANNOUNCED_LIMIT) }));
       } catch {
         memoryOnly = true;
       }
+    };
+    const said = (id) => {
+      if (announced.includes(id)) return;
+      announced.push(id);
+      if (announced.length > ANNOUNCED_LIMIT) announced = announced.slice(-ANNOUNCED_LIMIT);
     };
     const find = (id) => items.find((item) => item.id === id) || null;
     const undoLive = (item, at = now()) => Boolean(item?.undo) && item.undoUntil > at;
@@ -154,8 +170,16 @@
     const show = (raw, { replace = false, quiet = false } = {}) => {
       const item = normalize(raw);
       const known = find(item.id);
-      // A page opened again (reload, Back) brings its message from the history, not as news.
+      // A page opened again (reload, Back) brings its message back as read, not as news.
       if (known && !replace) return known;
+      if (!known && !replace && announced.includes(item.id)) {
+        item.read = true;
+        item.announced = true;
+        items.unshift(item);
+        prune();
+        changed();
+        return item;
+      }
       if (known) items.splice(items.indexOf(known), 1);
       if (known && quiet) { // an update in place (a check's progress): not news again
         item.read = known.read;
@@ -167,6 +191,7 @@
       prune();
       if (!quiet) {
         item.announced = true;
+        said(item.id);
         announce(item, words.get(item.id));
       }
       if (active?.id === item.id) {
@@ -259,6 +284,7 @@
     };
     const unread = () => items.filter((item) => !item.read);
     return {
+      normalize: (raw) => normalize(raw),
       show,
       remove,
       dismiss,
@@ -281,13 +307,14 @@
       // Signed out: this tab's messages go, of every install and sign-in.
       clearStorage: () => {
         items = [];
+        announced = [];
         pending.length = 0;
         if (active) collapse("cleared", false);
         // Also when a failed write made the history keep its messages in memory only.
         if (!storage) return;
         let names = [key];
         try {
-          names = [...new Set([key, ...storage.keys().filter((name) => name && name.startsWith(PREFIX))])];
+          names = [...new Set([key, ...storage.keys().filter((name) => name && (name.startsWith(PREFIX) || name.startsWith(LEGACY)))])];
         } catch {
           // the list cannot be read: this tab's own key at least
         }
@@ -340,7 +367,6 @@
   const menu = document.querySelector("[data-messages]");
   const toggle = menu?.querySelector("[data-messages-toggle]");
   const count = menu?.querySelector("[data-messages-count]");
-  const panel = menu?.querySelector("[data-messages-panel]");
   const list = menu?.querySelector("[data-messages-list]");
   const empty = menu?.querySelector("[data-messages-empty]");
 
@@ -386,9 +412,13 @@
       if (region) region.textContent = "";
     });
     center.clearStorage();
+    shared = emptyFeed();
     render();
   };
 
+  // The install's list, as the server last said it (memory only: never stored in the tab).
+  const emptyFeed = () => ({ items: [], unread: 0, worst: "", cursor: "", etag: "", loaded: false });
+  let shared = emptyFeed();
   let render = () => {};
   const center = createCenter({
     storage,
@@ -546,9 +576,9 @@
   };
   // One entry of the history; patched in place when its message changes (a check's progress,
   // then its result), so the open panel shows what the strip shows.
-  const entrySign = (item) => `${item.kind}|${item.subject}|${item.text}|${item.at}|${actionShape(item)}`;
+  const entrySign = (item) => `${item.kind}|${item.subject}|${item.text}|${item.at}|${item.shared && !item.read}|${actionShape(item)}`;
   const fillEntry = (row, item) => {
-    row.className = `msg-entry ${item.kind}${item.read ? "" : " unread"}`;
+    row.className = `msg-entry ${item.kind}${item.shared && !item.read ? " unread" : ""}`;
     row.dataset.sign = entrySign(item);
     const head = element("div", "msg-entry-head");
     head.append(icon(ICONS[item.kind]), element("span", "msg-entry-kind", KIND_WORDS[item.kind]), when(item.at));
@@ -574,41 +604,46 @@
     fillEntry(row, item);
     return row;
   };
+  // The shared entries, then this tab's own feedback under its heading (not counted as unread).
+  const sharedItem = (raw) => {
+    const item = center.normalize(raw);
+    item.read = raw?.read === true;
+    item.shared = true;
+    return item;
+  };
   let listShape = "";
+  const section = () => {
+    const row = element("li", "msg-section", t("js.messages.this_tab"));
+    row.dataset.section = "tab";
+    return row;
+  };
   const drawList = () => {
     if (!list || !menu?.open) return;
-    const items = center.items();
-    const shape = items.map((item) => item.id).join("|");
-    let changed = false;
+    const sharedItems = shared.items.map(sharedItem);
+    const local = center.items();
+    const all = [...sharedItems, ...local];
+    const shape = `${sharedItems.map((item) => item.id).join("|")}#${local.map((item) => item.id).join("|")}`;
     if (shape !== listShape) {
       const focusedId = list.contains(document.activeElement) ? document.activeElement.closest?.("[data-message-id]")?.dataset.messageId : "";
       listShape = shape;
-      const rows = items.map(entry);
+      const rows = [...sharedItems.map(entry), ...(local.length ? [section()] : []), ...local.map(entry)];
       list.replaceChildren(...rows);
       if (focusedId) (rows.find((row) => row.dataset.messageId === focusedId)?.querySelector("a, button") || toggle)?.focus();
-      changed = true;
     } else {
       list.querySelectorAll("li[data-message-id]").forEach((row) => {
-        const item = center.find(row.dataset.messageId);
-        if (item && row.dataset.sign !== entrySign(item)) {
-          fillEntry(row, item);
-          changed = true;
-        }
+        const item = all.find((one) => one.id === row.dataset.messageId);
+        if (item && row.dataset.sign !== entrySign(item)) fillEntry(row, item);
       });
     }
-    list.querySelectorAll("li[data-message-id]").forEach((row) => {
-      row.classList.toggle("unread", !center.find(row.dataset.messageId)?.read);
-    });
-    if (empty) empty.hidden = items.length > 0;
-    // A new or changed entry is read only once the open panel shows it.
-    if (changed) window.setTimeout(() => markShown(), 300);
+    if (empty) empty.hidden = all.length > 0;
   };
   const drawIcon = () => {
     if (!menu || !toggle) return;
-    const unread = center.unread();
-    const worst = center.worst();
+    // Unread and the colour are the install's list only: this tab's feedback is not "unread".
+    const unread = shared.unread;
+    const worst = shared.worst;
     // Shown while there is a message, a live Undo, or a check this tab still follows (checks.js).
-    const shown = center.items().length > 0 || Boolean(center.liveUndo()) || (window.towChecks?.count?.() || 0) > 0;
+    const shown = shared.items.length > 0 || center.items().length > 0 || Boolean(center.liveUndo()) || (window.towChecks?.count?.() || 0) > 0;
     if (!shown && menu.contains(document.activeElement)) document.getElementById("log-open")?.focus();
     if (!shown) menu.open = false;
     menu.hidden = !shown;
@@ -649,30 +684,90 @@
     keepTicking();
   };
 
-  // Entries are read when the open panel shows them, not because it opened (one below its fold
-  // stays unread).
-  const markShown = () => {
-    if (!menu?.open || !panel || !list) return;
-    const view = panel.getBoundingClientRect();
-    const seen = [];
-    list.querySelectorAll("li.unread[data-message-id]").forEach((row) => {
-      const box = row.getBoundingClientRect();
-      if (box.height > 0 && box.bottom > view.top && box.top < view.bottom) seen.push(row.dataset.messageId);
-    });
-    center.markRead(seen);
+  // The server: the list (conditional GET: unchanged costs a 304), read and clear (POST, for every
+  // device). One request at a time; a refresh asked meanwhile runs once it ends. An answer of an
+  // older session (signed out meanwhile) is dropped.
+  let inFlight = null;
+  let again = false;
+  const accept = (data, etag = "") => {
+    if (!data || !Array.isArray(data.items)) return;
+    shared = {
+      items: data.items.slice(0, LIMIT),
+      unread: Math.max(0, Number(data.unread) || 0),
+      worst: KINDS.includes(data.worst) ? data.worst : "",
+      cursor: typeof data.cursor === "string" ? data.cursor : "",
+      etag,
+      loaded: true,
+    };
+    render();
+  };
+  const refresh = () => {
+    if (typeof fetch !== "function") return Promise.resolve();
+    if (inFlight) {
+      again = true;
+      return inFlight;
+    }
+    const mine = session;
+    const headers = { Accept: "application/json" };
+    if (shared.etag) headers["If-None-Match"] = shared.etag;
+    inFlight = fetch("/messages.json", { credentials: "same-origin", cache: "no-store", headers })
+      .then(async (response) => {
+        if (mine !== session || response.status === 304) return;
+        if (response.status === 401) {
+          shared = emptyFeed(); // signed out: nothing of the list stays on the page
+          render();
+          return;
+        }
+        if (!response.ok) return;
+        accept(await response.json(), response.headers?.get?.("ETag") || "");
+      })
+      .catch(() => {})
+      .finally(() => {
+        inFlight = null;
+        if (again) {
+          again = false;
+          refresh();
+        }
+      });
+    return inFlight;
+  };
+  const failed = (text) => center.show({ kind: "err", text: text || t("js.messages.not_saved") });
+  // Read or clear up to the newest entry this page shows: an entry that arrived since stays.
+  const mark = (path) => {
+    if (typeof fetch !== "function" || !shared.cursor) return Promise.resolve();
+    const mine = session;
+    const body = new URLSearchParams({ cursor: shared.cursor });
+    return fetch(path, { method: "POST", credentials: "same-origin", headers: { Accept: "application/json" }, body })
+      .then(async (response) => {
+        if (mine !== session) return;
+        let data = null;
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+        if (response.ok) {
+          accept(data);
+          return;
+        }
+        if (response.status === 409) {
+          shared.etag = "";
+          refresh(); // another device changed the list meanwhile: shown anew
+          return;
+        }
+        failed(data?.error);
+      })
+      .catch(() => failed(""));
   };
   if (menu && toggle) {
-    let scrolled = 0;
     menu.addEventListener("toggle", () => {
       if (!menu.open) return;
       center.collapse("panel"); // the strip's message is in the list now: not shown twice
       listShape = "";
       drawList();
-      window.setTimeout(markShown, 300);
-    });
-    panel?.addEventListener("scroll", () => {
-      window.clearTimeout(scrolled);
-      scrolled = window.setTimeout(markShown, 150);
+      // Opening the panel reads what it shows (a poll never does).
+      if (shared.unread > 0) mark("/messages/read");
+      else refresh();
     });
     menu.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || !menu.open) return;
@@ -687,9 +782,13 @@
     menu.addEventListener("focusout", (event) => {
       if (event.relatedTarget && !menu.contains(event.relatedTarget)) menu.open = false;
     });
-    menu.querySelector("[data-messages-read]")?.addEventListener("click", () => center.markAllRead());
+    menu.querySelector("[data-messages-read]")?.addEventListener("click", () => {
+      center.markAllRead();
+      mark("/messages/read");
+    });
     menu.querySelector("[data-messages-clear]")?.addEventListener("click", () => {
-      center.clear();
+      center.clear(); // this tab's feedback goes too (a live Undo stays)
+      mark("/messages/clear");
       toggle.focus();
     });
   }
@@ -706,7 +805,14 @@
   window.addEventListener?.("resize", place);
   if (typeof ResizeObserver === "function") new ResizeObserver(place).observe(host);
 
-  document.addEventListener("visibilitychange", () => (document.hidden ? center.hold("hidden") : center.release("hidden")));
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      center.hold("hidden");
+      return;
+    }
+    center.release("hidden");
+    refresh(); // shown again: the list as it is now
+  });
   if (document.hidden) center.hold("hidden");
   // Signing out ends this tab's history with the session.
   document.addEventListener("submit", (event) => {
@@ -729,6 +835,33 @@
     if (record.text) center.show(record);
   }
   center.setUndo({ stamp, until, text: host.dataset.undoText || "" });
+  // The per-tab history of earlier versions: removed, never uploaded, said once.
+  const retireLegacy = () => {
+    if (!storage) return;
+    let names = [];
+    let had = false;
+    try {
+      names = storage.keys().filter((name) => name && name.startsWith(LEGACY));
+      had = names.some((name) => {
+        try {
+          return (JSON.parse(storage.get(name) || "null")?.items?.length || 0) > 0;
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return;
+    }
+    names.forEach((name) => {
+      try {
+        storage.remove(name);
+      } catch {
+        // stays; it is never read again
+      }
+    });
+    if (had) center.show({ id: "legacy-retired", kind: "info", text: t("js.messages.legacy_retired") });
+  };
+  retireLegacy();
   // Without a script the header keeps its own "Undo"; with one it is the message's.
   const headerUndo = document.querySelector("header.app #undo-form");
   if (headerUndo) headerUndo.hidden = true;
@@ -756,7 +889,14 @@
     // The session ended: this tab's history goes (checks.js stops following its checks too).
     signOut,
     session: () => session,
-    refresh: () => render(),
+    // Ask the server for the list again (conditional; one request at a time) and draw.
+    refresh: () => {
+      render();
+      return refresh();
+    },
+    // The list as the server last said it (a copy), for other scripts and tests.
+    shared: () => ({ ...shared, items: shared.items.slice() }),
     center,
   };
+  refresh(); // this install's list: what was said before this page never pops up
 })();

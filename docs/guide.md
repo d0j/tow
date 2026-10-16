@@ -368,11 +368,26 @@ The left column is the text TOW shows (on Home, in a row, in a message or on a p
 Every message after an action appears once at the top of the page, starting with the topic, site or client it is
 about: green when it worked, neutral for information, amber for a warning, red for an error. It folds into the
 **Recent messages** icon in the header after 10 seconds (a warning after 25, an error after 30; not while the
-pointer or keyboard is on it, × folds it at once). The icon takes the colour of the worst unread message and
-shows how many are unread; it lists this browser tab's last 50 messages of the past day, with **Mark all read**
-and **Clear history**. Problems that last (a topic error, a client that does not answer) stay in **Needs
-attention** until they are fixed. Folding or closing a message does not clear the topic's error or its History
-record.
+pointer or keyboard is on it, × folds it at once). The icon lists what TOW did and found, the same list on
+every signed-in browser and computer: up to 50 messages from the last seven days of the log (rotation of a busy
+log can shorten that), newest first. Read and cleared are shared too: opening the list marks what it shows
+read on every device; **Clear history** removes what you see, and a message that arrived meanwhile stays. The
+icon takes the colour of the worst unread message and shows how many are unread. Under **This tab** the list
+keeps this tab's own results until the page is closed; they never count as unread. What is in the list:
+
+| Kind | Messages |
+|---|---|
+| Downloads | a torrent added, started or updated in the client, a new file or version, a completed file or episode, an adopted, stopped or moved torrent; a failed add or move (red) |
+| Checks | a failed check (amber for a site's connection trouble, red for everything else; many topics of one site are one message), a blocked check, a client that does not answer; a check that works again |
+| Your changes | a topic, site or setting saved, removed, paused; a restore, an import, **Undo** - only once it is saved |
+| TOW itself | watchdog alerts, failed and recovered nightly backups, cleanups that wait |
+| Updates | an update started, refused, installed, failed or rolled back (from the update's own record) |
+| Messengers | a message that could not be delivered, and delivery working again |
+
+Routine checks that found nothing, each successful delivery and other bookkeeping are in History only. The
+list is not a complete history: an event the log could not write (a full disk) is missing there too.
+Problems that last (a topic error, a client that does not answer) stay in **Needs attention** until they are
+fixed. Folding or closing a message does not clear the topic's error or its History record.
 
 | Message | Meaning | What to do |
 |---|---|---|

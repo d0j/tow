@@ -32,7 +32,7 @@
         <ul class="attention-list" data-attention-list>{% for item in h.attention.entries %}<li data-issue-id="{{ item.id }}"><a class="attention-link {{ item.severity }}" href="{{ item.href }}"><span>{{ item.text }}</span>{{ icon('next', 'sm') }}</a></li>{% endfor %}</ul>
       </div>
     </details>
-    {# The results of the owner's own actions, after their message collapsed (messages.js shows it). #}
+    {# Recent messages: the install's list, the same on every device, and this tab's own results (messages.js). #}
     <details class="msg-menu muted" id="recent-messages" data-messages hidden>
       <summary class="ico" data-messages-toggle aria-label="{{ t('js.messages.title') }}" title="{{ t('js.messages.title') }}">{{ icon('message', 'sm') }}<span class="msg-count" data-messages-count aria-hidden="true" hidden></span></summary>
       <div class="msg-panel" role="region" aria-labelledby="recent-messages-title" data-messages-panel>

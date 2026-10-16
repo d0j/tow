@@ -1,7 +1,9 @@
 // messages.js on a page: it takes over the server's message strip, says it once, collapses it
-// into the header icon, shows the history panel and marks what it shows read, keeps one header
-// panel open, merges the header's Undo into the message history - and on a reload brings
-// nothing back as news. Prints a JSON verdict (every value true).
+// into the header panel's "This tab", shows the install's shared list from the server (badge,
+// colour, read on opening, clear through the displayed cursor), keeps one header panel open,
+// merges the header's Undo into the panel - and on a reload brings nothing back as news; the
+// per-tab history of earlier versions goes with one notice. Prints a JSON verdict (every value
+// true).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
@@ -13,9 +15,51 @@ const TEXTS = {
   "js.messages.title": "Recent messages", "js.messages.label_unread": "Recent messages: {count} unread",
   "js.messages.collapse": "Collapse", "js.messages.kind_ok": "Done", "js.messages.kind_info": "Note",
   "js.messages.kind_warn": "Warning", "js.messages.kind_err": "Error", "js.messages.undo": "Undo",
+  "js.messages.legacy_retired": "Recent messages are now the same on every device.", "js.messages.this_tab": "This tab",
 };
 
-const page = ({ storage, served = null, undo = null, address = "http://127.0.0.1/?flash=T1&s=name#row-a" }) => {
+// The server's side: GET /messages.json (ETag, 304) and POST /messages/read|clear (the cursor).
+export const fakeServer = (items = []) => {
+  const server = { items: items.map((item) => ({ read: false, ...item })), requests: [], fail: null, revision: 1 };
+  const feed = () => {
+    const unread = server.items.filter((item) => !item.read);
+    const rank = { info: 0, ok: 1, warn: 2, err: 3 };
+    return {
+      items: server.items.map((item) => ({ ...item })), unread: unread.length,
+      worst: unread.reduce((worst, item) => (rank[item.kind] > (rank[worst] ?? -1) ? item.kind : worst), ""),
+      cursor: server.items[0]?.cursor || "", revision: `r${server.revision}`,
+    };
+  };
+  const answer = (status, data, etag = "") => Promise.resolve({
+    status, ok: status >= 200 && status < 300,
+    headers: { get: (name) => (name.toLowerCase() === "etag" ? etag : null) },
+    json: () => Promise.resolve(data),
+  });
+  server.change = (mutate) => { mutate(server.items); server.revision += 1; };
+  server.fetch = (url, options = {}) => {
+    const body = options.body ? Object.fromEntries(new URLSearchParams(String(options.body))) : null;
+    server.requests.push({ url, method: options.method || "GET", body, headers: options.headers || {} });
+    if (server.fail) return answer(server.fail.status, server.fail.data || {});
+    if (url === "/messages.json") {
+      const etag = `"r${server.revision}"`;
+      if (options.headers?.["If-None-Match"] === etag) return answer(304, null, etag);
+      return answer(200, feed(), etag);
+    }
+    const index = server.items.findIndex((item) => item.cursor === body?.cursor);
+    if (index < 0) return answer(409, { ok: false, error: "changed" });
+    server.change((list) => {
+      list.slice(index).forEach((item) => { item.read = true; });
+      if (url === "/messages/clear") list.splice(index);
+    });
+    return answer(200, { ok: true, ...feed() });
+  };
+  return server;
+};
+const settle = async () => {
+  for (let n = 0; n < 6; n += 1) await new Promise((resolve) => setImmediate(resolve));
+};
+
+const page = ({ storage, served = null, undo = null, address = "http://127.0.0.1/?flash=T1&s=name#row-a", server = fakeServer() }) => {
   const document = fakeDocument();
   const timers = fakeTimers();
   const strip = served && ["div", {
@@ -53,10 +97,11 @@ const page = ({ storage, served = null, undo = null, address = "http://127.0.0.1
     location: { href: address },
     history: { state: null, replaceState: (_state, _title, url) => replaced.push(url) },
     setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+    fetch: server.fetch, URLSearchParams, Promise,
   };
   vm.runInNewContext(source, context);
   const $ = (selector) => document.root.querySelector(selector);
-  return { document, timers, window, replaced, $, menu: $("[data-messages]") };
+  return { document, timers, window, replaced, $, menu: $("[data-messages]"), server };
 };
 const verdict = {};
 const storage = memoryStorage();
@@ -76,37 +121,35 @@ assert.equal(first.$("#announce").textContent, "");
 assert.equal(first.replaced.at(-1), "/?s=name#row-a"); // the address no longer names the message
 verdict.takenOverAndSaidOnce = true;
 
-// The header icon: shown, red, one unread.
+// The header icon: shown for this tab's message, but it is feedback, not "unread": no count, muted.
 assert.equal(first.menu.hidden, false);
-assert.ok(first.menu.classList.contains("err"));
-assert.equal(first.$("[data-messages-count]").textContent, "1");
-assert.equal(first.$("[data-messages-toggle]").getAttribute("aria-label"), "Recent messages: 1 unread");
-verdict.iconColour = true;
+assert.ok(first.$("[data-messages-count]").hidden);
+assert.ok(first.menu.classList.contains("muted"));
+assert.equal(first.$("[data-messages-toggle]").getAttribute("aria-label"), "Recent messages");
+verdict.tabFeedbackIsNotUnread = true;
 
-// Its time runs out: it collapses into the icon, still unread.
+// Its time runs out: it collapses into the panel.
 first.timers.advance(30000);
 assert.equal(first.$("#msg-host #flash"), null);
-assert.equal(first.$("[data-messages-count]").textContent, "1");
+assert.equal(first.menu.hidden, false);
 verdict.collapsesOnTime = true;
 
-// A reload of the same page: the message is history, not news - no strip, nothing said.
+// A reload of the same page: the message is not news - no strip, nothing said.
 const again = page({ storage, served });
 again.timers.advance(5000);
 assert.equal(again.$("#msg-host #flash"), null);
 assert.equal(again.$("#announce-alert").textContent, "");
-assert.equal(again.$("[data-messages-count]").textContent, "1");
 verdict.reloadIsNotNews = true;
 
-// × collapses into the history and marks it read: the icon stays, muted, without a count.
+// × collapses it into the panel.
 const third = page({ storage, served: { id: "m2", kind: "ok", subject: "Show", text: "no changes" } });
-assert.ok(third.menu.classList.contains("err")); // m1 is still unread
 third.document.dispatch(third.$("#flash .flash-x"), "click");
 assert.equal(third.$("#msg-host #flash"), null);
-assert.equal(third.$("[data-messages-count]").textContent, "1");
-verdict.closeReads = true;
+assert.ok(third.$("[data-messages-count]").hidden);
+verdict.closeCollapses = true;
 
-// The panel: one header panel at a time; its entries say kind, subject and outcome; what it
-// shows is read, Escape closes it and gives the focus back.
+// One header panel at a time; this tab's entries under their heading; Escape closes the panel
+// and gives the focus back.
 const attention = third.$("[data-attention]");
 attention.open = true;
 // The entry's time is app.js's (towTime: the one time rule, in TOW's zone).
@@ -114,22 +157,121 @@ third.window.towTime = { element: (at) => Object.assign(third.document.createEle
 third.menu.open = true;
 assert.equal(attention.open, false);
 const rows = third.document.root.querySelectorAll("[data-messages-list] li");
-assert.equal(rows.length, 2);
-assert.equal(rows[0].querySelector(".msg-entry-text").textContent, "Show — no changes");
+assert.equal(rows[0].dataset.section, "tab");
+assert.equal(rows.length, 2); // a reload's message lived in memory only: the old page's are gone
+assert.equal(rows[1].querySelector(".msg-entry-text").textContent, "Show — no changes");
 assert.equal(rows[1].querySelector("time").textContent, "rule:1800000000000");
-assert.equal(rows[1].querySelector(".msg-entry-kind").textContent, "Error");
-rows[1].rect = { top: 400, bottom: 440, height: 40 }; // below the panel's fold
-third.timers.advance(300);
-assert.equal(third.$("[data-messages-count]").textContent, "1"); // the unseen one stays unread
-rows[1].rect = { top: 200, bottom: 240, height: 40 };
-third.document.dispatch(third.$("[data-messages-panel]"), "scroll", { bubbles: false });
-third.timers.advance(150);
-assert.ok(third.$("[data-messages-count]").hidden);
-assert.ok(third.menu.classList.contains("muted"));
+assert.equal(rows[1].querySelector(".msg-entry-kind").textContent, "Done");
+assert.ok(!rows[1].classList.contains("unread"));
 third.document.dispatch(third.menu, "keydown", { key: "Escape" });
 assert.equal(third.menu.open, false);
 assert.equal(third.document.activeElement, third.$("[data-messages-toggle]"));
-verdict.panelReadsWhatItShows = true;
+verdict.panelShowsThisTab = true;
+
+// The install's list: what the server says, the same on every device. The first load pops
+// nothing up (said before this page); the badge counts the shared unread entries, coloured by the
+// worst; this tab's feedback is listed after them.
+{
+  const server = fakeServer([
+    { id: "e3", cursor: "c3", kind: "warn", subject: "rutor", text: "Check failed · 2 topics", at: 1800000300, href: "/history?group=errors" },
+    { id: "e2", cursor: "c2", kind: "err", subject: "Show B", text: "Check failed", at: 1800000200, href: "/#row-b" },
+    { id: "e1", cursor: "c1", kind: "ok", subject: "Show A", text: "New file", at: 1800000100, read: true, href: "/#row-a" },
+  ]);
+  const live = page({ storage: memoryStorage(), server });
+  await settle();
+  assert.equal(server.requests[0].url, "/messages.json");
+  assert.equal(live.$("#msg-host #flash"), null); // no replayed pop-up
+  live.timers.advance(1000);
+  assert.equal(live.$("#announce").textContent, "");
+  assert.equal(live.$("#announce-alert").textContent, "");
+  assert.equal(live.$("[data-messages-count]").textContent, "2");
+  assert.ok(live.menu.classList.contains("err"));
+  assert.equal(live.$("[data-messages-toggle]").getAttribute("aria-label"), "Recent messages: 2 unread");
+  live.window.towMessages.showMessage({ kind: "err", subject: "Show", text: "the save failed" });
+  assert.equal(live.$("[data-messages-count]").textContent, "2"); // the strip adds no unread
+  verdict.sharedBadge = true;
+
+  // A refresh (sync.js's poll, the tab shown again) asks conditionally and reads nothing.
+  await live.window.towMessages.refresh();
+  await settle();
+  const poll = server.requests.at(-1);
+  assert.equal(poll.headers["If-None-Match"], '"r1"');
+  assert.equal(server.requests.filter((request) => request.method === "POST").length, 0);
+  assert.equal(live.$("[data-messages-count]").textContent, "2");
+  live.document.hidden = false;
+  live.document.dispatch(live.document, "visibilitychange");
+  await settle();
+  assert.equal(server.requests.at(-1).url, "/messages.json");
+  verdict.pollNeverReads = true;
+
+  // Opening the panel reads what it shows: up to the newest displayed entry, for every device.
+  live.menu.open = true;
+  await settle();
+  const read = server.requests.find((request) => request.url === "/messages/read");
+  assert.equal(read.method, "POST");
+  assert.equal(read.body.cursor, "c3");
+  assert.ok(live.$("[data-messages-count]").hidden);
+  const shared = live.document.root.querySelectorAll("[data-messages-list] li[data-message-id]");
+  assert.deepEqual(shared.slice(0, 3).map((row) => row.dataset.messageId), ["e3", "e2", "e1"]);
+  assert.equal(shared[0].querySelector(".msg-entry-text").textContent, "rutor — Check failed · 2 topics");
+  assert.equal(shared[1].querySelector("a").getAttribute("href"), "/#row-b");
+  assert.ok(!shared[0].classList.contains("unread"));
+  verdict.openingReads = true;
+
+  // Another device's event arrives after the list was shown; Clear goes through the displayed
+  // cursor, so the new one stays (and is unread).
+  server.change((list) => list.unshift({ id: "e4", cursor: "c4", kind: "ok", subject: "Show C", text: "Added", at: 1800000400, read: false }));
+  live.document.dispatch(live.$("[data-messages-clear]"), "click");
+  await settle();
+  const clear = server.requests.find((request) => request.url === "/messages/clear");
+  assert.equal(clear.body.cursor, "c3");
+  assert.deepEqual(live.window.towMessages.shared().items.map((item) => item.id), ["e4"]);
+  assert.equal(live.$("[data-messages-count]").textContent, "1");
+  verdict.clearKeepsANewerEvent = true;
+
+  // A cursor another device made stale: the list is fetched again. Markers that cannot be
+  // saved: said, with the server's words.
+  server.change((list) => list.splice(0));
+  live.document.dispatch(live.$("[data-messages-read]"), "click");
+  await settle();
+  assert.equal(server.requests.at(-1).url, "/messages.json");
+  server.change((list) => list.push({ id: "e5", cursor: "c5", kind: "warn", text: "x", at: 1800000500 }));
+  await live.window.towMessages.refresh();
+  await settle();
+  server.fail = { status: 503, data: { ok: false, error: "Could not save that the messages are read." } };
+  live.document.dispatch(live.$("[data-messages-read]"), "click");
+  await settle();
+  assert.equal(live.$("#flash .msg-text").textContent, "Could not save that the messages are read.");
+  assert.ok(live.$("#flash").classList.contains("error"));
+  server.fail = null;
+  verdict.staleAndFailedMarks = true;
+
+  // Signed out elsewhere (401): nothing of the list stays on the page.
+  server.fail = { status: 401, data: { error: "sign in" } };
+  await live.window.towMessages.refresh();
+  await settle();
+  assert.equal(live.window.towMessages.shared().items.length, 0);
+  assert.ok(live.$("[data-messages-count]").hidden);
+  server.fail = null;
+}
+verdict.signedOutDropsTheList = true;
+
+// The per-tab history of 1.32 and older: removed with one notice, never sent anywhere; a reload
+// says nothing again.
+{
+  const store = memoryStorage();
+  store.setItem("tow.messages.abc", JSON.stringify({ v: 1, items: [{ id: "old", kind: "err", text: "an old failure at D:\\TV" }] }));
+  const server = fakeServer();
+  const legacy = page({ storage: store, server });
+  await settle();
+  assert.equal(legacy.$("#flash .msg-text").textContent, "Recent messages are now the same on every device.");
+  assert.equal(store.getItem("tow.messages.abc"), null);
+  assert.ok(server.requests.every((request) => !JSON.stringify(request).includes("old failure")));
+  const reloaded = page({ storage: store, server });
+  await settle();
+  assert.equal(reloaded.$("#msg-host #flash"), null);
+}
+verdict.legacyRetiredOnce = true;
 
 // The header's Undo goes into the history (no-script fallback hidden); its entry counts down.
 const undone = page({ storage: memoryStorage(), undo: { stamp: "s1", left: 60 } });
@@ -216,8 +358,8 @@ verdict.oneEntryPoint = true;
 verdict.progressPatchesInPlace = true;
 
 // The open panel follows a message updated in place: its words, colour and link change where the
-// entry is; a focused control of the entry keeps the focus when it stays; the changed entry is
-// read again only when it is shown.
+// entry is; a focused control of the entry keeps the focus when it stays. This tab's entries are
+// never "unread" (only the install's list is).
 {
   const live = page({ storage: memoryStorage() });
   const show = (record, options) => live.window.towMessages.showMessage(record, options);
@@ -238,9 +380,6 @@ verdict.progressPatchesInPlace = true;
   assert.equal(now.querySelector(".msg-entry-text").textContent, "Show — failed");
   assert.equal(now.querySelector("a").getAttribute("href"), "/?credential_topic=a");
   assert.equal(now.querySelector("a").textContent, "Sign in");
-  assert.ok(now.classList.contains("unread"));
-  now.rect = { top: 150, bottom: 190, height: 40 }; // in the panel's view
-  live.timers.advance(300); // shown in the open panel: read
   assert.ok(!now.classList.contains("unread"));
 }
 verdict.panelFollowsUpdates = true;

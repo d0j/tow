@@ -8,6 +8,7 @@ globals. Importing a route module registers nothing.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -18,6 +19,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 
@@ -36,6 +38,7 @@ from tow.web import (
     routes_health,
     routes_history,
     routes_home,
+    routes_messages,
     routes_notifiers,
     routes_password,
     routes_protection,
@@ -58,6 +61,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     routes_auth.router,
     routes_health.router,
     routes_history.router,
+    routes_messages.router,
     routes_home.router,
     routes_sync.router,  # /topics/rows: before any /topics/{tid}
     routes_content.router,
@@ -91,10 +95,31 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Release discovery goes on while the server runs, whether or not a page asks (tow.releases).
     producer = ReleaseProducer()
     producer.start()
+    reconciler = asyncio.create_task(_reconcile_update_results())
     try:
         yield
     finally:
+        reconciler.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reconciler
         producer.stop()
+
+
+UPDATE_RESULT_EVERY_SEC = 15.0
+
+
+async def _reconcile_update_results() -> None:
+    """A finished web update's result reaches Recent messages once per job (its id is the
+    operation id), from the update's own job record: the server looks every 15 s, never a page's
+    request (a GET stays without side effects)."""
+    from tow.web.messages import reconcile_update_results
+
+    while True:
+        await asyncio.sleep(UPDATE_RESULT_EVERY_SEC)
+        try:
+            await run_in_threadpool(reconcile_update_results)
+        except Exception:  # noqa: BLE001 - an unreadable job record is tried again; the server keeps serving
+            _CONFIG_LOG.warning("the result of a web update could not be added to the messages yet")
 
 
 async def _store_corruption(_request: Request, exc: StoreCorruptionError) -> Response:

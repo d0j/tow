@@ -49,7 +49,16 @@ _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # short persistence_lock, not a lock held during tracker/client I/O. A manual release check
 # only refreshes the in-memory release cache (its own lock) after a GitHub request.
 _UNSERIALIZED_WRITES = frozenset(
-    {"/login", "/content/prepare", "/content/resolve", "/content/snapshot", "/updates/check"}
+    {
+        "/login",
+        "/content/prepare",
+        "/content/resolve",
+        "/content/snapshot",
+        "/updates/check",
+        # Recent messages' markers have their own lock (data/ui.json): a slow save never holds them.
+        "/messages/read",
+        "/messages/clear",
+    }
 )
 # Actions that wait on the network (a client, a site, a messenger) for up to a minute: they
 # read their inputs, talk, and take the persistence lock only to save what they learned,

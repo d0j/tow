@@ -1093,12 +1093,13 @@ def _built_keys() -> dict[str, str]:
 
 def _families() -> dict[str, set[str]]:
     """Every value each built key can take, from the code that picks it."""
-    from tow import log, notify, store
+    from tow import log, messages_feed, notify, store
 
     return {
         "cli.keys.error.{exc.kind}": set(store.MASTER_KEY_KINDS),
         "log.kind.{kind}": set(),  # optional by design: kind_label() falls back to words
         "log.cls.{cls}": set(log._CLASSES),
+        "log.update.{outcome}": set(messages_feed._UPDATE_RESULTS),
         "notify.action.{kind}": set(notify._ACTIONS),
         "notify.client_{state}": {"down", "up"},
         "notify.client_{state}_named": {"down", "up"},

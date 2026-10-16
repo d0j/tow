@@ -1,6 +1,6 @@
-// The recent-messages centre of messages.js with a fake clock: reading times per kind, pausing,
-// collapsing, reading, announcing once, the tab's storage and its fallback, Undo. Prints a JSON
-// verdict (every value true).
+// This tab's message centre of messages.js with a fake clock: reading times per kind, pausing,
+// collapsing, reading, announcing once (the tab keeps the ids it said, never the words) and its
+// fallback, Undo. Prints a JSON verdict (every value true).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
@@ -115,12 +115,12 @@ verdict.worstUnread = true;
 // Announced once: the same message again (a reload, Back) is history, not news.
 {
   const store = memoryStore();
-  const first = make({ storage: store, key: "tow.messages.n1" });
+  const first = make({ storage: store, key: "tow.announced.n1" });
   first.center.show({ id: "a", kind: "ok", text: "x" });
   assert.deepEqual(first.said, ["a"]);
   first.center.show({ id: "a", kind: "ok", text: "x" });
   assert.deepEqual(first.said, ["a"]);
-  const reloaded = make({ storage: store, key: "tow.messages.n1" });
+  const reloaded = make({ storage: store, key: "tow.announced.n1" });
   reloaded.center.show({ id: "a", kind: "ok", text: "x" });
   assert.deepEqual(reloaded.said, []);
   assert.equal(reloaded.center.active(), "");
@@ -147,48 +147,53 @@ verdict.announcedOnce = true;
 }
 verdict.replacementProtected = true;
 
-// The tab's storage: kept for the same install and sign-in, dropped for another; blocked storage
-// falls back to memory without breaking anything.
+// The tab keeps the ids it said for the same install and sign-in, drops them for another; the
+// messages themselves live in memory only. Blocked storage falls back to memory without
+// breaking anything.
 {
   const store = memoryStore();
-  make({ storage: store, key: "tow.messages.n1" }).center.show({ id: "a", kind: "ok", text: "x" });
-  assert.equal(make({ storage: store, key: "tow.messages.n1" }).center.items().length, 1);
+  make({ storage: store, key: "tow.announced.n1" }).center.show({ id: "a", kind: "ok", text: "x" });
+  const reloaded = make({ storage: store, key: "tow.announced.n1" });
+  assert.equal(reloaded.center.items().length, 0);
+  reloaded.center.show({ id: "a", kind: "ok", text: "x" });
+  assert.deepEqual(reloaded.said, []); // said before this reload: not news
   store.set("unrelated", "1");
-  const other = make({ storage: store, key: "tow.messages.n2" });
+  const other = make({ storage: store, key: "tow.announced.n2" });
   assert.equal(other.center.items().length, 0);
-  assert.equal(store.get("tow.messages.n1"), null);
+  assert.equal(store.get("tow.announced.n1"), null);
   assert.equal(store.get("unrelated"), "1");
   const blocked = {
     get() { throw new Error("SecurityError"); }, set() { throw new Error("SecurityError"); },
     remove() { throw new Error("SecurityError"); }, keys() { throw new Error("SecurityError"); },
   };
-  const fallback = make({ storage: blocked, key: "tow.messages.n1" });
+  const fallback = make({ storage: blocked, key: "tow.announced.n1" });
   fallback.center.show({ id: "b", kind: "err", text: "y" });
   assert.equal(fallback.center.items().length, 1);
   assert.equal(fallback.center.active(), "b");
   assert.equal(fallback.center.stored(), false);
   const full = memoryStore();
   full.set = () => { throw new Error("QuotaExceededError"); };
-  const quota = make({ storage: full, key: "tow.messages.n1" });
+  const quota = make({ storage: full, key: "tow.announced.n1" });
   quota.center.show({ id: "c", kind: "ok", text: "z" });
   assert.equal(quota.center.items().length, 1);
 }
 verdict.storageAndFallback = true;
 
-// Only plain words are stored: a link keeps its host, a path goes; a link of a message stays on
-// this TOW.
+// No words are stored at all, only ids; a message keeps plain words (a link its host, a path
+// goes); a link of a message stays on this TOW.
 {
   const store = memoryStore();
-  const { center } = make({ storage: store, key: "tow.messages.n1" });
+  const { center } = make({ storage: store, key: "tow.announced.n1" });
   center.show({
     id: "a", kind: "err", subject: "Show", href: "https://evil.example/x", link: "Open",
     text: "failed: https://user:secret@tracker.example/t?id=1 at D:\\TV\\Show and /srv/media/show/x.mkv",
   });
-  const stored = store.get("tow.messages.n1");
-  assert.ok(!stored.includes("secret"));
-  assert.ok(!stored.includes("TV"));
-  assert.ok(!stored.includes("/srv/"));
-  assert.ok(stored.includes("tracker.example"));
+  const stored = store.get("tow.announced.n1");
+  assert.deepEqual(JSON.parse(stored), { v: 2, ids: ["a"] });
+  assert.ok(!center.items()[0].text.includes("secret"));
+  assert.ok(!center.items()[0].text.includes("TV"));
+  assert.ok(!center.items()[0].text.includes("/srv/"));
+  assert.ok(center.items()[0].text.includes("tracker.example"));
   assert.equal(center.items()[0].href, "");
   assert.ok(center.words("a").text.includes("D:\\TV\\Show")); // the strip shows it in full now
   center.show({ id: "b", kind: "ok", text: "x", href: "/?check_result=1" });
@@ -263,17 +268,19 @@ verdict.undo = true;
 }
 verdict.progressInPlace = true;
 
-// Signing out removes the tab's stored messages even after a failed write made the history keep
-// them in memory only.
+// Signing out removes what the tab stored, of this and earlier versions, even after a failed
+// write made it keep the ids in memory only.
 {
   const store = memoryStore();
-  const first = make({ storage: store, key: "tow.messages.n1" });
+  const first = make({ storage: store, key: "tow.announced.n1" });
   first.center.show({ id: "a", kind: "ok", subject: "Show", text: "x" });
   store.set = () => { throw new Error("QuotaExceededError"); };
   first.center.show({ id: "b", kind: "ok", text: "y" });
   assert.equal(first.center.stored(), false);
+  store.data.set("tow.messages.old", "{}");
   first.center.clearStorage();
-  assert.equal(store.get("tow.messages.n1"), null);
+  assert.equal(store.get("tow.announced.n1"), null);
+  assert.equal(store.get("tow.messages.old"), null);
 }
 verdict.signOutRemovesAfterFallback = true;
 

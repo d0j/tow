@@ -65,6 +65,8 @@ header.app .msg-menu.err > summary.ico { color: var(--bad); }
 .msg-empty[hidden] { display: none; }
 .msg-list { list-style: none; padding: 0; display: grid; gap: var(--sp-2); }
 .msg-list:empty { display: none; }
+/* This tab's own feedback, under the install's list: a heading, not an entry. */
+.msg-section { color: var(--mut); font-size: 12px; font-weight: 600; }
 .msg-entry {
   display: grid; gap: var(--sp-1);
   padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--line); border-radius: 6px;
