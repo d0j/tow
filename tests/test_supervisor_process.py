@@ -554,27 +554,16 @@ def test_default_stop_does_not_terminate_a_reused_pid(monkeypatch):
 # --- the OS adapter ---------------------------------------------------------------------------
 
 
-def _free_port() -> int:
-    import socket
-
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return int(probe.getsockname()[1])
-
-
 def test_a_free_port_is_free_at_once_without_a_connection(monkeypatch):
     # A refused loopback connection costs a second and a half on Windows: every `tow run` and
-    # `tow setup` waited for it. A port that can be bound needs no connection at all.
-    import time
-
+    # `tow setup` waited for it. A port that can be bound needs no connection at all. (A real
+    # port closed again could be taken by another test worker before the probe: bindable here.)
     def forbidden(*_args, **_kwargs):
         pytest.fail("a bindable port must not be probed with a connection")
 
     monkeypatch.setattr(_os.socket, "create_connection", forbidden)
-    port = _free_port()
-    started = time.perf_counter()
-    assert _os.port_open(port) is False
-    assert time.perf_counter() - started < 0.5
+    monkeypatch.setattr(_os, "port_free", lambda _port: True)
+    assert _os.port_open(18999) is False
 
 
 def test_a_listening_port_is_open():
