@@ -22,7 +22,7 @@
   {# The owner's order: what TOW needs first (clients, messengers, checks), then access, copies and
      updates, then the rarely changed (the service, language and theme, optional site access). #}
   <div class="settings-content" id="settings-acc">
-    <details class="settings-section settings-accordion acc" id="acc-clients"{% if open_section == 'clients' %} open{% endif %} data-q="{{ search_words.clients }}">
+    <details class="settings-section settings-accordion acc" id="acc-clients"{% if open_section == 'clients' %} open{% endif %} data-q="{{ t('settings.clients.title') }} {{ clients | map(attribute='title') | join(' ') }} {{ search_words.clients }}">
       <summary>
         <span id="settings-clients-title" class="settings-summary-title">{{ t('settings.clients.title') }}</span>
         {#- What is set up, not how many cards there are: "1 client" read as working when it was not. -#}
@@ -147,7 +147,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-bots"{% if open_section == 'bots' %} open{% endif %} data-q="{{ search_words.notify }}">
+    <details class="settings-section settings-accordion acc" id="acc-bots"{% if open_section == 'bots' %} open{% endif %} data-q="{{ t('settings.notify.title') }} {{ notifiers | map(attribute='title') | join(' ') }} {{ search_words.notify }}">
       <summary>
         <span id="settings-bots-title" class="settings-summary-title">{{ t('settings.notify.title') }}</span>
         {#- The connected messengers by name: green once each has delivered, red while one fails,
@@ -229,7 +229,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-intervals"{% if open_section == 'intervals' %} open{% endif %} data-q="{{ t('settings.intervals.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-intervals"{% if open_section == 'intervals' %} open{% endif %} data-q="{{ t('settings.intervals.title') }} {{ t('settings.intervals.q') }}">
       <summary>
         <span id="settings-intervals-title" class="settings-summary-title">{{ t('settings.intervals.title') }}</span>
         <span class="pill mut">{{ interval_label }}</span>
@@ -253,7 +253,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-access"{% if open_section == 'access' %} open{% endif %} data-q="{{ t('settings.access.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-access"{% if open_section == 'access' %} open{% endif %} data-q="{{ t('settings.access.title') }} {{ t('settings.access.q') }}">
       <summary>
         <span id="settings-access-title" class="settings-summary-title">{{ t('settings.access.title') }}</span>
         <span class="pill {{ 'mut' if not allow_lan else ('ok' if lan_password_set else 'warn') }}">{% if not allow_lan %}{{ t('settings.access.pill_local') }}{% elif lan_password_set %}{{ t('settings.access.pill_password') }}{% else %}{{ t('settings.access.pill_no_password') }}{% endif %}</span>
@@ -347,7 +347,7 @@
 
     {% set point_cleanup_unknown = backups.point_cleanup_read_error or (backups.point_cleanup_unrecorded and restore_points) %}
     {% set night_cleanup_unknown = backups.cleanup_read_error or (backups.cleanup_unrecorded and backups.snapshots) %}
-    <details class="settings-section settings-accordion acc" id="acc-transfer"{% if open_section == 'transfer' %} open{% endif %} data-q="{{ t('settings.backups.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-transfer"{% if open_section == 'transfer' %} open{% endif %} data-q="{{ t('settings.backups.title') }} {{ t('settings.backups.night_title') }} {{ t('settings.backups.manual_title') }} {{ t('settings.backups.file_title') }} {{ t('settings.backups.q') }}">
       <summary>
         <span id="settings-transfer-title" class="settings-summary-title">{{ t('settings.backups.title') }}</span>
         <span class="pill {{ 'warn' if backups.read_error else ('bad' if backups.failed else ('warn' if backups.cleanup_pending or backups.point_cleanup_pending or point_cleanup_unknown or night_cleanup_unknown else ('ok' if backups.last_ok else 'mut'))) }}">{% if backups.read_error %}{{ t('settings.backups.pill_unknown') }}{% elif backups.failed %}{{ t('settings.backups.pill_failed') }}{% elif backups.cleanup_pending or backups.point_cleanup_pending %}{{ t('settings.backups.pill_cleanup') }}{% elif point_cleanup_unknown or night_cleanup_unknown %}{{ t('settings.backups.pill_unknown') }}{% elif backups.last_ok %}{{ tm('settings.backups.pill_last', at=backups.last_ok_at | short_time if backups.last_ok_at else backups.last_ok) }}{% else %}{{ t('settings.backups.pill_none') }}{% endif %}</span>
@@ -490,7 +490,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-updates"{% if open_section == 'updates' %} open{% endif %} data-q="{{ t('releases.search') }}">
+    <details class="settings-section settings-accordion acc" id="acc-updates"{% if open_section == 'updates' %} open{% endif %} data-q="{{ t('releases.title') }} {{ t('releases.search') }}">
       <summary>
         <span id="settings-updates-title" class="settings-summary-title">{{ t('releases.title') }}</span>
         <span class="pill mut">{{ hh.ver }}</span>
@@ -544,7 +544,7 @@
       </div>
     </details>
 
-    <details class="settings-section settings-accordion acc" id="acc-service"{% if open_section == 'service' %} open{% endif %} data-q="{{ t('settings.service.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-service"{% if open_section == 'service' %} open{% endif %} data-q="{{ t('settings.service.title') }} {{ t('settings.service.q') }}">
       <summary>
         <span id="settings-service-title" class="settings-summary-title">{{ t('settings.service.title') }}</span>
         <span class="pill {{ 'ok' if service.autostart else 'mut' }}">{{ t('settings.service.autostart_on') if service.autostart else t('settings.service.autostart_off') }}</span>
@@ -607,7 +607,7 @@
         list changed with the arrow keys must not reload the page at each step); the theme in the
         background, as before. -#}
     {% set themes = [('auto', 'monitor', t('settings.theme.auto')), ('light', 'sun', t('settings.theme.light')), ('dark', 'moon', t('settings.theme.dark'))] %}
-    <details class="settings-section settings-accordion acc" id="acc-language"{% if open_section in ('language', 'theme') %} open{% endif %} data-q="{{ language_setting.search }} {{ t('settings.theme.q') }}">
+    <details class="settings-section settings-accordion acc" id="acc-language"{% if open_section in ('language', 'theme') %} open{% endif %} data-q="{{ t('settings.appearance.title') }} {{ t('settings.language.choose') }} {{ t('settings.theme.title') }} {{ language_setting.search }} {{ t('settings.theme.q') }}">
       <summary>
         <span class="settings-summary-title">{{ t('settings.appearance.title') }}{% if lang() != 'en' %} · Language{% endif %}</span>
         <span class="integration-pills">
@@ -649,7 +649,7 @@
 
     {% include '_settings_protection.html' %}
 
-    <details class="settings-section settings-accordion acc settings-log" id="acc-log"{% if open_section == 'log' %} open{% endif %} data-q="{{ t('settings.log.q') }}">
+    <details class="settings-section settings-accordion acc settings-log" id="acc-log"{% if open_section == 'log' %} open{% endif %} data-q="{{ t('settings.log.title') }} {{ t('settings.log.q') }}">
       <summary>
         <span id="settings-log-title" class="settings-summary-title">{{ t('settings.log.title') }}</span>
         <span class="pill mut">{{ log_rows|length }}</span>
@@ -666,18 +666,18 @@
     </details>
 
     {#- What the header no longer carries: Diagnostics, the Guide and signing out of this device. -#}
-    <a class="settings-link" href="/doctor" data-q="{{ t('settings.page.doctor_q') }}">
+    <a class="settings-link" href="/doctor" data-q="{{ t('settings.page.doctor_link') }} {{ t('settings.page.doctor_q') }}">
       <span class="settings-summary-title">{{ t('settings.page.doctor_link') }}</span>
       <span class="settings-link-note">{{ t('settings.page.doctor_note') }}</span>
       {{ icon('next', 'sm') }}
     </a>
-    <a class="settings-link" href="/settings/help" data-q="{{ t('settings.page.help_q') }}">
+    <a class="settings-link" href="/settings/help" data-q="{{ t('settings.page.help_link') }} {{ t('settings.page.help_q') }}">
       <span class="settings-summary-title">{{ t('settings.page.help_link') }}</span>
       <span class="settings-link-note">{{ t('settings.page.help_note') }}</span>
       {{ icon('next', 'sm') }}
     </a>
     {% if network_session(request) %}
-    <form method="post" action="/logout" class="settings-link" data-q="{{ t('settings.page.sign_out_q') }}">
+    <form method="post" action="/logout" class="settings-link" data-q="{{ t('settings.page.sign_out') }} {{ t('settings.page.sign_out_q') }}">
       <span class="settings-summary-title">{{ t('settings.page.sign_out') }}</span>
       <span class="settings-link-note">{{ t('settings.page.sign_out_note') }}</span>
       <button type="submit" class="ghost">{{ t('settings.page.sign_out_button') }}</button>
