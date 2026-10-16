@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from tow.web import _context, services
 from tow.web.messages import request_flash
 from tow.web.templating import TEMPLATES
-from tow.web.text import t
+from tow.web.text import t, time_parts
 from tow.web.views import issue_notes
 
 router = APIRouter()
@@ -58,5 +58,11 @@ def log_json() -> Response:
 
     title_index = index_event_titles(_context.state().get("topics") or [])
     site_titles = index_site_titles(_context.config())
-    rows = [format_event(e, title_index=title_index, site_titles=site_titles) for e in services.read_events(limit=200)]
+    # Each with the server's words for its time: the one time rule in the page script (towTime).
+    rows = [
+        {**row, "time": time_parts(row.get("iso"))}
+        for row in (
+            format_event(e, title_index=title_index, site_titles=site_titles) for e in services.read_events(limit=200)
+        )
+    ]
     return JSONResponse({"ok": True, "rows": rows})

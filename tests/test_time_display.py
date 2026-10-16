@@ -131,10 +131,11 @@ def test_pages_have_short_time_and_the_scripts_tows_zone(monkeypatch):
     assert texts["time.month_short.10"] == "окт"
     assert texts["time.this_year"] == "{day} {month}, {time}"
     assert texts["time.other_year"] == "{day} {month} {year}, {time}"
-    # TOW's zone now and half a year ago (both sides of a summer time), in minutes east of UTC.
+    # TOW's zone by name (each moment's own offset in the scripts) and its offset now, in minutes.
     now = tow.clock.machine_now()
     assert texts["_tz_now"] == str(int(now.utcoffset().total_seconds() // 60))
-    assert texts["_tz_half"] in {"60", "120"}
+    assert texts["_tz_name"] == "Europe/Berlin"
+    assert "_tz_half" not in texts
 
 
 @pytest.mark.parametrize("lang", ["en", "ru"])
@@ -142,3 +143,56 @@ def test_every_month_has_a_short_name(lang):
     names = [i18n.translate(f"time.month_short.{n}", lang) for n in range(1, 13)]
     assert all(name and not name.startswith("time.") for name in names)
     assert len(set(names)) == 12
+
+
+def test_a_script_gets_the_servers_words_for_a_stored_time(monkeypatch):
+    """Without the zone's name a page script cannot know an earlier time's summer or winter
+    offset: the JSON answers carry what short_time writes (iso, short, full)."""
+    from tow.web.text import time_parts
+
+    _in(monkeypatch, "en")
+    assert time_parts("2026-03-01T12:00:00+00:00", now=NOW) == {
+        "iso": "2026-03-01T13:00:00+01:00",
+        "short": "1 Mar, 13:00",
+        "full": "2026-03-01 13:00:00 UTC+01:00",
+    }
+    assert time_parts("soon") is None
+    assert time_parts(None) is None
+
+
+def test_the_zone_has_a_name_only_when_it_is_known(monkeypatch):
+    from tow.web.text import zone_name
+
+    assert zone_name() == "Europe/Berlin"
+    monkeypatch.setattr(tow.clock, "local_zone", lambda: UTC)  # a zone without a name
+    assert zone_name() == ""
+    monkeypatch.setattr(tow.clock, "local_zone", lambda: None)  # this computer's zone
+    monkeypatch.delenv("TZ", raising=False)
+    assert zone_name() == ""
+    monkeypatch.setenv("TZ", "Nowhere/Atlantis")
+    assert zone_name() == ""
+    monkeypatch.setenv("TZ", "../etc")
+    assert zone_name() == ""
+
+
+def test_the_log_and_download_answers_carry_the_servers_words(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from tow.log import log_event
+    from tow.store import save_download_history, save_state
+    from tow.web import app
+
+    _in(monkeypatch, "en")
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    log_event("topic_pause", topic="t1", title="Show", paused=True, how="manual")
+    row = client.get("/log.json").json()["rows"][0]
+    assert set(row["time"]) == {"iso", "short", "full"}
+    assert row["time"]["iso"] == row["iso"]  # logged in TOW's zone, written back the same
+    save_state({"topics": [{"id": "t1", "title": "Show", "url": "https://rutor.info/torrent/1"}]})
+    done = "2026-01-10T12:00:00+00:00"
+    item = {"label": "S01E01", "status": "completed", "completed_observed_at": done}
+    event = {"kind": "episode_completed", "at": done}
+    save_download_history({"schema_version": 1, "topics": {"t1": {"items": {"a": item}, "last_event": event}}})
+    answer = client.get("/topics/t1/downloads.json").json()
+    assert answer["items"][0]["completed_time"]["full"] == "2026-01-10 13:00:00 UTC+01:00"  # winter in Berlin
+    assert answer["last_event"]["time"]["iso"] == "2026-01-10T13:00:00+01:00"

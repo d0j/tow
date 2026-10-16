@@ -49,7 +49,7 @@ from tow.web.messages import (  # noqa: F401 - the message helpers, importable f
 )
 from tow.web.messages import FLASHES as _FLASHES  # noqa: F401 - read by tests as views._FLASHES
 from tow.web.messages import TokenStore as _TokenStore
-from tow.web.text import format_bytes, t
+from tow.web.text import format_bytes, t, time_parts
 
 
 def flash_ttl_sec() -> int:
@@ -472,6 +472,7 @@ def event_output(event: Mapping[str, Any]) -> dict[str, Any]:
     row = dict(event)
     if row.get("at"):
         row["event_at"] = ui_time(row["at"])
+        row["time"] = time_parts(row["at"])  # the one time rule in the page script (towTime)
     row["display"] = _event_display(row)
     return row
 

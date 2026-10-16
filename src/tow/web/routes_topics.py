@@ -18,7 +18,7 @@ from tow.topic_form import TopicForm
 from tow.web import _context, services, topic_actions
 from tow.web.messages import flash_redirect, home_redirect, request_flash
 from tow.web.templating import TEMPLATES
-from tow.web.text import t
+from tow.web.text import t, time_parts
 from tow.web.views import event_output, topic_progress_summary, topic_rows, ui_time
 
 router = APIRouter()
@@ -61,11 +61,13 @@ def topic_downloads(tid: str, limit: int = 100, offset: int = 0) -> dict[str, An
         row = dict(item)
         if row.get("completed_observed_at"):
             row["completed_at"] = ui_time(row["completed_observed_at"])
+            row["completed_time"] = time_parts(row["completed_observed_at"])
         items.append(row)
     last = record.get("last_completed") or {}
     last_out = dict(last) if last else None
     if last_out and last_out.get("completed_observed_at"):
         last_out["completed_at"] = ui_time(last_out["completed_observed_at"])
+        last_out["completed_time"] = time_parts(last_out["completed_observed_at"])
     last_event = record.get("last_event") or None
     return {
         "ok": True,

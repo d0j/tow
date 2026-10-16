@@ -6,11 +6,13 @@ Outside a request (a test, a background thread) the language is the owner's.
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from markupsafe import Markup, escape
 
@@ -122,10 +124,24 @@ def short_time(value: Any, *, now: datetime | None = None) -> Markup:
     ``data-short`` lets the page script write it again after midnight (app.js, ``towTime``, has
     the same rule). A value ``moment_of`` reads no time from is shown as it is; none, as nothing.
     Templates: ``{{ value|short_time }}`` or ``{{ short_time(value) }}``."""
-    moment = moment_of(value)
-    if moment is None:
+    parts = time_parts(value, now=now)
+    if parts is None:
         text = "" if value is None or isinstance(value, (bool, int, float)) else str(value).strip()
         return Markup(escape(text))
+    return Markup('<time datetime="{}" title="{}" data-short>{}</time>').format(
+        parts["iso"], parts["full"], parts["short"]
+    )
+
+
+def time_parts(value: Any, *, now: datetime | None = None) -> dict[str, str] | None:
+    """What ``short_time`` writes, as words a page script puts in its own ``<time>`` (app.js,
+    ``towTime.element``): ``iso`` (the datetime, with the offset TOW's zone had then), ``short``
+    (the one time rule) and ``full`` (the tooltip). None when ``value`` holds no time. A JSON
+    answer carries them beside a stored time: without the zone's name a script cannot know the
+    summer or winter offset of an earlier time."""
+    moment = moment_of(value)
+    if moment is None:
+        return None
     zone = clock.local_zone()
     moment = moment.astimezone(zone)
     today = (now or clock.machine_now()).astimezone(zone)
@@ -137,19 +153,41 @@ def short_time(value: Any, *, now: datetime | None = None) -> Markup:
         month = i18n.translate(f"time.month_short.{moment.month}", lang)
         key = "time.this_year" if moment.year == today.year else "time.other_year"
         shown = i18n.translate(key, lang, day=moment.day, month=month, year=moment.year, time=at)
-    return Markup('<time datetime="{}" title="{}" data-short>{}</time>').format(
-        moment.isoformat(timespec="seconds"),
-        f"{i18n.format_datetime(moment, lang)} {utc_offset(moment)}",
-        shown,
-    )
+    return {
+        "iso": moment.isoformat(timespec="seconds"),
+        "short": shown,
+        "full": f"{i18n.format_datetime(moment, lang)} {utc_offset(moment)}",
+    }
 
 
-def zone_minutes(seconds_ago: float = 0) -> int:
-    """TOW's offset from UTC in minutes, now or ``seconds_ago`` (the page scripts' ``towTime``
-    writes times in TOW's zone, not the browser's: summer time is told by two of them)."""
-    moment = datetime.fromtimestamp(datetime.now(UTC).timestamp() - seconds_ago, UTC).astimezone(clock.local_zone())
-    offset = moment.utcoffset()
+def zone_minutes() -> int:
+    """TOW's offset from UTC in minutes now (the page scripts' ``towTime`` writes a time of now in
+    TOW's zone, not the browser's)."""
+    offset = datetime.now(UTC).astimezone(clock.local_zone()).utcoffset()
     return int(offset.total_seconds() // 60) if offset is not None else 0
+
+
+def zone_name() -> str:
+    """The name of TOW's zone ("Europe/Berlin"), "" when it is not known: a page script then knows
+    each moment's own offset (``towTime``). The zone TOW is set to when it has a name, else the
+    ``TZ`` variable when it names the zone this computer keeps (the same offset now and half a year
+    ago). Windows names its zones otherwise: there it is usually not known."""
+    zone = clock.local_zone()
+    if zone is not None:
+        key = getattr(zone, "key", None)
+        return key if isinstance(key, str) else ""
+    name = os.environ.get("TZ", "").strip().removeprefix(":")
+    if not name:
+        return ""
+    try:
+        named = ZoneInfo(name)
+    except ValueError, OSError, ZoneInfoNotFoundError:
+        return ""
+    now = datetime.now(UTC)
+    for moment in (now, now - timedelta(days=182)):
+        if moment.astimezone(named).utcoffset() != moment.astimezone().utcoffset():
+            return ""
+    return name
 
 
 def format_bytes(value: Any) -> str:

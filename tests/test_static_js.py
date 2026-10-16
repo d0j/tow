@@ -254,7 +254,7 @@ def test_fields_a_box_turns_off_are_disabled_with_it():
 def test_page_scripts_write_times_by_the_servers_rule_in_tows_zone():
     verdict = _verdict("time_short.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 8
+    assert len(verdict) == 9
 
 
 @pytest.mark.allow_system
