@@ -16,7 +16,8 @@
     with "Update TOW.cmd". -Uninstall removes TOW after asking (data, keys, settings and backups
     stay unless -Purge). Windows PowerShell 5.1 and PowerShell 7.
 
-    For tests: $env:TOW_INSTALL_SOURCE (a local zip) and $env:TOW_INSTALL_SUMS (its SHA256SUMS);
+    For tests: $env:TOW_INSTALL_SOURCE (a local zip) and $env:TOW_INSTALL_SUMS (its SHA256SUMS),
+    or $env:TOW_INSTALL_URL (a release's download folder served on 127.0.0.1, never elsewhere);
     $env:TOW_NO_BROWSER=1 opens no browser.
 #>
 param(
@@ -106,6 +107,10 @@ function Install-Tow {
         return
     }
 
+    # The tests' release on this computer; anything else comes from GitHub over HTTPS.
+    if ($env:TOW_INSTALL_URL -and $env:TOW_INSTALL_URL -notmatch '^http://127\.0\.0\.1:\d+/') {
+        throw "TOW: TOW_INSTALL_URL is for tests and must be http://127.0.0.1:<port>/...; remove it to install from GitHub"
+    }
     if (Test-Path -LiteralPath (Join-Path $Dir 'app')) {
         throw "TOW: TOW is already installed in $Dir. To update it, double-click `"Update TOW.cmd`" there."
     }
@@ -168,6 +173,20 @@ function Install-Tow {
         return $LASTEXITCODE -eq 0
     }
 
+    # One download for Windows PowerShell 5.1 and PowerShell 7, to the file named and no other:
+    # Invoke-WebRequest -OutFile reads [ ] in a folder name as a wildcard on 5.1 (and an escaped
+    # name literally on 7). A .NET path is literal; redirects and TLS are as Invoke-WebRequest's.
+    function Save-Download([string]$Uri, [string]$Path) {
+        $client = New-Object Net.WebClient
+        try { $client.DownloadFile($Uri, $Path) }
+        catch {
+            $reason = $_.Exception
+            while ($reason.InnerException) { $reason = $reason.InnerException }
+            throw "TOW: could not download $Uri ($($reason.Message))"
+        }
+        finally { $client.Dispose() }
+    }
+
     $created = -not (Test-Path -LiteralPath $Dir)
     $work = Join-Path $Dir '.install'
     $installed = $false
@@ -189,12 +208,12 @@ function Install-Tow {
         else {
             # TLS 1.2 for GitHub on Windows PowerShell 5.1.
             [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-            $base = if ($Version) { "https://github.com/$repo/releases/download/$Version" } else { "https://github.com/$repo/releases/latest/download" }
+            $base = if ($env:TOW_INSTALL_URL) { $env:TOW_INSTALL_URL.TrimEnd('/') } elseif ($Version) { "https://github.com/$repo/releases/download/$Version" } else { "https://github.com/$repo/releases/latest/download" }
             $zip = Join-Path $work $asset
             $sums = Join-Path $work 'SHA256SUMS'
             Say "downloading $base/$asset"
-            Invoke-WebRequest -UseBasicParsing -Uri "$base/SHA256SUMS" -OutFile $sums
-            Invoke-WebRequest -UseBasicParsing -Uri "$base/$asset" -OutFile $zip
+            Save-Download "$base/SHA256SUMS" $sums
+            Save-Download "$base/$asset" $zip
         }
         if ($sums) {
             $line = Get-Content -LiteralPath $sums | Where-Object { $_ -match "^([0-9a-fA-F]{64})\s+\*?$([regex]::Escape($asset))\s*$" } | Select-Object -First 1
