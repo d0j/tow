@@ -1137,7 +1137,8 @@ def test_the_light_themes_amber_dot_has_3_to_1_contrast():
 
 def test_hints_checkboxes_and_glue(client):
     rules = _rules(CSS)
-    assert "margin-top: 0" in rules[".action-hint"]
+    # A hint carries no margin of its own (1.32.3: its form's gap and its field's 3 px place it).
+    assert "margin: 0" in rules[".field-hint, .action-hint, .section-note"]
     assert "font-size: 12.5px" in rules[".check-field label"]
     assert "font-size: 12.5px" in rules[".check-label"]
     page = client.get("/sites").text

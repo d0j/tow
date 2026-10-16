@@ -122,6 +122,7 @@
   {% else %}
   {% set password_id = 'tracker-password-' ~ credential_prompt.id %}
   <form class="form-grid" method="post" action="/topics/{{ credential_prompt.id|urlencode }}/tracker-login">
+    <div class="field">
     <div class="field-row">
       <div class="field"><label for="tracker-username-{{ credential_prompt.id }}">{{ t('home.auth.username') }}</label>
         <input id="tracker-username-{{ credential_prompt.id }}" class="w-m" name="username" value="{{ credential_prompt.username }}" autocomplete="username" required></div>
@@ -129,6 +130,7 @@
         <span class="secret"><input id="{{ password_id }}" class="w-m" name="password" type="password" autocomplete="current-password" required aria-describedby="{{ password_id }}-note">{{ reveal(password_id, t('home.auth.password')) }}</span></div>
     </div>
     <p class="field-hint" id="{{ password_id }}-note">{{ t('home.auth.password_note') }}</p>
+    </div>
     <div class="actions">
       <button type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('home.auth.save_retry') }}</button>
       <a class="btn ghost" href="/">{{ t('home.cancel') }}</a>

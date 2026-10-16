@@ -154,6 +154,7 @@
                     <input id="q_port-client-0" name="port" value="8080" class="w-xs" type="number" min="1" max="65535" inputmode="numeric">
                   </div>
                 </div>
+                <div class="field">
                 <div class="field-row">
 
                   <div class="field">
@@ -167,7 +168,9 @@
                   </div>
                 </div>
                 <p class="field-hint keep-note" id="client-keep-client-0">Leave passwords and keys empty to keep them.</p>
+                </div>
               </fieldset>
+              <div class="stack-2">
               <div class="settings-actions">
                 <button type="submit">Save</button>
                 <button class="ghost" type="submit" form="ping-client-0" data-keep data-check-saved data-busy-label="Checking…" data-fix="check_client:main">Check</button>
@@ -175,6 +178,7 @@
               </div>
               <p class="action-hint">New topics go to the main client.</p>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+              </div>
             </form>
             <form id="ping-client-0" method="post" action="/settings/client/ping" data-return-target="client-main">
               <input type="hidden" name="client_id" value="main">
@@ -224,6 +228,7 @@
                     <input id="q_port-client-1" name="port" value="9091" class="w-xs" type="number" min="1" max="65535" inputmode="numeric">
                   </div>
                 </div>
+                <div class="field">
                 <div class="field-row">
 
                   <div class="field">
@@ -237,7 +242,9 @@
                   </div>
                 </div>
 
+                </div>
               </fieldset>
+              <div class="stack-2">
               <div class="settings-actions">
                 <button type="submit">Save</button>
                 <button class="ghost" type="submit" form="ping-client-1" data-keep data-check-saved data-busy-label="Checking…" data-fix="check_client:nas">Check</button>
@@ -248,6 +255,7 @@
               </div>
 
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+              </div>
             </form>
             <form id="ping-client-1" method="post" action="/settings/client/ping" data-return-target="client-nas">
               <input type="hidden" name="client_id" value="nas">
@@ -320,6 +328,7 @@
               <fieldset>
                 <legend class="sr-only">Telegram connection</legend>
 
+                <div class="field">
                 <div class="field-row">
 
                 <div class="field">
@@ -340,7 +349,9 @@
 
                 </div>
                 <p class="field-hint keep-note" id="notifier-keep-telegram">Leave passwords and keys empty to keep them.</p>
+                </div>
               </fieldset>
+              <div class="stack-2">
               <div class="settings-actions">
                 <button type="submit">Save</button>
 
@@ -349,6 +360,7 @@
 
               </div>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+              </div>
             </form>
 
             <form id="notifier-test-telegram" method="post" action="/settings/notifier/telegram/test" data-return-target="acc-bots"></form>
@@ -379,6 +391,7 @@
               <fieldset>
                 <legend class="sr-only">Discord connection</legend>
 
+                <div class="field">
                 <div class="field-row">
 
                 <div class="field">
@@ -391,12 +404,15 @@
 
                 </div>
 
+                </div>
               </fieldset>
+              <div class="stack-2">
               <div class="settings-actions">
                 <button type="submit">Save</button>
 
               </div>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+              </div>
             </form>
 
           </details>
@@ -424,6 +440,7 @@
               <fieldset>
                 <legend class="sr-only">WhatsApp connection</legend>
 
+                <div class="field">
                 <div class="field-row">
 
                 <div class="field">
@@ -444,12 +461,15 @@
 
                 </div>
 
+                </div>
               </fieldset>
+              <div class="stack-2">
               <div class="settings-actions">
                 <button type="submit">Save</button>
 
               </div>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+              </div>
             </form>
 
           </details>
@@ -477,6 +497,7 @@
               <fieldset>
                 <legend class="sr-only">ntfy (phone notifications) connection</legend>
 
+                <div class="field">
                 <div class="field-row">
 
                 <div class="field">
@@ -497,12 +518,15 @@
 
                 </div>
 
+                </div>
               </fieldset>
+              <div class="stack-2">
               <div class="settings-actions">
                 <button type="submit">Save</button>
 
               </div>
               <p class="unsaved-state" role="status" hidden>There are unsaved changes. Save them first.</p>
+              </div>
             </form>
 
           </details>
@@ -526,8 +550,10 @@
             <label for="flash_ttl_min">Show “Undo” for</label>
             <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="1" class="w-xs" type="number" min="1" step="1" inputmode="numeric"><span>min</span></div>
           </div>
-          <div class="settings-actions"><button type="submit">Save</button></div>
-          <p class="unsaved-state" role="status" hidden>There are unsaved changes.</p>
+          <div class="stack-2">
+            <div class="settings-actions"><button type="submit">Save</button></div>
+            <p class="unsaved-state" role="status" hidden>There are unsaved changes.</p>
+          </div>
         </form>
       </div>
     </details>
@@ -546,6 +572,7 @@
               <p id="allow-lan-hint">On after restarting TOW; off immediately.</p>
             </div>
             <div class="form-grid lan-password" data-enabled-by="allow-lan">
+              <div class="field">
               <div class="field-row">
                 <div class="field">
                   <label for="lan-password">Password</label>
@@ -557,6 +584,7 @@
                 </div>
               </div>
               <p class="field-hint"><span id="lan-password-hint">At least 8 characters.</span> <span id="lan-hint-help">Public on the sign-in page. Do not include the password.</span></p>
+              </div>
               <div class="settings-actions"><button type="submit">Save and enable</button></div>
             </div>
           </form>
@@ -688,10 +716,12 @@
               <button type="submit">Save file</button>
             </form>
             <form method="post" action="/settings/portable/import" enctype="multipart/form-data" data-return-target="acc-transfer" class="portable-import-form">
-              <label for="portable-backup-file">File <code>.towx</code></label>
-              <span class="file-pick" data-file-pick><input type="file" id="portable-backup-file" class="file-native" name="backup_file" accept=".towx,application/octet-stream" required>
+              <div class="field">
+                <label for="portable-backup-file">File <code>.towx</code></label>
+                <span class="file-pick" data-file-pick><input type="file" id="portable-backup-file" class="file-native" name="backup_file" accept=".towx,application/octet-stream" required>
 <label for="portable-backup-file" class="btn ghost file-button" aria-hidden="true">Choose a file</label>
 <span class="file-name" data-file-name>No file chosen</span></span>
+              </div>
               <div class="settings-actions">
                 <button class="ghost" type="submit" name="operation" value="check" data-busy-label="Checking…" data-needs-file>Check</button>
                 <button class="ghost" type="submit" name="operation" value="restore" data-confirm="Restore TOW from this file? The current data is saved before it is replaced. Network access and its password stay unchanged." data-confirm-label="Restore" data-confirm-danger data-busy-label="Restoring…" data-needs-file>Restore</button>

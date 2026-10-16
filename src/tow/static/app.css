@@ -264,7 +264,8 @@ dialog.confirm::backdrop { background: rgba(0,0,0,.42); }
 .pill.warn { background: var(--pill-warn-bg); color: var(--warn); }
 .pill.mut { background: var(--panel2); color: var(--mut); }
 .pill.new { background: var(--new-row); color: var(--acc); } /* new data observed: an event, blue */
-label { display: block; margin: .55rem 0 .2rem; color: var(--mut); font-size: 12px; }
+/* A label: 12 px on one line height with the hints under the fields (17.4 px). */
+label { display: block; margin: 0; color: var(--mut); font-size: 12px; line-height: 1.45; }
 /* A field's text is 14 px (16 px on a touch screen, below: iOS zooms into a smaller one). */
 input, textarea, select {
   width: 100%; box-sizing: border-box; background: var(--panel2); color: var(--fg);
@@ -321,23 +322,20 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { he
 :is(.integration-card, .edit-panel) .saved-tag { background: var(--panel); }
 /* One form layout (Settings, Sites, the add and edit forms, dialogs): at most 46 rem wide, its
    groups (a .field: label, field, hint; a .field-row; a check field; the buttons) 9 px apart, a
-   label 3 px above its field, help text at most 68 characters a line. The form is the container
-   its rows measure. */
+   label 3 px above its field and a hint 3 px under it, help text at most 68 characters a line.
+   The gap alone spaces the groups: no group carries a margin. The form is the container its rows
+   measure. */
 .form-grid {
-  display: grid; gap: .55rem; align-content: start; min-width: 0; max-width: 46rem;
+  display: grid; gap: var(--sp-3); align-content: start; min-width: 0; max-width: 46rem;
   container-type: inline-size;
 }
 .form-grid > *, .field-row > * { min-width: 0; }
-.form-grid label { margin: 0; }
-.form-grid .field { display: grid; gap: .1875rem; align-content: start; }
-/* The gap spaces the groups: no older "next field" margin, which pushed the second field of a row
-   down (the doubled class outranks `.settings-page-compact .field + .field`). */
-.form-grid .field + .field.field { margin-top: 0; }
+.form-grid .field { display: grid; gap: var(--sp-1); align-content: start; }
 .form-grid :is(.field-hint, .action-hint, .section-note, .check-field p) { max-width: 68ch; }
 /* F4: fields that belong together (address and port, user and password) share a line whenever
    they fit and wrap when they do not - each as wide as its field's class, one without a class
    taking what is left. Two 240 px fields need 492 px; a narrower form or card stacks them. */
-.field-row { display: flex; flex-flow: row wrap; align-items: start; gap: .55rem .75rem; min-width: 0; }
+.field-row { display: flex; flex-flow: row wrap; align-items: start; gap: var(--sp-3) var(--sp-4); min-width: 0; }
 .field-row > * { flex: 1 1 12rem; max-width: 100%; }
 /* A short field keeps its 88 px beside a label and hint narrower than that; a long one shares a
    line only where its 576 px fit, or takes a line of its own. */
@@ -353,8 +351,8 @@ input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visib
   outline: 2px solid var(--acc); outline-offset: 2px;
 }
 button, .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
-  box-sizing: border-box; min-height: var(--btn-h); padding: 0 .75rem;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  box-sizing: border-box; min-height: var(--btn-h); padding: 0 var(--sp-4);
   background: var(--acc2); color: #fff; border: 1px solid transparent;
   border-radius: 8px; cursor: pointer; font: inherit; font-size: 12.5px; line-height: 1.2; text-decoration: none;
 }
@@ -362,7 +360,7 @@ button:hover { filter: brightness(1.08); }
 button:disabled { opacity: .55; cursor: wait; }
 button.ghost, .btn.ghost { background: transparent; border-color: var(--line); color: var(--fg); }
 button.danger, .btn.danger { background: var(--danger); }
-button.sm, .btn.sm { min-height: var(--btn-h-sm); padding: 0 .6rem; }
+button.sm, .btn.sm { min-height: var(--btn-h-sm); padding: 0 var(--sp-3); }
 /* Icon and inline controls keep their own geometry. */
 button.ico, button.row-ico, button.flash-x { min-height: 0; }
 .folder-input { position: relative; min-width: 0; }
@@ -394,7 +392,7 @@ button.ghost.danger:hover, .btn.ghost.danger:hover { background: var(--pill-bad-
 .watchdog-note { margin: .8rem 0; }
 .watchdog-lines { margin: .3rem 0 0; padding-left: 1.2rem; font-size: 13px; display: grid; gap: .2rem; }
 .integration-pills { display: inline-flex; gap: .35rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
-.client-add-row { display: flex; gap: .5rem; align-items: center; }
+.client-add-row { display: flex; gap: var(--sp-2); align-items: center; }
 .client-add-row select { flex: 0 1 15rem; min-width: 0; }
 .notifier-steps ol { color: var(--fg); font-size: 13px; }
 .actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
@@ -505,8 +503,6 @@ details.row-edit > summary::-webkit-details-marker { display: none; }
   display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3);
   padding: .4rem .8rem 1rem; border-top: 1px solid var(--line); background: var(--panel2);
 }
-.new-topic-form, .new-site-form { margin-top: 0; }
-.new-topic-form > label:first-of-type, .new-site-form > label:first-of-type { margin-top: 0; }
 details summary { cursor: pointer; }
 details.add { margin-bottom: var(--sp-3); }
 /* The add card is as wide as its form (46 rem) plus its padding and border, not the whole page. */
@@ -514,9 +510,8 @@ details#new.add.card { max-width: calc(46rem + 2.2rem + 2px); }
 details.add > summary { color: var(--acc); font-weight: 650; }
 /* The add forms say what they add; the site form's first field is the link that fills it in. */
 .add-title { margin: 0; font-size: 1.05rem; line-height: 1.3; }
-.lbl-row.add-head { margin: 0 0 .3rem; }
 details.advanced > summary { width: fit-content; color: var(--acc); font-size: 12.5px; }
-.check-label { display: flex; align-items: center; gap: .45rem; min-height: 1.5rem; color: var(--fg); font-size: 12.5px; }
+.check-label { display: flex; align-items: center; gap: var(--sp-2); min-height: 1.5rem; color: var(--fg); font-size: 12.5px; }
 /* First start: what TOW is and the next steps (setup page, empty Home). */
 .first-steps { text-align: left; max-width: 44rem; margin-inline: auto; }
 .steps { padding-left: var(--sp-5); display: grid; gap: var(--sp-2); }
@@ -583,11 +578,7 @@ button.spinning:disabled { opacity: 1; cursor: wait; }
 .row-ico.busy { opacity: .7; }
 form.ico-form { margin: 0; display: inline-flex; }
 i.dot { font-style: normal; }
-.lbl-row {
-  display: flex; align-items: center; gap: .35rem;
-  margin: .55rem 0 .2rem;
-}
-.lbl-row label { margin: 0; }
+.lbl-row { display: flex; align-items: center; gap: var(--sp-2); }
 details#new { position: relative; }
 /* H2: a target of #new or of the add error is not hidden under the sticky header. */
 #new, #add-error { scroll-margin-top: var(--land-top); }
@@ -664,43 +655,34 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
 .integration-head h3, .service-restart h3 { margin: 0; font-size: .98rem; }
 .integration-head p, .service-restart p { margin: .15rem 0 0; color: var(--mut); font-size: 13px; }
 .integration-head > .pill { flex: 0 0 auto; }
-.settings-form { display: grid; gap: .75rem; padding-top: .8rem; }
+.settings-form { display: grid; gap: var(--sp-3); }
 .settings-form.compact-form { max-width: 42rem; }
 .settings-form fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 /* A label 3 px above its field on every screen (Settings had 2.6 px, a field outside a form 4.5). */
-.field { display: grid; gap: .1875rem; min-width: 0; }
-.field + .field { margin-top: .7rem; }
-/* One label style everywhere (the global one); a checkbox label reads as text. */
-.field label, .settings-form label { margin: 0; }
+.field { display: grid; gap: var(--sp-1); min-width: 0; }
 .settings-form.compact-form.protection-form { max-width: none; }
 .field-hint, .action-hint, .section-note {
   margin: 0; color: var(--mut); font-size: 12px; line-height: 1.45;
 }
-.action-hint { margin-top: 0; }
-.section-note { margin-top: .75rem; }
 /* Free space under the folder field: amber when the chosen files will not fit (the topic then
    waits for room, stopped in the client). */
-.space-hint { margin-top: .25rem; }
 .space-hint.warn { color: var(--warn); }
-.settings-actions {
-  display: flex; align-items: center; flex-wrap: wrap; gap: .55rem;
-  margin-top: .1rem;
-}
+.settings-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
 
+/* A box, its words 6 px after it and its hint 3 px under them; the form's gap spaces it from the
+   next group (no padding of its own). The box sits on the words' first line. */
 .check-field {
   display: grid; grid-template-columns: auto minmax(0, 1fr);
-  align-items: start; column-gap: .65rem; row-gap: .08rem;
-  padding: .45rem 0;
+  align-items: start; column-gap: var(--sp-2); row-gap: var(--sp-1);
 }
-.check-field + .check-field { border-top: 1px solid var(--line); }
 .check-field input { margin-top: .1rem; }
-/* margin: 0 - the global label margin put the text ~7 px below its box outside .settings-form. A
-   one-line label is still a 24 px target: its padding takes the space back from its margins. */
+/* A one-line label is still a 24 px target: its padding takes the space back from its margins. */
 .check-field label {
   margin: -.19rem 0; padding: .19rem 0; line-height: 1.45; cursor: pointer; color: var(--fg); font-size: 12.5px;
 }
-/* A check field that is itself the <label> (Backups) reads like the others, not like a field label. */
-label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: pointer; }
+/* A check field that is itself the <label> (Backups, site access) reads like the others, not like a
+   field label, and is a 24 px target too. */
+label.check-field { min-block-size: 24px; align-content: center; color: var(--fg); font-size: 12.5px; cursor: pointer; }
 .check-field p { grid-column: 2; margin: 0; color: var(--mut); font-size: 12px; }
 .check-field p.locked-hint { color: var(--warn); }
 .check-field input:disabled + label { color: var(--mut); cursor: not-allowed; }
@@ -727,7 +709,7 @@ label.check-field { margin: 0; color: var(--fg); font-size: 12.5px; cursor: poin
 /* A note inside a card or a panel keeps clear of what follows it, and of the card's head. */
 :is(.settings-panel, .integration-card, .edit-panel) > .notice { margin-bottom: .6rem; }
 .integration-head + .notice { margin-top: .6rem; }
-.input-unit { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .45rem; }
+.input-unit { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); }
 .input-unit span { color: var(--mut); font-size: 12px; }
 .service-restart {
   display: flex; align-items: center; justify-content: space-between;
@@ -830,7 +812,7 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .settings-panel { padding: .85rem .9rem 1rem; border-top: 1px solid var(--line); }
 .settings-accordion .integration-head { align-items: center; }
 .settings-accordion .integration-head h2 { margin: 0; font-size: .98rem; }
-.unsaved-state { margin: -.35rem 0 0; color: var(--warn); font-size: 12px; }
+.unsaved-state { color: var(--warn); font-size: 12px; line-height: 1.45; }
 .settings-accordion.settings-log > summary {
   display: grid; grid-template-columns: 1rem minmax(0, 1fr) auto;
   padding: .7rem .9rem;
@@ -918,10 +900,6 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .settings-page-compact .integration-head h2,
 .settings-page-compact .service-restart h2,
 .settings-page-compact .backup-card h2 { font-size: 13.5px; }
-.settings-page-compact .settings-form { gap: .48rem; padding-top: .5rem; }
-.settings-page-compact .field + .field { margin-top: .5rem; }
-
-.settings-page-compact .check-field { padding: .32rem 0; }
 .settings-page-compact .service-restart {
   margin-top: .58rem; padding-top: .58rem;
 }
@@ -960,21 +938,19 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
 .backup-card form { margin: 0; }
 .backup-card .restore-point-list { margin-top: 0; }
 .backup-card .section-note { margin: 0; }
-.portable-import-form { display: grid; gap: .4rem; max-width: 42rem; }
-.portable-import-form label { margin: 0; }
+.portable-import-form { display: grid; gap: var(--sp-3); max-width: 42rem; }
 /* L1: as tall as the other fields; its 26 px button sits centred inside. */
 .portable-import-form input[type="file"], .content-picker input[type="file"] {
   height: var(--field-h); padding: calc((var(--field-h) - var(--btn-h-sm)) / 2 - 1px) .35rem; font-size: 12.5px; line-height: var(--btn-h-sm);
 }
 .portable-import-form input[type="file"]::file-selector-button, .content-picker input[type="file"]::file-selector-button {
-  height: var(--btn-h-sm); margin-right: .55rem; padding: 0 .6rem;
+  height: var(--btn-h-sm); margin-right: var(--sp-2); padding: 0 var(--sp-3);
   color: #fff; background: var(--acc2); border: 0; border-radius: 8px;
   cursor: pointer; font: inherit;
 }
-.portable-import-form .settings-actions { margin-top: 0; }
 /* B2: a file field in the page's language (_file.html): the browser's own field until app.js is
    ready, then a button-like label and the file's name; the field itself still takes the focus. */
-.file-pick { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; min-width: 0; max-width: 100%; }
+.file-pick { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; max-width: 100%; }
 .file-pick > .file-button, .file-pick > .file-name { display: none; }
 .file-pick[data-ready] { position: relative; }
 .file-pick[data-ready] > .file-native {
@@ -1010,14 +986,13 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   color: var(--bad);
   font-weight: 600;
   font-size: 13px;
-  margin: 0 0 8px;
   overflow-wrap: anywhere;
 }
 /* Transport trouble (site unreachable, mirror paused) is amber, as the row's dot. */
 .form-error.warn { color: var(--warn); }
 /* AU1: a refusal about one field sits right under that field (its aria-describedby names it); a
    refusal about the whole form stays above it (.form-error). */
-.field-error { margin: .1rem 0 0; color: var(--bad); font-size: 12.5px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.field-error { color: var(--bad); font-size: 12.5px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
 
 /* The event's time goes under the event (it wrapped anyway, starting the line with "·"). */
 .event-at { display: block; }
@@ -1272,7 +1247,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* Language and theme: two small forms, side by side when there is room. */
 .settings-panel.appearance { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .6rem 2.5rem; }
 .settings-page .appearance > form { flex: 0 1 auto; min-width: 0; max-width: 100%; margin: 0; padding-top: 0; }
-.inline-save { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
+.inline-save { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
 @media (max-width: 420px) {
   /* AU1: a small phone keeps the sign-in card's room for its fields (290 px of 360 were left). */
   main.auth-shell { padding: .5rem; }
@@ -1286,9 +1261,7 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .appearance .field-hint { max-width: 68ch; margin-top: .16rem; }
 /* The forms (.form-grid): a fieldset's fields 9 px apart like the form's own groups; the compact
    page's per-field margins do not add to that gap. */
-.settings-page .form-grid > fieldset { display: grid; gap: .55rem; min-width: 0; }
-.settings-page-compact .form-grid { gap: .55rem; }
-.settings-page-compact .form-grid .field + .field { margin-top: 0; }
+.settings-page .form-grid > fieldset { display: grid; gap: var(--sp-3); min-width: 0; }
 /* An intro line above the cards keeps clear of the first one. */
 .settings-panel > p:not(:last-child) { margin-bottom: .5rem; }
 /* Hints and notes outside a form keep a readable line too. */
@@ -1374,7 +1347,8 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .follow-row > .check-label { flex: 0 0 auto; min-height: var(--field-h); }
 @container (min-width: 38rem) {
   .follow-row { align-items: start; }
-  .follow-row > .check-label { margin-top: calc(12px * 1.5 + .1875rem); }
+  /* Level with the interval field beside it: its label's line (12 px at 1.45) and 3 px down. */
+  .follow-row > .check-label { margin-top: calc(12px * 1.45 + var(--sp-1)); }
 }
 /* The selection's rule field is hidden for "All files" and "Choose files" (content.js), also as a
    group of the form grid. */
@@ -1388,11 +1362,12 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 /* Sites: a card starts with its sign-in. Browser sign-in replaces the password: the user name and
    password step aside with their "leave empty to keep" note (what is saved stays saved) and the
    note says where the window opens. */
-.sign-in { display: grid; gap: .45rem; }
+.sign-in { display: grid; gap: var(--sp-3); }
 .site-form:has(input[name="browser_auth"]:checked) :is(.password-group, .keep-note) { display: none; }
+/* ...with their group, which would otherwise keep an empty place in the sign-in's flow. */
+.site-form:has(input[name="browser_auth"]:checked) .password-pair { display: none; }
 .site-form:not(:has(input[name="browser_auth"]:checked)) .browser-note { display: none; }
-details.advanced > .form-grid { margin-top: .55rem; }
-.new-site-form .add-head { margin-bottom: .2rem; }
+details.advanced > .form-grid { margin-top: var(--sp-2); }
 .by-hand p, .by-hand li { color: var(--fg); }
 .by-hand code { overflow-wrap: anywhere; }
 /* History: the search as wide as a search needs beside the chips; "nothing found" is a sentence
