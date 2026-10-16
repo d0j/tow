@@ -238,6 +238,21 @@ def test_the_console_writes_utf8_when_redirected_or_on_a_code_page(monkeypatch, 
         out.write("TOW — проверка")  # the em dash and Russian no longer fail
 
 
+@pytest.mark.parametrize("encoding", ["latin-1", "koi8-r", "iso8859-15"])
+def test_a_terminal_with_a_legacy_encoding_keeps_it_but_never_fails_on_a_character(monkeypatch, encoding):
+    # A Linux or macOS terminal with a KOI8-R or ISO-8859 locale: its own encoding stays (it is what
+    # the terminal shows), a character it lacks becomes "?" instead of ending the command.
+    out, err = _Stream(encoding, True), _Stream(encoding, True)
+    monkeypatch.setattr("sys.stdout", out)
+    monkeypatch.setattr("sys.stderr", err)
+    cli._utf8_console()
+    for stream in (out, err):
+        assert stream.encoding.lower() == encoding
+        stream.write("TOW — проверка €")
+        stream.flush()
+    assert out.buffer.getvalue().startswith(b"TOW ? ")
+
+
 @pytest.mark.parametrize("language", ["en", "ru"])
 def test_the_update_help_gives_an_example_every_install_accepts(language):
     # "for example v1.21.0": `tow update` itself refuses that tag on an install without git.

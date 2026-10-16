@@ -120,6 +120,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   replaces the ignored hangup with its own stop. Without `nohup`, closing the terminal still stops it cleanly.
 - On Linux and macOS, TOW's data or an export on a network share (CIFS), a WSL drive or some FUSE file systems no
   longer reports a save that succeeded as failed when that file system cannot flush folders.
+- In a Linux or macOS terminal with a KOI8-R or ISO-8859 locale, `tow` commands no longer stop with an encoding
+  error on a character the terminal lacks (such as “—”): it is printed as “?”.
 ### Changed
 
 - Forms are more compact: each field is as wide as what it holds (a port or an interval 88 px, a user name, a password
