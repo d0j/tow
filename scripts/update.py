@@ -65,6 +65,7 @@ import hashlib
 import json
 import math
 import os
+import plistlib
 import re
 import shutil
 import signal
@@ -84,6 +85,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
+from xml.parsers.expat import ExpatError
 
 # Not `from datetime import UTC`: Python 3.10 has none, and must reach the version check in main().
 UTC = timezone.utc  # noqa: UP017
@@ -435,11 +437,79 @@ class _StayOnGitHub(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def same_path(left: str | Path, right: str | Path) -> bool:
-    def norm(value: str | Path) -> str:
-        return os.path.normcase(os.path.normpath(str(value).strip().strip('"')))
+def _canonical(value: str | Path) -> str:
+    """A path as the file system finds it: links, junctions and subst drives followed (this file
+    is found that way, the launchers and the OS give the path as written), case as it compares."""
+    return os.path.normcase(os.path.realpath(os.path.normpath(str(value).strip().strip('"'))))
 
-    return norm(left) == norm(right)
+
+def same_path(left: str | Path, right: str | Path) -> bool:
+    return _canonical(left) == _canonical(right)
+
+
+def path_inside(path: str | Path, folder: str | Path) -> bool:
+    """``path`` lies inside ``folder`` (the folder itself, not a sibling whose name starts like it)."""
+    return _canonical(path).startswith(_canonical(folder).rstrip(os.sep) + os.sep)
+
+
+_RUNS_TOW = re.compile(r"(?:^|\s)-m\s+tow(?:\s|$)")
+
+
+def owned_command(command: str, root: str | Path) -> bool:
+    """``command`` (a process's command line) runs TOW (``-m tow``) with a program of the install
+    ``root``: the program's own path lies inside that folder - not a folder whose name only starts
+    like it (/srv/tow-other is not /srv/tow), and not this folder named among its arguments."""
+    text = command.strip()
+    found = _RUNS_TOW.search(text)
+    if found is None:
+        return False
+    program = text[: found.start()].strip()
+    if program.startswith('"'):
+        program = program[1:].split('"', 1)[0]
+    else:  # ps of Linux and macOS: the words as given; options before -m are not the program
+        words = program.split(" ")
+        while len(words) > 1 and words[-1].startswith("-"):
+            words.pop()
+        program = " ".join(words)
+    return bool(program) and os.path.isabs(program) and path_inside(program, root)
+
+
+# The program of a systemd unit's ExecStart= as tow.autostart.systemd writes it (C-style quotes,
+# %% and $$ for % and $), kept in step with its reader by tests/test_update.py.
+_EXEC_START = re.compile(r'(?m)^ExecStart=\s*"((?:[^"\\]|\\.)*)"')
+_EXEC_START_PLAIN = re.compile(r'(?m)^ExecStart=\s*([^\s"]+)')
+
+
+def unit_program(unit: str) -> str | None:
+    """The program a systemd unit runs (an unquoted one of an older writer too), or None."""
+    match = _EXEC_START.search(unit)
+    if match is not None:
+        text = re.sub(r"\\(.)", r"\1", match.group(1))
+        return text.replace("%%", "%").replace("$$", "$")
+    match = _EXEC_START_PLAIN.search(unit)
+    return match.group(1).replace("%%", "%").replace("$$", "$") if match else None
+
+
+def agent_program(data: bytes) -> str | None:
+    """The program a LaunchAgent runs (its ProgramArguments[0]), or None."""
+    try:
+        agent = plistlib.loads(data)
+    except (ValueError, ExpatError):
+        return None
+    arguments = agent.get("ProgramArguments") if isinstance(agent, dict) else None
+    if isinstance(arguments, list) and arguments and isinstance(arguments[0], str):
+        return arguments[0]
+    return None
+
+
+def windows_program(*parts: str) -> str:
+    """A program of Windows itself by its full path: a bare name is searched in the current folder
+    and on PATH first."""
+    system = os.environ.get("SystemRoot") or os.environ.get("SYSTEMROOT") or "C:\\Windows"
+    return str(Path(system, "System32", *parts))
+
+
+POWERSHELL = ("WindowsPowerShell", "v1.0", "powershell.exe")
 
 
 def _held(_signum: int, _frame: Any) -> None:
@@ -629,7 +699,7 @@ class System:
 
     def kill_tree(self, pid: int) -> bool:
         if self.windows:
-            code, _ = self._run(["taskkill", "/PID", str(pid), "/T", "/F"], timeout=60)
+            code, _ = self._run([windows_program("taskkill.exe"), "/PID", str(pid), "/T", "/F"], timeout=60)
             return code == 0
         kill = getattr(signal, "SIGKILL", 9)
         try:
@@ -650,10 +720,28 @@ class System:
                 "try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }; "
                 f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine"
             )
-            code, output = self._run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=60)
-        else:
-            code, output = self._run(["ps", "-o", "command=", "-p", str(int(pid))], timeout=30)
-        return output.strip() if code == 0 else ""
+            code, output = self._run(
+                [windows_program(*POWERSHELL), "-NoProfile", "-NonInteractive", "-Command", script], timeout=60
+            )
+            return output.strip() if code == 0 else ""
+        # -ww: the whole command, never cut at the terminal's width
+        code, output = self._run(["ps", "-ww", "-o", "command=", "-p", str(int(pid))], timeout=30)
+        if code == 0 and output.strip():
+            return output.strip()
+        return self._proc_command_line(pid)
+
+    @staticmethod
+    def _proc_command_line(pid: int) -> str:
+        """Linux without a usable ps (BusyBox has no -p): /proc/<pid>/cmdline, NUL-separated; ""
+        when the process is gone, not ours to read, or this is no Linux."""
+        if pid <= 0 or not sys.platform.startswith("linux"):
+            return ""
+        try:
+            with open(f"/proc/{int(pid)}/cmdline", "rb") as handle:
+                raw = handle.read(1 << 16)
+        except OSError:
+            return ""
+        return " ".join(part.decode("utf-8", "replace") for part in raw.split(b"\0") if part)
 
     def spawn_handoff(self, argv: list[str], log: Path) -> None:
         """Start the updater behind an exiting intermediate parent, outside the server's tree.
@@ -701,7 +789,7 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
         }
         try:
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                [windows_program(*POWERSHELL), "-NoProfile", "-NonInteractive", "-Command", script],
                 input=json.dumps(payload, ensure_ascii=True),
                 capture_output=True,
                 text=True,
@@ -831,9 +919,13 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
         if self.windows:
             info = task_info(self.task_xml("TOW"))
             return "task" if info and same_path(info["command"], venv / "Scripts" / "pythonw.exe") else None
+        # The program each one runs, read as its writer wrote it, never a path found anywhere in the
+        # text (a comment, another install's unit, a folder whose name was escaped).
         for kind, path in (("systemd", self.unit_path()), ("launchd", self.agent_path())):
             with contextlib.suppress(OSError, UnicodeError):
-                if str(venv / "bin" / "tow") in path.read_text(encoding="utf-8"):
+                data = path.read_bytes()
+                program = unit_program(data.decode("utf-8")) if kind == "systemd" else agent_program(data)
+                if program and same_path(program, venv / "bin" / "tow"):
                     return kind
         return None
 
@@ -854,7 +946,7 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
                 argv = ["launchctl", "bootstrap", f"gui/{self.uid}", str(self.agent_path())]
         else:
             argv = {
-                "task": ["schtasks", "/Run", "/TN", "TOW"],
+                "task": [windows_program("schtasks.exe"), "/Run", "/TN", "TOW"],
                 "systemd": ["systemctl", "--user", "start", UNIT_NAME],
             }[kind]
         return self._run(argv, timeout=60)[0] == 0
@@ -909,7 +1001,9 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
             "[Console]::Error.WriteLine($_.Exception.Message); exit 1 }; "
             "'xml:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($xml))"
         )
-        code, output = self._run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], timeout=60)
+        code, output = self._run(
+            [windows_program(*POWERSHELL), "-NoProfile", "-NonInteractive", "-Command", script], timeout=60
+        )
         answer = next((line.strip() for line in output.splitlines() if line.strip().startswith("xml:")), "")
         if code != 0 or not answer:
             return None
@@ -1718,9 +1812,7 @@ class Update:
         of this install: on Linux and macOS they have their own sessions, so stopping the
         supervisor's never reached them. A pid that now runs anything else is left alone."""
         for pid in self.sys.status_pids():
-            command = os.path.normcase(self.sys.command_line(pid).replace('"', ""))
-            ours = any(os.path.normcase(str(path)) in command for path in (self.app, self.root))
-            if "-m tow" in command and ours:
+            if owned_command(self.sys.command_line(pid), self.root):
                 self.sys.kill_tree(pid)
 
     def start(self) -> None:

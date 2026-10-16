@@ -11,6 +11,7 @@ import importlib.util
 import io
 import json
 import os
+import plistlib
 import subprocess
 import sys
 from pathlib import Path
@@ -587,7 +588,8 @@ def test_the_os_manager_stops_and_starts_tow(install, monkeypatch):
     system.windows = False
     unit = install["root"] / "xdg" / "systemd" / "user" / "tow.service"
     unit.parent.mkdir(parents=True)
-    unit.write_text(f'ExecStart="{install["app"] / ".venv" / "bin" / "tow"}" run\n', encoding="utf-8")
+    program = str(install["app"] / ".venv" / "bin" / "tow").replace("\\", "\\\\")  # as the writer escapes it
+    unit.write_text(f'ExecStart="{program}" run\n', encoding="utf-8")
     assert system.autostart_kind() == "systemd"  # found where XDG_CONFIG_HOME says
     assert system.stop_autostart("systemd") is True
     assert system.start_autostart("systemd") is True
@@ -909,7 +911,7 @@ def test_the_windows_task_is_read_as_utf8_from_powershell(tmp_path):
 
     system = Windows(app)
     assert system.autostart_kind() == "task"
-    assert system.argv[0] == "powershell"
+    assert system.argv[0] == updater.windows_program("WindowsPowerShell", "v1.0", "powershell.exe")  # never by PATH
     assert "Export-ScheduledTask -TaskName 'TOW' -TaskPath '\\'" in system.argv[-1]
     for answer in ("absent", "broken"):
         system.answer = answer
@@ -937,7 +939,7 @@ def test_a_cyrillic_command_line_is_read_whole_on_windows(tmp_path, monkeypatch)
         windows = True
 
     assert Windows(app).command_line(4300) == command
-    assert seen["argv"][0] == "powershell"
+    assert seen["argv"][0] == updater.windows_program("WindowsPowerShell", "v1.0", "powershell.exe")
     assert "ProcessId=4300" in seen["argv"][-1]
     assert (seen["encoding"], seen["errors"]) == ("utf-8", "replace")
 
@@ -997,3 +999,141 @@ def test_untracked_files_that_clash_with_nothing_do_not_stop_an_update(install):
     code, _lines = run(Fake(install["app"]))
     assert code == 0
     assert (install["app"] / "notes.txt").is_file()
+
+
+# --- whose processes and autostart these are -----------------------------------------------------
+
+
+def test_a_process_of_another_install_whose_folder_starts_alike_is_never_stopped(install):
+    # QA 16.10.2026: any command naming this folder counted as this install's: /srv/tow-other
+    # matched /srv/tow, and so did another TOW whose arguments named a file here. A stale pid of
+    # status.json could then stop another TOW.
+    root = install["root"]
+    own = install["app"] / ".venv" / "bin" / "python"
+    sibling = Path(f"{root}-other") / "app" / ".venv" / "bin" / "python"
+    commands = {
+        4300: f'"{sibling}" -m tow serve --log-file "{root / "data" / "logs" / "serve.log"}"',
+        4400: f"{own} -X utf8 -m tow check --apply",  # ps of Linux and macOS: no quotes
+        4500: f'"{own}" -c "print(1)"',  # this install's Python, not TOW
+        4600: f"notepad.exe {root / 'data' / 'x.txt'}",
+    }
+    fake = Fake(install["app"], supervisor=False, status_pids=(4300, 4400, 4500, 4600), commands=commands)
+    fake.scenario["server_pids"] = (4400,)
+    fake.up = True
+    code, lines = run(fake)
+    assert code == 0, lines
+    assert [call for call in fake.calls if call.startswith("kill")] == ["kill 4400"]
+
+
+@pytest.mark.parametrize(
+    ("command", "owned"),
+    [
+        ('"{root}/app/.venv/Scripts/pythonw.exe" -m tow run', True),
+        ('"{root}/app/.venv/bin/python" -m   tow serve', True),
+        ("{root}/runtime/python/cpython-3.14.8-x/bin/python3 -X utf8 -m tow serve", True),
+        ('"{root}-old/app/.venv/bin/python" -m tow serve', False),
+        ('"{root}/app/.venv/bin/python" -m towel', False),
+        ('"{other}/python" -m tow serve --log-file {root}/data/logs/x', False),
+        ("python -m tow serve", False),  # a relative program: whose it is cannot be told
+        ('"{link}/app/.venv/bin/python" -m tow serve', True),  # a junction or symlink to the install
+    ],
+)
+def test_a_command_is_this_installs_only_by_its_own_program(monkeypatch, tmp_path, command, owned):
+    root, link, other = tmp_path / "TOW", tmp_path / "Link", tmp_path / "Other"
+    original = updater.os.path.realpath
+    monkeypatch.setattr(
+        updater.os.path,
+        "realpath",
+        lambda value, **options: original(str(value).replace(str(link), str(root)), **options),
+    )
+    text = command.format(root=root, link=link, other=other).replace("/", os.sep)
+    assert updater.owned_command(text, root) is owned
+
+
+def test_paths_are_compared_as_the_file_system_finds_them(monkeypatch, tmp_path):
+    # update.py finds itself through links (resolve), the launchers and the OS name the folder as
+    # given: a task or unit of an install reached through a junction or symlink never matched.
+    real, alias = tmp_path / "real", tmp_path / "alias"
+    original = updater.os.path.realpath
+    monkeypatch.setattr(
+        updater.os.path,
+        "realpath",
+        lambda value, **options: original(str(value).replace(str(alias), str(real)), **options),
+    )
+    assert updater.same_path(alias / "app" / "x", real / "app" / "x")
+    assert updater.path_inside(alias / "app" / "x", real)
+    assert not updater.path_inside(Path(f"{real}-other") / "x", real)
+
+
+def _systemd_and_launchd(root: Path):
+    from tow.autostart import Install
+    from tow.autostart.launchd import LaunchAgent
+    from tow.autostart.systemd import SystemdUser
+
+    install = Install(root=root, app=root / "app", home=root / "home", user="owner", uid=501)
+    return SystemdUser(install, runner=None), LaunchAgent(install, runner=None)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("name", ["TOW", "TOW 50%", "$HOME TOW", "a&b <x> TOW", 'quote " TOW', r"back\slash"])
+def test_the_updater_reads_the_unit_and_agent_as_tow_writes_them(tmp_path, name):
+    # The writers escape % $ \ " (systemd) and & < > (plist): a raw text search missed such a
+    # folder, and systemd or launchd brought the old TOW back in the middle of the update.
+    systemd, launchd = _systemd_and_launchd(tmp_path / name)
+    assert updater.unit_program(systemd.unit()) == str(systemd.command)
+    assert updater.agent_program(plistlib.dumps(launchd.plist())) == str(launchd.command)
+
+
+def test_a_unit_or_agent_counts_only_by_the_program_it_runs(install, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(install["root"] / "xdg"))
+    system = Recorder(install["app"])
+    system.home = install["root"] / "home"
+    system.windows = False
+    unit = install["root"] / "xdg" / "systemd" / "user" / "tow.service"
+    unit.parent.mkdir(parents=True)
+    own = str(install["app"] / ".venv" / "bin" / "tow").replace("\\", "\\\\")
+    unit.write_text(f'# ExecStart="{own}" run\nExecStart="/srv/other/app/.venv/bin/tow" run\n', encoding="utf-8")
+    assert system.autostart_kind() is None  # this install only in a comment
+    unit.write_text(f'[Service]\nExecStart="{own}" run\n', encoding="utf-8")
+    assert system.autostart_kind() == "systemd"
+    unit.unlink()
+    agent = system.agent_path()
+    agent.parent.mkdir(parents=True)
+    arguments = [str(install["app"] / ".venv" / "bin" / "tow"), "run"]
+    agent.write_bytes(plistlib.dumps({"Label": "io.tow", "ProgramArguments": arguments}))
+    assert system.autostart_kind() == "launchd"
+    agent.write_bytes(plistlib.dumps({"Label": "io.tow", "ProgramArguments": ["/srv/other/tow", str(install["app"])]}))
+    assert system.autostart_kind() is None
+    agent.write_bytes(b"<plist><dict><key>broken")
+    assert system.autostart_kind() is None
+
+
+def test_a_command_line_ps_cannot_give_is_read_from_proc_on_linux(install, monkeypatch):
+    # BusyBox ps has no -p: leftovers of a timed-out stop were never recognised there.
+    system = Recorder(install["app"], results={"-ww": 1})
+    system.windows = False
+    files = {"/proc/4300/cmdline": b"/srv/tow/app/.venv/bin/python\0-m\0tow\0serve\0"}
+
+    def fake_open(path, mode="r", *args, **kwargs):
+        if path not in files:
+            raise FileNotFoundError(path)
+        return io.BytesIO(files[path])
+
+    monkeypatch.setattr(updater, "open", fake_open, raising=False)
+    monkeypatch.setattr(updater.sys, "platform", "linux")
+    assert system.command_line(4300) == "/srv/tow/app/.venv/bin/python -m tow serve"
+    assert system.argv[0] == ["ps", "-ww", "-o", "command=", "-p", "4300"]  # never cut at a width
+    assert system.command_line(4400) == ""  # gone
+    assert system.command_line(0) == ""
+    monkeypatch.setattr(updater.sys, "platform", "darwin")
+    assert system.command_line(4300) == ""  # macOS keeps ps alone
+
+
+def test_windows_programs_of_the_updater_are_named_by_their_full_path():
+    text = SCRIPT.read_text(encoding="utf-8")
+    for bare in ('["powershell"', '"powershell",', '["taskkill"', '["schtasks"', '"wmic'):
+        assert bare not in text
+    assert updater.windows_program("taskkill.exe").lower().endswith(os.sep + "system32" + os.sep + "taskkill.exe")
+    start = (SCRIPT.parent / "tow-start.cmd").read_text(encoding="utf-8")
+    calls = [line for line in start.splitlines() if "powershell.exe" in line and not line.startswith("rem ")]
+    assert calls
+    assert all(r'"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"' in line for line in calls)
