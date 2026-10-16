@@ -146,7 +146,9 @@ try {
         if ($output -match 'Preparing TOW|internet' -or (Test-Path -LiteralPath (Join-Path $root 'app\.venv'))) { throw 'bundle-smoke: the refused folder was prepared' }
         if (@(Get-ChildItem -LiteralPath $sentinel -Force).Count) { throw 'bundle-smoke: the refusal wrote into TEMP' }
         Step 'passed: refused before setup, nothing written'
-        return
+        # exit, not return: a return ends this script with the refusal's exit code still in
+        # $LASTEXITCODE (the finally below still runs and removes the folder).
+        exit 0
     }
     if ($Offline) {
         # Any download would go to a closed port and fail: the first start must not need one.
