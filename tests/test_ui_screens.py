@@ -601,6 +601,27 @@ def test_the_picker_has_one_all_files_box_instead_of_two_buttons(client):
     assert "сохранить не удалось" in picker.select_one("[data-content-cached]").get_text()
 
 
+def test_the_pickers_torrent_file_is_chosen_in_the_pages_language(client):
+    """1.32.1 B2: the picker's ".torrent file" was the browser's own field ("Choose File / No file
+    chosen" in the browser's language). It is the shared file chooser now, one id per picker, and
+    content.js still finds it by ``data-content-upload``."""
+    from tow.store import save_state
+
+    picker = BeautifulSoup(client.get("/").text, "html.parser").select_one("#new [data-content-picker]")
+    field = picker.select_one(".file-pick > input[type=file][data-content-upload]")
+    assert field is not None
+    assert field["id"] == "content-upload-new"
+    assert field["accept"] == ".torrent,application/x-bittorrent"
+    assert (
+        picker.select_one('label[for="content-upload-new"]:not(.file-button)').get_text(strip=True) == "Файл .torrent"
+    )
+    assert picker.select_one(".file-pick .file-button").get_text(strip=True) == "Выбрать файл"
+    url = "https://rutracker.org/forum/viewtopic.php?t=1234567"
+    save_state({"topics": [{"id": "t1", "title": "Show", "url": url, "save_path": "M:/TV", "hash": "a" * 40}]})
+    panel = BeautifulSoup(client.get("/topics/t1/edit-panel").text, "html.parser")
+    assert panel.select_one("#content-upload-t1[data-content-upload]") is not None
+
+
 def test_sites_show_a_sign_in_pill_only_when_it_says_something(client):
     """1.32.1 ST1: every Sites row said "No sign-in needed" or "Sign-in not set" - a third line
     per site on a phone, and "not needed" was a guess (a sign-in path proves a form exists, not

@@ -71,7 +71,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The torrent contents list is calmer: one **All files** box at the top of the tree (ticked, partly ticked or
   clear) replaces **Select all files** and **Clear selection**, a torrent in a single folder opens it, and the
   saved-copy note joins the one status line ("Files selected: 2 of 6 · 3 GB · saved copy, no download limit
-  used").
+  used"). Its .torrent file is chosen with a "Choose a file" button in the page's language.
 - Sites no longer labels every row "No sign-in needed" or "Sign-in not set". A row says **Saved sign-in
   details** when a login is stored, and **Sign-in required** (amber) only after a check or a probe saw the site
   ask for it; otherwise it says nothing.
