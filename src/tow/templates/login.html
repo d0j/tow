@@ -32,7 +32,7 @@
       <form method="post" action="/login" class="form-grid auth-form" data-native-submit>
         <div class="field">
           <label for="lan-password">{{ label }}</label>
-          <span class="secret"><input id="lan-password" class="w-m" name="password" type="password" autocomplete="current-password" required{% if error %} aria-invalid="true" aria-describedby="login-error"{% endif %} {% if not configured %}disabled{% else %}autofocus{% endif %}>{{ reveal('lan-password', label) }}</span>
+          <span class="secret"><input id="lan-password" name="password" type="password" autocomplete="current-password" required{% if error %} aria-invalid="true" aria-describedby="login-error"{% endif %} {% if not configured %}disabled{% else %}autofocus{% endif %}>{{ reveal('lan-password', label) }}</span>
           {% if error and field_error %}<p class="field-error" id="login-error" role="alert">{{ error }}</p>{% endif %}
         </div>
         <div class="settings-actions"><button type="submit" {% if not configured %}disabled{% endif %}>{{ t('login.submit') }}</button></div>
