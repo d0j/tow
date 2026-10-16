@@ -756,7 +756,7 @@ def test_only_main_gate_writes_shared_uv_cache(name):
                 assert options["save-cache"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
             else:
                 assert options["save-cache"] is False
-    assert found == {"ci": 1, "installers": 3, "real": 2}[name]
+    assert found == {"ci": 2, "installers": 3, "real": 2}[name]
 
 
 @pytest.mark.parametrize("name", ["ci", "release", "installers", "real"])
@@ -907,6 +907,25 @@ def test_ci_keeps_the_required_check_names_and_audits_once():
     assert "${{ matrix.audit && '-Audit' || '' }}" in _runs(jobs["gate"])
 
 
+def test_ci_starts_the_windows_bundle_on_every_commit():
+    """TC-01: Windows, the owner's system, had its bundle started only in path-filtered or tag
+    workflows. ci.yml (no path filter) builds it once and runs the start/offline/move smoke of
+    the release on it; a docs-only pull request reports the check without the work."""
+    _text, flow = _workflow("ci")
+    _release_text, release = _workflow("release")
+    job = flow["jobs"]["bundle"]
+    assert job["name"] == "Windows bundle smoke"  # the check's name: branch protection may require it
+    assert job["runs-on"] == "windows-latest"
+    assert "strategy" not in job
+    runs = [step.get("run", "") for step in job["steps"]]
+    assert sum("scripts/build-bundle.py" in run for run in runs) == 1  # one build
+    smoke = "./scripts/bundle-smoke.ps1 -Zip dist/TOW-windows-x64.zip -Offline -Move"
+    assert runs[-1] == smoke
+    assert smoke in _runs(release["jobs"]["windows"])  # the release's own smoke
+    assert 'git archive --format=tar.gz --prefix=tow/ -o "$RUNNER_TEMP/tow-source.tar.gz" HEAD' in runs
+    assert job["timeout-minutes"] <= 30
+
+
 def test_a_docs_only_pull_request_skips_the_heavy_work_but_reports_every_check():
     """Every pull request ran the gate on four systems and install.sh on three, docs-only ones too.
     No path filter (a required check it never started would stay pending): the jobs keep their
@@ -924,7 +943,7 @@ def test_a_docs_only_pull_request_skips_the_heavy_work_but_reports_every_check()
     assert 'git diff --name-only "$BASE" HEAD' in diff["run"]
     assert diff["env"]["BASE"] == "${{ github.event.pull_request.base.sha }}"
     assert "github.event.pull_request" not in diff["run"]  # through env only: no expression in a script
-    for job_id in ("gate", "install"):
+    for job_id in ("gate", "install", "bundle"):
         job = jobs[job_id]
         assert job["needs"] == "changes"
         assert job["if"] == "${{ !cancelled() }}"  # also when `changes` failed: then everything runs
