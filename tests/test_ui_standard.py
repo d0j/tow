@@ -215,3 +215,16 @@ def test_a_long_settings_pill_wraps_on_a_phone_instead_of_losing_its_end():
     assert "white-space: normal" in body
     assert "text-overflow" not in body
     assert "overflow: hidden" not in body
+
+
+def test_the_content_trees_folder_expander_is_a_24_px_icon():
+    """1.32 QA L3: the expander was a 20 x 20 ghost action button, below the 24 px target size and
+    outside the icon exemption. It is a square .ico: 24 px, 32 px under a finger."""
+    content = (ROOT / "src" / "tow" / "static" / "content.css").read_text(encoding="utf-8")
+    script = (ROOT / "src" / "tow" / "static" / "content.js").read_text(encoding="utf-8")
+    assert 'toggle.className = "ico ghost content-toggle"' in script
+    body = _first(".content-folder > button.ico.content-toggle", content)
+    assert "width: 1.5rem" in body
+    assert "height: 1.5rem" in body
+    coarse = content.partition("@media (pointer: coarse) {")[2]
+    assert "width: 2rem; height: 2rem" in coarse

@@ -179,7 +179,7 @@
         row.dataset.depth = String(Math.min(node.depth, 8));
         if (!node.file) {
           const toggle = document.createElement("button");
-          toggle.type = "button"; toggle.className = "ghost";
+          toggle.type = "button"; toggle.className = "ico ghost content-toggle"; // a square icon, not an action button
           const open = Boolean(query) || expanded.has(node.path);
           toggle.textContent = open ? "▾" : "▸";
           toggle.disabled = Boolean(query);
