@@ -2062,10 +2062,25 @@ const landOnProblem = () => {
   target.focus({ preventScroll: true });
 };
 landOnProblem();
+// L1: a page opened on #<section> with a control marked autofocus in it (the language segment
+// just pressed) - browsers skip autofocus when the address has a fragment, so it is focused here,
+// unless the page has put the focus somewhere already.
+const focusAutofocus = () => {
+  let id = String(location.hash || "").slice(1);
+  try { id = decodeURIComponent(id); } catch { /* a malformed address: as written */ }
+  const wanted = id ? document.getElementById(id)?.querySelector("[autofocus]") : null;
+  if (!wanted || wanted.closest("[hidden]")) return;
+  if (document.activeElement && document.activeElement !== document.body) return;
+  wanted.focus({ preventScroll: true });
+};
+focusAutofocus();
 // The browser's own move to #anchor, when the page has been read, takes the focus away from a
 // control that is not that spot (Chromium): once the page has loaded, the focus is put back.
 window.addEventListener("load", () => {
-  if (!document.activeElement || document.activeElement === document.body) landOnProblem();
+  if (!document.activeElement || document.activeElement === document.body) {
+    landOnProblem();
+    focusAutofocus();
+  }
 }, { once: true });
 
 // Last: the rows are in their order (sort, filter) before the focus comes back to one (A5).

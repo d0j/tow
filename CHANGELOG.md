@@ -66,7 +66,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Shorter texts across Settings and the first start: "Add client" is one folded line, and a backup folder always says
   where the copies go ("Default: …").
 - Language is three buttons (Auto, Русский, English) in one segmented control like the theme's, and each saves at
-  once; the theme's label says it applies on every device.
+  once, with the focus back on it when the page comes back; the theme's label says it applies on every device.
 - Every restore confirmation says that network access and its password stay unchanged.
 - Site access: a saved connection is removed by its own Remove button (with a confirmation), and the order field shows
   only when there are two or more connections.
