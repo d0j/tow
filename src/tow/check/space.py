@@ -45,6 +45,7 @@ from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.jsonish import as_dict
 from tow.log import error_fields
+from tow.progress import safe_relative_path
 from tow.records import Topic, topics_of
 
 if TYPE_CHECKING:
@@ -166,15 +167,17 @@ def _wanted_rows(info: dict[str, Any]) -> Iterator[dict[str, Any]]:
 
 
 def _client_wanted(info: dict[str, Any], dest: str) -> Iterator[tuple[tuple[Path, ...], int, int]]:
-    """The selected files as the client reports them (names relative to its save folder)."""
+    """The selected files as the client reports them (names relative to its save folder). A
+    name that is no plain path inside the folder (``..``, a drive, a stream: the progress
+    check's ``safe_relative_path``) is never looked at and counts as not there yet."""
     for row in _wanted_rows(info):
         size = int(row.get("size") or 0)
         try:
             progress = min(1.0, max(0.0, float(row.get("progress") or 0)))
         except TypeError, ValueError:
             progress = 0.0
-        name = str(row.get("name") or "").replace("\\", "/")
-        where = (Path(dest, *[part for part in name.split("/") if part]),) if name else ()
+        relative = safe_relative_path(dest, str(row.get("name") or ""))
+        where = (Path(dest, *relative.split("/")),) if relative else ()
         yield where, size, int(size * progress)
 
 
