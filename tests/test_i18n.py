@@ -1246,3 +1246,18 @@ def test_qa10_wording_says_what_it_means():
     assert "зашифрованным" in t("home.auth.password_note", "ru")
     assert "ни в данные TOW" not in t("home.auth.password_note", "ru")
     assert "состояние" not in t("settings.backups.night_restore_confirm", "ru", at="x")
+
+
+def test_an_example_and_a_default_path_have_one_text_each():
+    """1.32.1: Settings (package B) and Home/Sites (package C) each added "e.g. ..." and "Default:
+    {path}" for their own forms; one pair of keys serves every page."""
+    for lang in ("en", "ru"):
+        examples = sorted(
+            key for key in i18n.keys(lang) if re.fullmatch(r"(e\.g\.|Напр\.) \{\w+\}", i18n.translate(key, lang))
+        )
+        defaults = sorted(
+            key
+            for key in i18n.keys(lang)
+            if re.fullmatch(r"(Default:|По умолчанию:) \{path\}", i18n.translate(key, lang))
+        )
+        assert (examples, defaults) == (["common.example"], ["common.default_path"])

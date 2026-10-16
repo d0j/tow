@@ -70,7 +70,7 @@
                 <div class="field-row">
                   <div class="field">
                     <label for="q_host-{{ c.form_id }}">{{ c.labels.host }}</label>
-                    <input id="q_host-{{ c.form_id }}" name="host" value="{{ c.host }}" class="w-m" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{ t('settings.common.example', value='127.0.0.1') }}">
+                    <input id="q_host-{{ c.form_id }}" name="host" value="{{ c.host }}" class="w-m" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{ t('common.example', example='127.0.0.1') }}">
                   </div>
                   <div class="field">
                     <label for="q_port-{{ c.form_id }}">{{ c.labels.port }}</label>
@@ -197,7 +197,7 @@
                 <div class="field">
                   {% set field_id = 'nf-' ~ n.kind ~ '-' ~ f.name %}
                   {#- PH1: a format is an example ("e.g. …"), never read as a saved value. -#}
-                  {% set example = t('settings.common.example', value=f.placeholder) if f.placeholder else '' %}
+                  {% set example = t('common.example', example=f.placeholder) if f.placeholder else '' %}
                   <label for="{{ field_id }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %}{% if f.kind == 'secret' and f.saved %}{{ saved_hint(field_id ~ '-saved') }}{% endif %}</label>
                   {% if f.kind == 'secret' %}
                   {#- A token, a webhook or a key: not a password to remember or to generate. #}
@@ -361,7 +361,7 @@
             <label for="backup-path-{{ f.kind }}" class="sr-only">{{ t('settings.backups.folder', title=f.title) }}</label>
             <input id="backup-path-{{ f.kind }}" name="path" value="{{ f.value }}" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-{{ f.kind }}-where{% if hint %} backup-path-{{ f.kind }}-hint{% endif %}">
             {#- Where the copies go, always: an empty field is the default folder, not "no copies". -#}
-            {% set where = t('settings.backups.default_path', path=f.default_path) if not f.value else (t('settings.backups.now', path=f.path) if f.path != f.value else '') %}
+            {% set where = t('common.default_path', path=f.default_path) if not f.value else (t('settings.backups.now', path=f.path) if f.path != f.value else '') %}
             <p class="field-hint" id="backup-path-{{ f.kind }}-where">{{ where }}{% if where and f.free %} · {% endif %}{% if f.free %}{{ t('settings.backups.free', free=f.free) }}{% endif %}</p>
             {% if hint %}<p class="field-hint" id="backup-path-{{ f.kind }}-hint">{{ hint }}</p>{% endif %}
           </div>
@@ -524,7 +524,7 @@
             <p class="action-hint">{{ t('releases.rollback_policy') }}</p>
             <div class="field">
               <label for="rollback-version">{{ t('releases.target_label') }}</label>
-              <input id="rollback-version" class="w-s" data-update-version inputmode="text" placeholder="{{ t('settings.common.example', value='1.22.21') }}" maxlength="32" autocomplete="off">
+              <input id="rollback-version" class="w-s" data-update-version inputmode="text" placeholder="{{ t('common.example', example='1.22.21') }}" maxlength="32" autocomplete="off">
             </div>
             <div class="settings-actions"><button type="button" class="ghost" data-update-apply>{{ t('releases.apply_version') }}</button><button type="button" class="ghost" data-update-previous hidden></button></div>
           </details>
