@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from tow import errors
@@ -47,13 +48,18 @@ def note_removed(topic: Topic) -> None:
 def removal_seen_by(topic: Topic, moment: float | None) -> bool:
     """Whether a check had already seen the topic's torrent gone from its client by ``moment``
     (epoch seconds: when the owner asked to add it back; None: no such bound). A torrent removed
-    after the owner's request was not what the request was about."""
+    after the owner's request was not what the request was about. A time stored to the whole
+    second (``iso_now``) stands for that whole second: one in the request's own second may have
+    been after it, so it counts as after (the owner asks again)."""
     if moment is None:
         return True
     receipt = topic.get("verification_pending")
     for seen in (topic.get("client_removed_at"), receipt.get("missing_since") if isinstance(receipt, dict) else None):
         try:
-            if seen and parse_timestamp(str(seen)).timestamp() <= moment:
+            if not seen:
+                continue
+            at = parse_timestamp(str(seen))
+            if at.timestamp() <= moment if at.microsecond else at.timestamp() < math.floor(moment):
                 return True
         except TypeError, ValueError, OverflowError:
             continue

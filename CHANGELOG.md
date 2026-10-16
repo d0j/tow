@@ -31,6 +31,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   runs (you cancel it, or it waits past the time limit): the password saved before it comes back, and the message
   says so. A password typed while the previous one's check was already running now puts back the last password
   that worked, not one the site had just refused.
+- A torrent you removed in the client in the same second as you clicked a topic's Check, while the check waited
+  for another one, is no longer added back by it.
 - First start in a browser without JavaScript is no longer stopped by a short password typed and then hidden by
   clearing "Open TOW from other devices": Start goes on, for this computer only.
 
