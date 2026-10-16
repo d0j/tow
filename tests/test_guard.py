@@ -41,6 +41,33 @@ def nested(pytester, monkeypatch):
     return run
 
 
+@pytest.mark.parametrize("ci", ["true", ""])
+def test_a_tool_every_ci_runner_has_cannot_skip_its_tests_there(nested, monkeypatch, ci):
+    """node or PowerShell missing on a CI runner turned 30 browser-logic tests into skips that
+    nobody reads; on CI they fail, on a developer machine they still skip. Other skips stay."""
+    monkeypatch.setenv("CI", ci)
+    result = nested(
+        """
+import pytest
+
+@pytest.mark.skipif(True, reason="node is not installed")
+def test_js():
+    pass
+
+def test_pwsh():
+    pytest.skip("PowerShell is not installed")
+
+def test_other():
+    pytest.skip("not a git checkout")
+""",
+    )
+    if ci:
+        result.assert_outcomes(failed=1, errors=1, skipped=1)  # a skipif mark's skip comes at setup
+        result.stdout.fnmatch_lines(["*node is not installed*CI runner*"])
+    else:
+        result.assert_outcomes(skipped=3)
+
+
 @pytest.mark.parametrize("library", ["httpx", "httpx2"])  # httpx2: TestClient's, locked for the tests
 def test_swallowed_real_http_still_fails_the_test(nested, library):
     result = nested(
