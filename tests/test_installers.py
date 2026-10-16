@@ -589,6 +589,12 @@ def test_a_docs_only_pull_request_skips_the_heavy_work_but_reports_every_check()
     assert "ubuntu-latest" not in jobs["install"]["env"]["RUN"]
 
 
+def test_ci_cancels_only_a_pull_requests_older_run():
+    """Two merges close together cancelled the first one's run on main."""
+    flow = _workflow("ci")[1]
+    assert flow["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
+
+
 def test_ci_lets_the_gate_stop_a_hung_test_run_itself():
     """The job's limit equalled the gate's 30-minute deadline for the test run alone: GitHub ended
     the job first, and the gate never named and stopped the hung processes."""
