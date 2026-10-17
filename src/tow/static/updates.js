@@ -349,7 +349,40 @@
     }
   };
   logPanel?.addEventListener("toggle", refreshLog);
+  // Settings → Updates: "Check for updates automatically" as saved now (the config area of
+  // sync.js). The box and its form's base - what a save is merged against - take another device's
+  // change, but not while the owner uses them: the box being saved, an unsaved change of it, the
+  // form under the owner's hands (pages.js), a conflict waiting for a choice. Then the next
+  // successful poll brings it.
+  const autoBox = document.querySelector("#check-updates");
+  const autoForm = autoBox?.closest?.("form") || null;
+  const followAutomatic = (data) => {
+    if (!autoBox || !autoForm || typeof data?.check_updates !== "boolean") return;
+    const value = data.check_updates;
+    const base = autoForm.querySelector('input[name="base"]');
+    let record = null;
+    try {
+      record = base ? JSON.parse(base.value) : null;
+    } catch {
+      record = null; // a base it cannot read stays as it is: a save then asks to reload the form
+    }
+    if (Array.isArray(record?.p) && record.p.length) return;
+    const busy = autoForm.dataset.submitting === "1" || autoForm.getAttribute("aria-busy") === "true" || autoBox.disabled
+      || autoBox.checked !== autoBox.defaultChecked || Boolean(window.towPages?.protectedElement?.(autoForm));
+    if (busy) return;
+    autoBox.checked = value;
+    autoBox.defaultChecked = value;
+    autoBox.dataset.initialChecked = value ? "1" : "0"; // what app.js puts back after a failed save
+    if (record?.f && typeof record.f === "object" && typeof record.f.check_updates === "boolean" && record.f.check_updates !== value) {
+      record.f.check_updates = value;
+      base.value = JSON.stringify(record);
+    }
+  };
   const synced = window.towSync;
+  if (synced?.on && autoBox) {
+    synced.on("config", followAutomatic);
+    synced.onPoll?.((_, ok) => { if (ok) followAutomatic(synced.area?.("config")); });
+  }
   if (synced?.on) {
     // The page's poll (sync.js) brings the published release answer and the update job: the badge
     // follows at once on every page; Settings asks for its fuller words again, and follows a job

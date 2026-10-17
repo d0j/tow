@@ -242,6 +242,22 @@ def test_a_config_rewritten_under_the_same_stamp_reaches_every_page(clock):
     assert load_config()["language"] == "en"
 
 
+def test_the_automatic_update_checks_preference_reaches_every_settings_page(clock):
+    # Settings' "Check for new versions automatically" was in no area: another device's change never
+    # reached an open Settings page, which kept showing (and saving against) the old value.
+    _seed()
+    client = TestClient(app)
+    first = _poll(client).json()
+    assert first["areas"]["config"]["check_updates"] is True
+    cfg = load_config()
+    cfg["check_updates"] = False
+    save_config(cfg)
+    clock.tick()
+    after = _poll(client, have={"config": first["rev"]["config"]}).json()
+    assert after["rev"]["config"] != first["rev"]["config"]
+    assert after["areas"]["config"]["check_updates"] is False
+
+
 def test_the_header_follows_the_clients_health_and_not_the_rows(clock):
     _seed()
     client = TestClient(app)
