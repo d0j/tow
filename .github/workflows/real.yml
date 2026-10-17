@@ -3,7 +3,9 @@ name: real systems
 # What the gate replaces with fakes, for real: qBittorrent, Transmission and Deluge, each started
 # on the runner with a login of this run and driven through TOW's own adapters and a real
 # `tow check --apply` against a local site (tests/integration/test_real_clients.py), qBittorrent
-# on Windows too; the native probes of Linux and macOS (tests/integration/test_real_probes.py); and the
+# on Windows too, and how qBittorrent and Transmission spell the file names Windows reserves,
+# recorded as an artifact and checked against TOW's keys (test_real_client_names.py); the
+# native probes of Linux and macOS (tests/integration/test_real_probes.py); and the
 # autostart of each OS - Task Scheduler, launchd, systemd --user - turned on for a throwaway
 # install made the way the owner makes one, started by the OS and turned off again
 # (tests/integration/test_real_autostart.py, in autostart.yml, which release.yml runs for a tag
@@ -67,7 +69,7 @@ jobs:
   clients:
     name: torrent clients
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       TOW_REAL_CLIENTS: "1"
       TOW_REAL_QBITTORRENT: 127.0.0.1:18080
@@ -210,6 +212,28 @@ jobs:
       - name: TOW's adapters and `tow check --apply` against the real clients
         timeout-minutes: 20
         run: uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_clients.py
+      # B36: how qBittorrent and Transmission spell the names Windows reserves (CON, aux.txt, COM0,
+      # LPT0, superscript digits, CONIN$, a trailing dot or space): synthetic torrents, no tracker.
+      - name: The client spellings of names Windows reserves, recorded
+        if: ${{ !cancelled() }}
+        timeout-minutes: 15
+        env:
+          TOW_REAL_CLIENT_NAMES_OUT: ${{ runner.temp }}/client-names
+        run: uv run --frozen pytest -q -ra -s -p no:cacheprovider tests/integration/test_real_client_names.py -k test_record_the_spellings
+      - name: TOW's keys against the recorded spellings
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        env:
+          TOW_REAL_CLIENT_NAMES: "1"
+          TOW_REAL_CLIENT_NAMES_DIR: ${{ runner.temp }}/client-names
+        run: uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_client_names.py -k test_tow_keys_agree
+      - name: The recorded spellings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: client-names-linux
+          path: ${{ runner.temp }}/client-names
+          if-no-files-found: warn
       - name: The clients' logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -316,6 +340,35 @@ jobs:
           $base = Join-Path $env:RUNNER_TEMP ('pytest ' + (-join [char[]](0x0422, 0x0435, 0x0441, 0x0442)))
           uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_clients.py -k qbittorrent --basetemp $base
           if ($LASTEXITCODE) { throw "pytest exited with $LASTEXITCODE" }
+      # B36 on the owner's system: qBittorrent's spellings of names Windows reserves, read back
+      # through \\?\ (which keeps CON or a trailing dot), then TOW's keys against them.
+      - name: qBittorrent's spellings of names Windows reserves, recorded
+        if: ${{ !cancelled() }}
+        timeout-minutes: 15
+        shell: pwsh
+        env:
+          TOW_REAL_CLIENT_NAMES_OUT: ${{ runner.temp }}/client-names
+        run: |
+          $base = Join-Path $env:RUNNER_TEMP ('pytest names ' + (-join [char[]](0x0422, 0x0435, 0x0441, 0x0442)))
+          uv run --frozen pytest -q -ra -s -p no:cacheprovider tests/integration/test_real_client_names.py -k test_record_the_spellings --basetemp $base
+          if ($LASTEXITCODE) { throw "pytest exited with $LASTEXITCODE" }
+      - name: TOW's keys against the recorded spellings
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          TOW_REAL_CLIENT_NAMES: "1"
+          TOW_REAL_CLIENT_NAMES_DIR: ${{ runner.temp }}/client-names
+        run: |
+          uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_client_names.py -k test_tow_keys_agree
+          if ($LASTEXITCODE) { throw "pytest exited with $LASTEXITCODE" }
+      - name: The recorded spellings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: client-names-windows
+          path: ${{ runner.temp }}/client-names
+          if-no-files-found: warn
       - name: The client's logs and what was installed
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
