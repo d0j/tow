@@ -973,6 +973,13 @@ def _epoch_time(value: float) -> str:
     return format_ui_timestamp(datetime.fromtimestamp(value, UTC).isoformat())
 
 
+def _shown_error(text: str, *, local: bool) -> str:
+    """A stored error's words on a Settings card: never a link's credentials; for a network device
+    (``local`` false) no folder or file either, as Recent messages. The stored text stays."""
+    shown = services.scrub_text(text)
+    return shown if local else services.scrub_display(shown, limit=8192)
+
+
 def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     """Night copies: folder, last result, the newest copies; folders of both kinds of copies."""
     from tow.backup_retention import retention_settings
@@ -1026,7 +1033,7 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "last_ok_at": last_ok if isinstance(last_ok, (int, float)) else (copies[0]["created_at"] if copies else None),
         "failed": status_failed(st),
         "read_error": st.get("read_error") is True,
-        "error": str(st.get("last_error") or ""),
+        "error": _shown_error(str(st.get("last_error") or ""), local=access.is_local(request)),
         "error_at": _epoch_time(failed_at) if isinstance(failed_at, (int, float)) else "",
         "error_when": failed_at if isinstance(failed_at, (int, float)) else None,
         "cleanup_pending": night_cleanup["pending"] is True,

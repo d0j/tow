@@ -182,8 +182,9 @@ def test_a_messenger_status_is_shown_in_the_readers_language():
     status = state["notify_status"]["telegram"]
     assert status["error_code"] == "notifier.telegram.bad_token"
     i18n.use("en")
-    assert _status_error(status) == i18n.translate("notifier.telegram.bad_token", "en")
-    assert _status_error({"error": "old text"}) == "old text"
+    for local in (True, False):  # this PC or a network device: a sentence without a path is the same
+        assert _status_error(status, local=local) == i18n.translate("notifier.telegram.bad_token", "en")
+        assert _status_error({"error": "old text"}, local=local) == "old text"
 
 
 def test_an_unconfirmed_add_is_recognised_by_its_code_also_inside_another_error():

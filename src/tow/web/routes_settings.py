@@ -91,7 +91,7 @@ def settings_view(request: Request, *, live: bool) -> Response:
             "secret_store_error": secret_store_error,
             "clients": clients,
             "client_types": [{"kind": spec.kind, "title": spec.title} for spec in ready_clients()],
-            "notifiers": notifier_cards(s, state),
+            "notifiers": notifier_cards(s, state, local=access.is_local(request)),
             "search_words": _search_words(),
             # The card just saved / checked stays open (a messenger not connected yet, a working
             # client), as does the one a "Needs attention" link lands on (?spot=client-<id>).
