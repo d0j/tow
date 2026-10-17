@@ -733,7 +733,21 @@ def global_interval_minutes(cfg: Mapping[str, Any]) -> int:
     return max(1, interval_sec_of(cfg) // 60)
 
 
-def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
+# A row's words about its error, as a network device gets them: scrubbed as Recent messages are
+# (a link keeps its host, a folder or file path goes): what the PC running TOW keeps for itself.
+_ERROR_FIELDS = ("last_error", "last_error_human", "error_line", "last_error_details")
+
+
+def _for_network(row: dict[str, Any]) -> dict[str, Any]:
+    for name in _ERROR_FIELDS:
+        if row.get(name):
+            row[name] = services.scrub_display(str(row[name]), limit=8192)
+    return row
+
+
+def topic_rows(state: Mapping[str, Any], *, local: bool) -> list[dict[str, Any]]:
+    """Home's rows of ``state``'s topics; ``local``: for this PC (every word of an error), else
+    for a network device (``_for_network``)."""
     cfg = _context.config()
     _context.trackers()  # a site whose link pattern is broken fails the page, as it always did
     history = _context.history()
@@ -830,6 +844,8 @@ def topic_rows(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "tracker_label": status.tracker_label,
             }
         )
+        if not local:
+            _for_network(rows[-1])
     return rows
 
 

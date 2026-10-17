@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from tow import undo
+from tow import access, undo
 from tow.clients.factory import client_configurations, default_client_id
 from tow.errors import TowError
 from tow.folders import recent_save_roots
@@ -93,7 +93,7 @@ def _topic_edit_context(request: Request, tid: str) -> dict[str, Any] | None:
     return {
         "edit_base": conflict["base"] if conflict else topic_actions.edit_base_of(topic),
         "conflict": conflict,
-        "topic": topic_rows({**state, "topics": [topic]})[0],
+        "topic": topic_rows({**state, "topics": [topic]}, local=access.is_local(request))[0],
         "client_options": [row for row in client_configurations(cfg) if row.get("enabled", True)],
         "default_client_id": default_client_id(cfg),
         "save_roots": recent_save_roots(state),
@@ -124,7 +124,7 @@ def topics_row(request: Request, tid: str) -> Response:
         from markupsafe import escape
 
         return HTMLResponse(f'<p class="form-error">{escape(t("web.topics.not_found"))}</p>', status_code=404)
-    row = topic_rows({**state, "topics": [topic]})[0]
+    row = topic_rows({**state, "topics": [topic]}, local=access.is_local(request))[0]
     row["manual_job"] = check_jobs.pending_topic(str(row["id"]))
     return TEMPLATES.TemplateResponse(
         request, "_topic_row.html", {"topic": row, "landing_topic": ""}, headers={"Cache-Control": "no-store"}
