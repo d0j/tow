@@ -963,7 +963,10 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     last_ok = st.get("last_ok_at")
     failed_at = st.get("last_error_at")
     cleanup = services.restore_point_cleanup_status(cfg=cfg)
-    night_cleanup = services.night_cleanup_status(cfg=cfg)
+    # The synchronization poll reads it without the data lock (whose taking runs the recovery
+    # steps): a poll only looks.
+    reader = services.night_cleanup_status_unlocked if services.read_only_now() else services.night_cleanup_status
+    night_cleanup = reader(cfg=cfg)
     retention = retention_settings(cfg)
     return {
         "folders": folders,

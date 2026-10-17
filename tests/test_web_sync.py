@@ -795,6 +795,65 @@ def test_a_transaction_in_progress_is_503_and_its_recovery_runs_apart(monkeypatc
     assert _poll(client).status_code == 200
 
 
+def test_settings_and_history_polls_never_wait_for_the_data_or_the_logs_lock(clock):
+    """Final review 1.33.0 #8: the Settings inventory read the night copies' cleanup under the
+    data lock (whose taking runs the recovery steps), and History's lines took the log's lock -
+    even for a poll that ends unchanged."""
+    _seed()
+    client = TestClient(app, headers=ORIGIN)
+    first = _poll(client, page="/settings")
+    history = _poll(client, page="/history")
+    with _locks_held():
+        clock.tick()  # a new sample: the inventory and the fragments are read again
+        again = _within(lambda: _poll(client, page="/settings"))
+        assert again.status_code == 200
+        assert again.json()["rev"]["page"] == first.json()["rev"]["page"]
+        fragments = _within(lambda: client.get("/page/fragments", params={"page": "/settings"}))
+        assert fragments.status_code == 200
+        lines = _within(lambda: client.get("/page/fragments", params={"page": "/history"}))
+        assert lines.status_code == 200
+        assert _within(lambda: _poll(client, page="/history")).json()["rev"]["page"] == history.json()["rev"]["page"]
+
+
+def test_historys_lock_free_snapshot_leaves_out_a_line_still_being_appended():
+    import json as json_module
+
+    from tow.log import history_events, log_path
+
+    whole = json_module.dumps({"kind": "new_file", "topic": "t1", "ts": "2026-10-17T10:00:00+00:00"})
+    half = json_module.dumps({"kind": "new_file", "topic": "t2", "ts": "2026-10-17T10:01:00+00:00"})[:20]
+    path = log_path()
+    path.write_text(whole + "\n" + half, encoding="utf-8")
+    assert [event["topic"] for event in history_events(lock_live=False)] == ["t1"]
+    path.write_text(whole + "\n", encoding="utf-8")
+    assert [event["topic"] for event in history_events(lock_live=False)] == ["t1"]
+
+
+def test_a_poll_never_quarantines_a_damaged_state(clock):
+    """``_context.state()`` read on a poll's path (Recent messages name topics through it) never
+    takes the data lock to set a damaged file aside: a poll changes nothing."""
+    from tow.web import _context
+
+    _seed()
+    path = services.sync_source_paths()["state"]
+    path.write_bytes(b"{not json")
+    services.forget_parsed(path)
+
+    def read():  # in the poll's thread: its request context and its read-only paths
+        with services.read_only_paths():
+            _context.begin()
+            try:
+                _context.state()
+            except Exception as exc:  # noqa: BLE001 - the error is the answer
+                return exc
+            return None
+
+    with _locks_held():
+        assert _within(read) is not None
+    assert path.read_bytes() == b"{not json"  # still there, not set aside
+    assert not list(path.parent.glob(f"{path.name}.corrupt-*"))
+
+
 def _check_journal() -> Path:
     from tow import check_transaction
 

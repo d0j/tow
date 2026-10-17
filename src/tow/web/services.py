@@ -66,6 +66,7 @@ from tow.mirrors import prefer_host as _prefer_host
 from tow.notifiers import test as test_notifier
 from tow.notify import short_series_title
 from tow.paths import read_only as read_only_paths
+from tow.paths import read_only_now
 from tow.protection.local_service import managed as _local_service_managed
 from tow.protection.providers import adapters as protection_adapters
 from tow.protection.providers import registry as protection_registry
@@ -97,6 +98,7 @@ from tow.snapshots import (
     snapshot_path,
 )
 from tow.snapshots import cleanup_status as night_cleanup_status
+from tow.snapshots import cleanup_status_unlocked as night_cleanup_status_unlocked
 from tow.snapshots import status as snapshot_status
 from tow.storage.locks import CheckBusyError
 from tow.store import (
@@ -193,6 +195,7 @@ __all__ = [
     "network_credential",
     "next_check_at",
     "night_cleanup_status",
+    "night_cleanup_status_unlocked",
     "note_signed_in",
     "notify_topic_error",
     "persistence_lock",
@@ -202,6 +205,7 @@ __all__ = [
     "protection_settings_view",
     "read_content",
     "read_events",
+    "read_only_now",
     "read_only_paths",
     "reconcile_update_result",
     "record_check_failure",

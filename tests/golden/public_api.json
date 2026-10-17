@@ -125,6 +125,7 @@
   "backup_root": "def(cfg: 'dict[str, Any] | None' = None) -> 'Path'",
   "check_snapshot": "def(name: 'str') -> 'dict[str, Any]'",
   "cleanup_status": "def(*, cfg: 'dict[str, Any] | None' = None) -> 'dict[str, Any]'",
+  "cleanup_status_unlocked": "def(*, cfg: 'dict[str, Any] | None' = None) -> 'dict[str, Any]'",
   "create_snapshot": "def(*, how: 'str' = 'auto') -> 'dict[str, Any]'",
   "delete_snapshot": "def(name: 'str', revision: 'str') -> 'dict[str, Any]'",
   "list_snapshots": "def(limit: 'int | None' = 10) -> 'list[dict[str, Any]]'",

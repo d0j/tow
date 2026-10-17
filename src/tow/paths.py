@@ -52,6 +52,12 @@ def read_only() -> Iterator[None]:
         _READ_ONLY.reset(token)
 
 
+def read_only_now() -> bool:
+    """Whether this code runs for a request that must only read (inside ``read_only``): its
+    readers then also never quarantine, recover or wait for a writer's lock."""
+    return _READ_ONLY.get()
+
+
 def _may_create() -> bool:
     return not _READ_ONLY.get()
 

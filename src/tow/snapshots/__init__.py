@@ -36,7 +36,15 @@ from tow.snapshots.manifest import (
     MAX_RESTORE_JOURNAL_BYTES,
     UNSIGNED_FORMAT,
 )
-from tow.snapshots.record import STATUS_NAME, cleanup_status, record_failure, status, status_failed, status_path
+from tow.snapshots.record import (
+    STATUS_NAME,
+    cleanup_status,
+    cleanup_status_unlocked,
+    record_failure,
+    status,
+    status_failed,
+    status_path,
+)
 from tow.snapshots.restore import MAX_RESTORE_MARKER_BYTES, SAFETY_KEEP, recover_interrupted_restore, restore_snapshot
 from tow.snapshots.verify import check_snapshot, verify_snapshot
 
@@ -53,6 +61,7 @@ __all__ = [
     "backup_root",
     "check_snapshot",
     "cleanup_status",
+    "cleanup_status_unlocked",
     "create_snapshot",
     "delete_snapshot",
     "list_snapshots",
