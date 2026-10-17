@@ -390,8 +390,8 @@ class Smoke:
             permissions = _script("permissions-smoke.py", "permissions_smoke")
             problems = permissions.check(self.root)
             if problems:
-                # Not a failure yet: the previous release's code did this; the check at the end is
-                # of this commit's. Asking icacls what TOW asks shows why.
+                # Not a failure: the previous release's code did this (before 1.33.1 a rule another
+                # account had on the folder itself stayed); the check at the end is of this commit's.
                 say(f"the previous release's first start left the install open: {problems}")
                 self.explain_open_root(permissions)
         return version
@@ -611,11 +611,9 @@ class Smoke:
         expect(not problems, f"the install's permissions: {problems}")
         say("   the root, data/, keys/ and keys/master.key are private")
 
-    def explain_open_root(self, permissions, *, repair: bool = True) -> None:
-        """Why TOW could not close the root (Windows): the longest paths below it, the root's
-        rules, what `tow permissions` reports and (``repair``) what icacls answers when asked what
-        TOW asks at every start (the root closed for this account, SYSTEM and Administrators,
-        passed on to what it holds)."""
+    def explain_open_root(self, permissions) -> None:
+        """Why TOW could not close the root (Windows), changing nothing: the longest paths below
+        it, the root's rules (inherited or its own) and what `tow permissions` reports."""
         base = "\\\\?\\" + str(self.root)
         lengths = []
         for current, folders, files in os.walk(base):
@@ -626,21 +624,6 @@ class Smoke:
         say(f"   the root's permissions: {permissions.windows_acl(self.root)}")
         code, _output = self.tow("permissions", capture=True)  # its report is printed above
         say(f"   tow permissions exited {code}")
-        if not repair:
-            return
-        # Exactly what TOW runs (tow.platform.windows._close), its errors not hidden.
-        grants = [f"*{sid}:(OI)(CI)F" for sid in (permissions.user_sid(), "S-1-5-18", "S-1-5-32-544")]
-        done = subprocess.run(
-            ["icacls", str(self.root), "/inheritance:r", "/grant:r", *grants],
-            capture_output=True,
-            text=True,
-            errors="replace",
-            check=False,
-        )
-        lines = (done.stdout + done.stderr).strip().splitlines()
-        failures = [line for line in lines if not line.startswith("processed file:")]
-        say(f"   icacls exited {done.returncode}: {' | '.join(failures)[-2000:]}")
-        say(f"   after it: {permissions.windows_acl(self.root)}")
 
     def stop_and_report(self, failed: bool) -> None:
         if (self.root / "app" / "scripts").is_dir() and self.health() is not None:
