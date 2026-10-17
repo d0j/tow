@@ -237,7 +237,7 @@ def test_record_the_spellings_of_reserved_names(tmp_path):
         taken = [case for case in record["cases"] if isinstance(case.get("listed"), str)]
         print(f"{kind} {record['version']} on {record['os']}: {len(taken)} of {len(CASES)} taken; {target}")
         for case in record["cases"]:
-            print(json.dumps(case, ensure_ascii=False))
+            print(json.dumps(case))  # ASCII: a Windows console may not take every name
         assert taken, f"{kind} took none of the torrents: {record['cases']}"
 
 
