@@ -909,9 +909,16 @@ environment and Python 3.11 syntax.
   probe) and takes `process_alive`, `terminate`, `port_owner`, `bind_children` and
   `die_with_parent` from `tow.platform`.
 - **Volumes** (1.33.1, `volume_of`): the file system an existing path is on, read-only, `None` when it cannot be
-  told: on Windows the volume GUID of its mount point (a folder a disk is mounted on counts; a share or a mapped
-  drive by its path), on Linux `/proc/self/mountinfo` (type, mount point and source), on macOS `statfs`; with it
-  whether it is a network one (the note of `tow doctor` and Diagnostics on `data/`). A check that confirms a
+  told, and whether it is a network one (the note of `tow doctor` and Diagnostics on `data/`). Its identity names
+  that very file system, never its place: on Windows the volume GUID of its mount point (a folder a disk is mounted
+  on counts) with the volume's serial number, a share or a mapped drive by the share it stands for
+  (`WNetGetConnection`) with the serial its server reports, a `subst` drive by the volume and folder it stands for;
+  on Linux the UUID of the mount's block device (`/proc/self/mountinfo` and the links in `/dev/disk/by-uuid`, else
+  `by-partuuid`) or a network mount's source (`server:/export`, `//server/share`); on macOS the volume UUID
+  (`getattrlist`, else `diskutil info`) or the URL a network one is mounted from. Where there is none - a tmpfs, an
+  overlay, a device without a UUID, a failed lookup - the identity is unknown: nothing is recorded for such a
+  folder, and a recorded folder on it counts as off its volume. Another disk of the same type at the same mount
+  point or drive letter is another volume. A check that confirms a
   topic's file on disk records its folder's volume in the download history; a nightly backup or a restore point written and read back
   records its folder's volume in `state.json` (`backup_volumes`). From then on the folder, or while it is missing
   its nearest existing parent, must be on that volume: on another, a missing or an unreadable one the topic's files
@@ -919,7 +926,8 @@ environment and Python 3.11 syntax.
   so (`volume_missing`). A record is never replaced by itself: only `tow check --apply --rebind-volumes` or
   **Same disk — accept** on `/volumes` (on this computer) binds the folder again, and only to a volume a file of
   the topic (or a copy TOW opens) is found on now; a folder moved elsewhere records anew, and an import keeps no
-  records. Without a record everything is as before 1.33.1.
+  records. A record in another shape (a development build of 1.33.1 wrote a type and mount point or a bare GUID)
+  matches no volume: the folder is accepted again. Without a record everything is as before 1.33.1.
 - File locks are `tow.platform.locks` (`msvcrt` on Windows, `flock` elsewhere), used by
   `storage/locks.py`, `log.py`, `supervisor/layout.py` and `web_update.py`.
 

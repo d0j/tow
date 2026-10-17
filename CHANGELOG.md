@@ -99,8 +99,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   record is missing or unclear.
 - A topic's files are no longer called missing when the disk their folder is on is not mounted (Linux, macOS, and
   Windows folders a disk is mounted on): TOW remembers the disk once it has seen a file there, keeps the files
-  unconfirmed and measures no other disk's free space until it is back. After replacing or reformatting the disk, run
-  `tow check --apply --rebind-volumes`.
+  unconfirmed and measures no other disk's free space until it is back. The disk is known by its own ID (its UUID,
+  the Windows volume and its serial number, the share a network drive stands for), so another disk of the same kind
+  put at the same place or drive letter is another disk; one without an ID is not remembered. After replacing or
+  reformatting the disk, run `tow check --apply --rebind-volumes`.
 - A nightly backup or a restore point is no longer written onto the system disk when the disk of its folder is not
   connected: TOW remembers the disk once a copy was written and checked there, refuses the copy with a clear message
   while it is missing or another one, and shows no free space for that folder then.

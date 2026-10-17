@@ -2282,47 +2282,47 @@ def _volume_world(tmp_path: Path, monkeypatch, identity: str | None):
 
 
 def test_a_confirmed_file_records_the_volume_of_its_folder(tmp_path: Path, monkeypatch):
-    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "usb-disk")
+    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "uuid:usb-disk")
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
-    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "usb-disk"}
+    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "uuid:usb-disk"}
 
 
 def test_a_folder_on_another_volume_is_unverified_never_missing(tmp_path: Path, monkeypatch):
-    client, topic, history, current = _volume_world(tmp_path, monkeypatch, "system-disk")
-    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "usb-disk"}
+    client, topic, history, current = _volume_world(tmp_path, monkeypatch, "uuid:system-disk")
+    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "uuid:usb-disk"}
     (tmp_path / "Show" / "S01E01.mkv").unlink()  # the disk is gone: its folder is empty
 
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
 
     statuses = {item["status"] for item in history["topics"]["vol"]["items"].values()}
     assert statuses == {"unverified"}
-    assert history["topics"]["vol"]["volume"]["id"] == "usb-disk"  # never silently rebound
+    assert history["topics"]["vol"]["volume"]["id"] == "uuid:usb-disk"  # never silently rebound
     current["id"] = None  # the volume cannot be told: unknown as well
     reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00")
     assert {item["status"] for item in history["topics"]["vol"]["items"].values()} == {"unverified"}
 
 
 def test_the_owner_rebinds_a_folder_only_with_a_file_confirmed_on_the_new_volume(tmp_path: Path, monkeypatch):
-    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "new-disk")
-    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "old-disk"}
+    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "uuid:new-disk")
+    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "uuid:old-disk"}
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
-    assert history["topics"]["vol"]["volume"]["id"] == "old-disk"  # a mismatch alone binds nothing
+    assert history["topics"]["vol"]["volume"]["id"] == "uuid:old-disk"  # a mismatch alone binds nothing
 
     reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00", rebind_volume=True)
-    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "new-disk"}
+    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "uuid:new-disk"}
     assert {item["status"] for item in history["topics"]["vol"]["items"].values()} == {"completed"}
 
 
 def test_a_rebind_without_a_confirmed_file_keeps_the_record(tmp_path: Path, monkeypatch):
-    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "system-disk")
-    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "usb-disk"}
+    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "uuid:system-disk")
+    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "uuid:usb-disk"}
     (tmp_path / "Show" / "S01E01.mkv").unlink()  # an unmounted disk: nothing to confirm
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00", rebind_volume=True)
-    assert history["topics"]["vol"]["volume"]["id"] == "usb-disk"
+    assert history["topics"]["vol"]["volume"]["id"] == "uuid:usb-disk"
 
 
 def test_a_moved_topic_records_its_new_folder(tmp_path: Path, monkeypatch):
-    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "usb-disk")
-    history["topics"]["vol"]["volume"] = {"path": str(tmp_path / "old"), "id": "old-disk"}
+    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "uuid:usb-disk")
+    history["topics"]["vol"]["volume"] = {"path": str(tmp_path / "old"), "id": "uuid:old-disk"}
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
-    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "usb-disk"}
+    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "uuid:usb-disk"}

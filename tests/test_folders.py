@@ -222,36 +222,36 @@ def _volumes(monkeypatch, by_folder):
 def test_a_folder_on_its_recorded_volume_is_seen(tmp_path, monkeypatch):
     folder = tmp_path / "disk" / "tv"
     folder.mkdir(parents=True)
-    _volumes(monkeypatch, {str(folder): "usb-disk"})
-    assert seen_from_here(str(folder), volume="usb-disk")
+    _volumes(monkeypatch, {str(folder): "uuid:usb-disk"})
+    assert seen_from_here(str(folder), volume="uuid:usb-disk")
 
 
 def test_an_existing_empty_mount_point_on_another_volume_is_not_seen(tmp_path, monkeypatch):
     # The disk is unmounted, its mount point folder is still there: on the system disk now.
     folder = tmp_path / "mnt" / "disk"
     folder.mkdir(parents=True)
-    asked = _volumes(monkeypatch, {str(folder): "system-disk"})
-    assert not seen_from_here(str(folder), volume="usb-disk")
+    asked = _volumes(monkeypatch, {str(folder): "uuid:system-disk"})
+    assert not seen_from_here(str(folder), volume="uuid:usb-disk")
     assert asked == [str(folder)]
 
 
 def test_a_missing_folder_is_judged_by_its_nearest_existing_folder(tmp_path, monkeypatch):
     mount = tmp_path / "mnt" / "disk"
     mount.mkdir(parents=True)
-    asked = _volumes(monkeypatch, {str(mount): "usb-disk"})
+    asked = _volumes(monkeypatch, {str(mount): "uuid:usb-disk"})
     # A new subfolder the client has not made yet, on the recorded disk: seen.
-    assert seen_from_here(str(mount / "tv" / "Show"), volume="usb-disk")
+    assert seen_from_here(str(mount / "tv" / "Show"), volume="uuid:usb-disk")
     assert asked == [str(mount)]
     # The same, with the disk gone and its folder with it: the parent is another volume.
     mount.rmdir()
-    asked = _volumes(monkeypatch, {str(mount.parent): "system-disk"})
-    assert not seen_from_here(str(mount / "tv" / "Show"), volume="usb-disk")
+    asked = _volumes(monkeypatch, {str(mount.parent): "uuid:system-disk"})
+    assert not seen_from_here(str(mount / "tv" / "Show"), volume="uuid:usb-disk")
     assert asked == [str(mount.parent)]
 
 
 def test_an_unreadable_volume_is_not_seen_when_one_was_recorded(tmp_path, monkeypatch):
     _volumes(monkeypatch, {})
-    assert not seen_from_here(str(tmp_path), volume="usb-disk")
+    assert not seen_from_here(str(tmp_path), volume="uuid:usb-disk")
     assert seen_from_here(str(tmp_path))  # without a record: as before, nothing is asked
 
 
@@ -264,11 +264,18 @@ def test_without_a_record_the_volume_is_never_asked(tmp_path, monkeypatch):
     ("record", "path", "expected"),
     [
         (None, "/srv/tv", None),
-        ({"path": "/srv/tv", "id": "ext4 /srv"}, "/srv/tv", "ext4 /srv"),
-        ({"path": "/srv/tv/", "id": "ext4 /srv"}, "/srv/tv", "ext4 /srv"),
-        ({"path": "/srv/old", "id": "ext4 /srv"}, "/srv/tv", None),  # the topic moved: recorded again
-        ({"path": "D:\\TV", "id": "vol"}, "d:/tv", "vol"),  # a Windows folder ignores case
-        ({"path": "/srv/TV", "id": "ext4 /srv"}, "/srv/tv", None),  # a POSIX one does not
+        ({"path": "/srv/tv", "id": "uuid:0A1B-2C3D"}, "/srv/tv", "uuid:0A1B-2C3D"),
+        ({"path": "/srv/tv/", "id": "uuid:0A1B-2C3D"}, "/srv/tv", "uuid:0A1B-2C3D"),
+        ({"path": "/srv/old", "id": "uuid:0A1B-2C3D"}, "/srv/tv", None),  # the topic moved: recorded again
+        ({"path": "D:\\TV", "id": "win-volume:v"}, "d:/tv", "win-volume:v"),  # a Windows folder ignores case
+        ({"path": "/srv/TV", "id": "uuid:0A1B-2C3D"}, "/srv/tv", None),  # a POSIX one does not
+        ({"path": "/srv/tv", "id": "net:nas:/export"}, "/srv/tv", "net:nas:/export"),
+        # 1.33.1's development builds: a type and mount point, a bare GUID, a drive letter, a share
+        # path. Never a positive identity: nothing matches them, the owner accepts the disk again.
+        ({"path": "/srv/tv", "id": "ext4 /srv"}, "/srv/tv", ""),
+        ({"path": "D:\\TV", "id": "\\\\?\\volume{0000aaaa-1111}\\"}, "d:/tv", ""),
+        ({"path": "D:\\TV", "id": "path d:\\"}, "d:/tv", ""),
+        ({"path": "D:\\TV", "id": "share \\\\nas\\tv\\"}, "d:/tv", ""),
         ({"path": "/srv/tv", "id": ""}, "/srv/tv", ""),  # damaged: nothing matches it
         ({"path": "/srv/tv", "id": 7}, "/srv/tv", ""),
         ({"id": "ext4 /srv"}, "/srv/tv", ""),
@@ -279,3 +286,17 @@ def test_the_recorded_volume_of_a_folder(record, path, expected):
     from tow.folders import recorded_volume
 
     assert recorded_volume(record, path) == expected
+
+
+def test_a_volume_the_system_cannot_name_is_unknown(tmp_path, monkeypatch):
+    # 1.33.1 review: no positive identity (a tmpfs, a failed GUID lookup) is unknown - never a
+    # type and mount point or a drive letter instead, and never the recorded volume.
+    from tow.folders import volume_at
+
+    monkeypatch.setattr(platform, "volume_of", lambda path: platform.Volume(None, "local"))
+    assert volume_at(str(tmp_path)) is None
+    assert not seen_from_here(str(tmp_path), volume="uuid:usb-disk")
+    # A backend answering in an earlier shape is no positive identity either.
+    monkeypatch.setattr(platform, "volume_of", lambda path: platform.Volume("exfat /mnt/disk", "local"))
+    assert volume_at(str(tmp_path)) is None
+    assert not seen_from_here(str(tmp_path), volume="exfat /mnt/disk")

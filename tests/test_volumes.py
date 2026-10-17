@@ -38,7 +38,7 @@ def _disk(monkeypatch, identity):
     return current
 
 
-def _seed(tmp_path: Path, *, recorded: str = "usb-disk", unseen: bool = True) -> Path:
+def _seed(tmp_path: Path, *, recorded: str = "uuid:usb-disk", unseen: bool = True) -> Path:
     folder = tmp_path / "media"
     (folder / "Show").mkdir(parents=True)
     (folder / "Show" / "S01E01.mkv").write_bytes(b"0123456789")
@@ -76,7 +76,7 @@ def _issues():
 
 def test_the_issue_appears_while_the_folder_is_off_its_disk_and_goes_when_it_is_back(tmp_path, monkeypatch):
     folder = _seed(tmp_path, unseen=False)
-    disk = _disk(monkeypatch, "system-disk")
+    disk = _disk(monkeypatch, "uuid:system-disk")
     topic = load_state()["topics"][0]
     history = load_download_history()
     reconcile_topic(topic, FakeClient(), history, "2026-09-12T21:00:00+03:00")
@@ -90,7 +90,7 @@ def test_the_issue_appears_while_the_folder_is_off_its_disk_and_goes_when_it_is_
     assert (issue.fix.action, issue.fix.subject) == ("accept_volume", "topic:t1")
     assert issue.message.params == {"title": "Show A", "folder": str(folder)}
 
-    disk["id"] = "usb-disk"  # connected again
+    disk["id"] = "uuid:usb-disk"  # connected again
     reconcile_topic(topic, FakeClient(), history, "2026-09-12T21:30:00+03:00")
     assert "volume_unseen" not in topic
     state["topics"] = [topic]
@@ -221,7 +221,7 @@ def test_accept_binds_the_disk_a_file_of_the_topic_is_confirmed_on_now(tmp_path,
     from tow.web import app
 
     folder = _seed(tmp_path)
-    _disk(monkeypatch, "new-disk")
+    _disk(monkeypatch, "uuid:new-disk")
     seen = _run_check_with(monkeypatch, FakeClient())
     response = TestClient(app, headers=ORIGIN).post(
         "/volumes/accept", data={"subject": "topic:t1"}, follow_redirects=False
@@ -231,7 +231,7 @@ def test_accept_binds_the_disk_a_file_of_the_topic_is_confirmed_on_now(tmp_path,
     assert seen["ids"] == ["t1"]
     assert seen["progress_only"] is True  # the client alone: no site is asked
     assert seen["rebind_volumes"] is True
-    assert load_download_history()["topics"]["t1"]["volume"] == {"path": str(folder), "id": "new-disk"}
+    assert load_download_history()["topics"]["t1"]["volume"] == {"path": str(folder), "id": "uuid:new-disk"}
     assert "volume_unseen" not in load_state()["topics"][0]
     assert _issues() == []
 
@@ -241,14 +241,14 @@ def test_accept_is_refused_when_nothing_of_the_topic_is_confirmed_there(tmp_path
 
     folder = _seed(tmp_path)
     (folder / "Show" / "S01E01.mkv").unlink()  # the disk below an unmounted one: nothing of ours
-    _disk(monkeypatch, "system-disk")
+    _disk(monkeypatch, "uuid:system-disk")
     _run_check_with(monkeypatch, FakeClient())
     response = TestClient(app, headers=ORIGIN).post(
         "/volumes/accept", data={"subject": "topic:t1"}, follow_redirects=False
     )
     assert flash_kind(response.headers["location"]) == "err"
     assert flash_of(response.headers["location"]) == t("volumes.refused", "ru")
-    assert load_download_history()["topics"]["t1"]["volume"]["id"] == "usb-disk"
+    assert load_download_history()["topics"]["t1"]["volume"]["id"] == "uuid:usb-disk"
 
 
 @pytest.mark.parametrize("subject", ["", "topic:", "topic:nope", "backup:night", "backup:other", "elsewhere:t1"])
@@ -271,23 +271,74 @@ def test_a_backup_folder_is_accepted_only_with_a_copy_of_ours_on_it(tmp_path, mo
     cfg = load_config()
     cfg["backup_dir"] = str(night)
     save_config(cfg)
-    disk = _disk(monkeypatch, "old-disk")
+    disk = _disk(monkeypatch, "uuid:old-disk")
     create_snapshot()
-    disk["id"] = "new-disk"
+    disk["id"] = "uuid:new-disk"
     with pytest.raises(SnapshotError):
         create_snapshot()
     assert _issues()[0].id == "volume_missing:backup:night"
     for copy in night.iterdir():  # an empty new disk: nothing of ours there
         shutil.rmtree(copy)
     assert volumes.accept("backup:night") == volumes.REFUSED
-    assert load_state()["backup_volumes"]["night"]["id"] == "old-disk"
-    disk["id"] = "old-disk"
+    assert load_state()["backup_volumes"]["night"]["id"] == "uuid:old-disk"
+    disk["id"] = "uuid:old-disk"
     create_snapshot()  # the old disk is back: a copy is written there again
-    disk["id"] = "new-disk"  # the copies were moved to a new disk mounted at the same place
+    disk["id"] = "uuid:new-disk"  # the copies were moved to a new disk mounted at the same place
     with pytest.raises(SnapshotError):
         create_snapshot()
     assert volumes.accept("backup:night") == volumes.ACCEPTED
-    assert load_state()["backup_volumes"]["night"]["id"] == "new-disk"
+    assert load_state()["backup_volumes"]["night"]["id"] == "uuid:new-disk"
     assert "unseen_at" not in load_state()["backup_volumes"]["night"]
     assert _issues() == []
     create_snapshot()  # copies go on
+
+
+# --- a positive identity, or none (1.33.1 review) ------------------------------------------------------
+
+
+def test_a_record_of_an_earlier_shape_is_off_its_disk_until_accepted_again(tmp_path, monkeypatch):
+    """1.33.1's development builds recorded a type and mount point ("exfat /mnt/disk"), which
+    another disk of that type at that place matched. Such a record matches no volume now: the
+    folder is in Needs attention, and the owner's accept binds the disk's own identity."""
+    from tow import volumes
+
+    folder = _seed(tmp_path, recorded="exfat /mnt/disk", unseen=False)
+    _disk(monkeypatch, "uuid:usb-disk")
+    topic = load_state()["topics"][0]
+    history = load_download_history()
+    reconcile_topic(topic, FakeClient(), history, "2026-09-12T21:00:00+03:00")
+    assert topic["volume_unseen"]["folder"] == str(folder)
+    assert history["topics"]["t1"]["volume"]["id"] == "exfat /mnt/disk"  # never silently rebound
+    state = load_state()
+    state["topics"] = [topic]
+    save_state(state)
+    save_download_history(history)
+    (issue,) = _issues()
+    assert issue.fix is not None
+    assert issue.fix.action == "accept_volume"
+
+    _run_check_with(monkeypatch, FakeClient())
+    assert volumes.accept("topic:t1") == volumes.ACCEPTED
+    assert load_download_history()["topics"]["t1"]["volume"] == {"path": str(folder), "id": "uuid:usb-disk"}
+    assert _issues() == []
+
+
+def test_a_disk_without_an_identity_is_never_seen_nor_accepted(tmp_path, monkeypatch):
+    """A file system the system cannot name (a tmpfs, a failed lookup): its files are not
+    confirmed nor called missing, and accept binds nothing."""
+    from tow import volumes
+
+    _seed(tmp_path, unseen=False)
+    monkeypatch.setattr(platform, "volume_of", lambda path: platform.Volume(None, "local"))
+    topic = load_state()["topics"][0]
+    history = load_download_history()
+    reconcile_topic(topic, FakeClient(), history, "2026-09-12T21:00:00+03:00")
+    assert "volume_unseen" in topic
+    assert {item["status"] for item in history["topics"]["t1"]["items"].values()} == {"unverified"}
+    state = load_state()
+    state["topics"] = [topic]
+    save_state(state)
+    save_download_history(history)
+    _run_check_with(monkeypatch, FakeClient())
+    assert volumes.accept("topic:t1") == volumes.REFUSED
+    assert load_download_history()["topics"]["t1"]["volume"]["id"] == "uuid:usb-disk"

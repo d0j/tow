@@ -5,12 +5,14 @@ tmpfs, a loop-mounted vfat and exFAT image (the kernel's drivers) and the same e
 (exfat-fuse); on macOS exFAT and FAT disk images (hdiutil). Each leg (``filesystems.leg``) is
 mounted, unmounted and mounted again by the test itself, in a folder of the test's own:
 
-- C03: the volume TOW records for a folder there (``tow.folders.volume_at``) names the file
-  system and its mount point; the folder is seen on it and its free space counts. Unmounted -
-  the folder gone, or its empty mount point left on the disk below - the folder is not seen on
-  the recorded volume and its space is unknown (never the disk below's); mounted again it is seen
-  again (the identity is stable across a remount); another file system at the same mount point
-  is not the recorded volume.
+- C03: the volume TOW records for a folder there (``tow.folders.volume_at``) is the file
+  system's own UUID (udev's /dev/disk/by-uuid on Linux, the volume UUID on macOS); the folder is
+  seen on it and its free space counts. Unmounted - the folder gone, or its empty mount point left
+  on the disk below - the folder is not seen on the recorded volume and its space is unknown
+  (never the disk below's); mounted again it is seen again (the identity is stable across a
+  remount); another file system at the same mount point is not the recorded volume, and neither
+  is another of the SAME type (the leg's twin image, made with another UUID). A tmpfs has no
+  identity: unknown, nothing is recorded.
 - C04: ``atomic_create_bytes`` (what an export publishes through) without replacing: where the
   file system has hard links, by a link; where it has none, by the C library's no-replace rename
   (renameat2 RENAME_NOREPLACE, renamex_np RENAME_EXCL), which must exist on Linux's own vfat and
@@ -32,7 +34,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from filesystems import LINUX_LEGS, MACOS_LEGS, Leg, leg, other
+from filesystems import LINUX_LEGS, MACOS_LEGS, Leg, leg, other, twin
 
 pytestmark = [pytest.mark.real_system("TOW_REAL_FILESYSTEMS"), pytest.mark.timeout(300)]
 
@@ -55,6 +57,7 @@ class Mounted:
         ids = (os.getuid(), os.getgid())  # type: ignore[attr-defined,unused-ignore]
         self.leg: Leg = leg(name, SYSTEM, images, self.point, *ids)
         self.other: Leg = other(SYSTEM, images, self.point, *ids, name)
+        self.twin: Leg | None = twin(SYSTEM, images, self.point, *ids, name)
         self.up: Leg | None = None
 
     def mount(self, which: Leg | None = None) -> None:
@@ -62,6 +65,8 @@ class Mounted:
         chosen = which or self.leg
         _run(chosen.mount)
         self.up = chosen
+        if SYSTEM == "linux":  # udev names the new loop device's UUID in /dev/disk/by-uuid
+            subprocess.run(("udevadm", "settle", "--timeout=10"), capture_output=True, timeout=30, check=False)
 
     def unmount(self) -> None:
         if self.up is not None:
@@ -98,13 +103,18 @@ def test_the_recorded_volume_follows_the_mount(mounted):
     recorded = volume_at(str(folder))
     found = platform.volume_of(folder)
     assert found is not None
-    assert recorded == found.identity
-    fstype, _, point = str(recorded).partition(" ")
-    assert fstype.startswith(mounted.leg.fstype), recorded  # FUSE may name its subtype too
-    assert point == os.path.realpath(mounted.point), recorded
     print(f"{mounted.leg.name}: {recorded!r}, {found.kind}")
     if mounted.leg.name != "exfat-fuse":
         assert found.kind == "local"
+    if mounted.leg.name == "tmpfs":  # no UUID: unknown, never "tmpfs <mount point>"
+        assert recorded is None
+        assert found.identity is None
+        assert seen_from_here(str(folder))  # nothing recorded: as without a record
+        return
+    assert recorded == found.identity
+    assert recorded is not None
+    assert recorded.startswith(("uuid:", "partuuid:") if SYSTEM == "linux" else ("uuid:",)), recorded
+    assert str(mounted.point) not in recorded  # the file system's own name, not its place
     assert seen_from_here(str(folder), volume=recorded)
     assert _space_known(folder, recorded)
 
@@ -120,14 +130,25 @@ def test_the_recorded_volume_follows_the_mount(mounted):
     assert volume_at(str(folder)) == recorded  # a remount keeps the identity
     assert seen_from_here(str(folder), volume=recorded)
     assert _space_known(folder, recorded)
-    if mounted.leg.name != "tmpfs":
-        assert (folder / "e01.mkv").read_bytes() == b"x" * 1000
+    assert (folder / "e01.mkv").read_bytes() == b"x" * 1000
 
     mounted.unmount()
     mounted.mount(mounted.other)  # another file system at the very same mount point
-    other = volume_at(str(folder))
-    print(f"{mounted.leg.name}: {mounted.other.name} at the same mount point is {other!r}")
-    assert other != recorded
+    folder.mkdir(exist_ok=True)
+    elsewhere = volume_at(str(folder))
+    print(f"{mounted.leg.name}: {mounted.other.name} at the same mount point is {elsewhere!r}")
+    assert elsewhere != recorded
+    assert not seen_from_here(str(folder), volume=recorded)
+    assert not _space_known(folder, recorded)
+
+    assert mounted.twin is not None
+    mounted.unmount()
+    mounted.mount(mounted.twin)  # the SAME type at the same mount point: another disk of its kind
+    folder.mkdir(exist_ok=True)
+    (folder / "e01.mkv").write_bytes(b"y" * 1000)  # even the same name and size there
+    same_type = volume_at(str(folder))
+    print(f"{mounted.leg.name}: {mounted.twin.name} (the same type) at the same mount point is {same_type!r}")
+    assert same_type != recorded
     assert not seen_from_here(str(folder), volume=recorded)
     assert not _space_known(folder, recorded)
 

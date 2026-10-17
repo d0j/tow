@@ -123,9 +123,11 @@ other files for it in the client, or remove it, TOW stops waiting. Only a drive 
 client on another computer, a folder this computer cannot see or free space that cannot be read never holds a
 torrent back, and the forms then show no free space.
 
-Once TOW has seen a file of a topic in its folder, it also remembers which disk that folder is on. When that disk
-is later not mounted (its folder is empty or lies on another disk), TOW does not call the files missing and does not
-measure the other disk's free space: they stay unconfirmed until the disk is back. After you replace or reformat the
+Once TOW has seen a file of a topic in its folder, it also remembers which disk that folder is on - the disk itself
+by its own ID, not its drive letter or folder: another disk put in its place counts as another disk, and a disk
+without an ID (a RAM disk) is not remembered. When that disk is later not mounted (its folder is empty or lies on
+another disk), TOW does not call the files missing and does not measure the other disk's free space: they stay
+unconfirmed until the disk is back. After you replace or reformat the
 disk, accept it in Needs attention (**Same disk — accept**, on the computer running TOW) or run
 `tow check --apply --rebind-volumes` once the files are on the new one: only a disk a file of the topic is found on now
 is accepted.

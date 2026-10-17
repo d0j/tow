@@ -1629,72 +1629,235 @@ def test_the_native_rename_of_this_system_refuses_an_existing_name(tmp_path):
 _MOUNT_LINES = (
     "22 1 8:2 / / rw,relatime shared:1 - ext4 /dev/sda2 rw",
     "30 22 0:40 / /srv/media rw shared:2 - nfs4 nas:/export/media rw,vers=4.2",
-    "31 22 0:41 / /mnt/my\\040disk rw - exfat /dev/sdb1 rw",
+    "31 22 0:41 / /mnt/my\\040disk rw - exfat /dev/sdb1 rw",  # its device by its source
     "32 22 0:42 / /mnt/ssh rw - fuse.sshfs user@host:/data rw",
     "33 22 0:43 / /mnt/fuse rw - fuse some-local-fuse rw",
     "34 22 8:33 / /mnt/ntfs rw - fuseblk /dev/sdc1 rw",
     "35 30 0:44 / /srv/media rw - cifs //nas/media rw",  # mounted over the NFS one: it counts
+    "36 22 0:45 / /mnt/ram rw - tmpfs tow-tmpfs rw",
+    "37 22 0:46 / /mnt/layer rw - overlay overlay rw,lowerdir=/a",
+    "38 22 8:17 /shows /mnt/bind rw - exfat /dev/sdb1 rw",  # a folder of the exFAT disk
+    "39 22 0:47 / /mnt/smb rw - cifs //alice@nas/tv rw",
     "garbage line",
 )
 _MOUNTINFO = "\n".join(_MOUNT_LINES)
+# udev's links: the root and the exFAT disk by file system UUID, the NTFS one by its partition only.
+_DEVICES = {"8:2": "uuid:6f1d-root", "8:17": "uuid:0A1B-2C3D", "8:33": "partuuid:5e2a-03"}
+_SOURCES = {"/dev/sda2": "8:2", "/dev/sdb1": "8:17", "/dev/sdc1": "8:33"}
+
+
+@pytest.fixture
+def linux_devices(monkeypatch):
+    """The block devices udev names, as /dev/disk/by-uuid and by-partuuid would give them."""
+    devices = dict(_DEVICES)
+    monkeypatch.setattr(posix, "_block_identities", lambda: dict(devices))
+    monkeypatch.setattr(posix, "_device_number", _SOURCES.get)
+    return devices
 
 
 @pytest.mark.parametrize(
     ("path", "identity", "kind"),
     [
-        ("/home/user/tow/data", "ext4 /", "local"),
-        ("/srv/media/tv", "cifs /srv/media //nas/media", "network"),
-        ("/srv/mediathek", "ext4 /", "local"),  # a name that only starts like a mount point
-        ("/mnt/my disk/tv", "exfat /mnt/my disk", "local"),
-        ("/mnt/ssh/tow", "fuse.sshfs /mnt/ssh user@host:/data", "network"),
-        ("/mnt/fuse/tow", "fuse /mnt/fuse", "unknown"),
-        ("/mnt/ntfs", "fuseblk /mnt/ntfs", "local"),
-        ("/mnt/usb", "ext4 /", "local"),  # not mounted: its empty folder is on the root file system
+        ("/home/user/tow/data", "uuid:6f1d-root", "local"),
+        ("/srv/media/tv", "net://nas/media", "network"),
+        ("/srv/mediathek", "uuid:6f1d-root", "local"),  # a name that only starts like a mount point
+        ("/mnt/my disk/tv", "uuid:0A1B-2C3D", "local"),
+        ("/mnt/ssh/tow", "net:user@host:/data", "network"),
+        ("/mnt/fuse/tow", None, "unknown"),  # no device, no share: never its type and place
+        ("/mnt/ntfs", "partuuid:5e2a-03", "local"),
+        ("/mnt/usb", "uuid:6f1d-root", "local"),  # not mounted: its empty folder is on the root file system
+        ("/mnt/ram/tv", None, "local"),  # a tmpfs has no identity of its own
+        ("/mnt/layer/tv", None, "unknown"),
+        ("/mnt/bind/tv", "uuid:0A1B-2C3D|/shows", "local"),
+        ("/mnt/smb/tv", "net://nas/tv", "network"),  # the share, not the account mounting it
     ],
 )
-def test_linux_volume_is_the_longest_mount_above_the_path(path, identity, kind):
+def test_linux_volume_is_the_file_system_of_the_longest_mount_above_the_path(linux_devices, path, identity, kind):
     assert posix.linux_volume(path, _MOUNTINFO) == platform.Volume(identity, kind)
 
 
-def test_linux_volume_unknown_without_mountinfo():
+def test_linux_volume_unknown_without_mountinfo(linux_devices):
     assert posix.linux_volume("/srv", "") is None
 
 
-def test_posix_backends_read_their_own_sources(monkeypatch):
+def test_another_disk_of_the_same_type_at_the_same_mount_point_is_another_volume(linux_devices):
+    # 1.33.1 review: an exFAT disk replaced by another exFAT disk at the same mount point (even
+    # under the same device number) was "ext4/exfat + mount point" both times: its files called
+    # missing, its free space credited, backups written to it. The UUID tells them apart.
+    line = "40 22 8:49 / /media/usb rw - exfat /dev/sdd1 rw"
+    linux_devices["8:49"] = "uuid:1111-AAAA"
+    first = posix.linux_volume("/media/usb/TV", line)
+    linux_devices["8:49"] = "uuid:2222-BBBB"  # another exFAT disk in the same slot
+    second = posix.linux_volume("/media/usb/TV", line)
+    assert first == platform.Volume("uuid:1111-AAAA", "local")
+    assert second == platform.Volume("uuid:2222-BBBB", "local")
+    # The first disk again, in another slot (another device number): the same volume.
+    linux_devices.pop("8:49")
+    linux_devices["8:65"] = "uuid:1111-AAAA"
+    assert posix.linux_volume("/media/usb/TV", line.replace("8:49", "8:65")) == first
+    # A disk udev names no UUID for: unknown, not "exfat /media/usb".
+    assert posix.linux_volume("/media/usb/TV", line.replace("8:49", "8:81")) == platform.Volume(None, "local")
+
+
+def test_linux_block_identities_prefer_the_file_system_uuid(monkeypatch, tmp_path):
+    by_uuid, by_partuuid = tmp_path / "by-uuid", tmp_path / "by-partuuid"
+    by_uuid.mkdir()
+    by_partuuid.mkdir()
+    for folder, name in ((by_uuid, "0A1B-2C3D"), (by_partuuid, "5e2a-02"), (by_partuuid, "5e2a-03")):
+        (folder / name).write_text("", encoding="utf-8")
+    numbers = {"0A1B-2C3D": "8:17", "5e2a-02": "8:17", "5e2a-03": "8:33"}
+    monkeypatch.setattr(posix, "_DISK_LINKS", ((str(by_uuid), "uuid:"), (str(by_partuuid), "partuuid:")))
+    monkeypatch.setattr(posix, "_device_number", lambda link: numbers[Path(link).name])
+    assert posix._block_identities() == {"8:17": "uuid:0A1B-2C3D", "8:33": "partuuid:5e2a-03"}
+    monkeypatch.setattr(posix, "_DISK_LINKS", ((str(tmp_path / "none"), "uuid:"),))
+    assert posix._block_identities() == {}
+
+
+def test_a_linux_device_number_is_read_from_sys(monkeypatch):
+    monkeypatch.setattr(posix.os.path, "realpath", lambda path: "/dev/sdb1")
+    monkeypatch.setattr(posix, "_read", lambda path: "8:17\n" if path == "/sys/class/block/sdb1/dev" else "")
+    assert posix._device_number("/dev/disk/by-uuid/0A1B-2C3D") == "8:17"
+    monkeypatch.setattr(posix, "_read", lambda path: "")
+    assert posix._device_number("/dev/sdb1") is None
+
+
+def test_posix_backends_read_their_own_sources(monkeypatch, linux_devices):
     monkeypatch.setattr(posix, "_resolve", lambda path: "/srv/media/tv")
     monkeypatch.setattr(posix, "_read", lambda path: _MOUNTINFO if path == "/proc/self/mountinfo" else "")
-    assert PosixBackend("linux").volume(Path("/srv/media/tv")).kind == "network"
+    assert PosixBackend("linux").volume(Path("/srv/media/tv")) == platform.Volume("net://nas/media", "network")
+    uuids = {"/System/Volumes/Data": "6A2B-DATA", "/Volumes/USB": "1111-AAAA"}
+    monkeypatch.setattr(posix, "_volume_uuid", uuids.get)
     monkeypatch.setattr(posix, "_statfs", lambda path: ("smbfs", "/Volumes/media", "//user@nas/media"))
-    assert PosixBackend("macos").volume(Path("/Volumes/media/tv")) == platform.Volume(
-        "smbfs /Volumes/media //user@nas/media", "network"
-    )
+    assert PosixBackend("macos").volume(Path("/Volumes/media/tv")) == platform.Volume("net://nas/media", "network")
     monkeypatch.setattr(posix, "_statfs", lambda path: ("apfs", "/System/Volumes/Data", "/dev/disk3s5"))
-    assert PosixBackend("macos").volume(Path("/Users/user")) == platform.Volume("apfs /System/Volumes/Data", "local")
+    assert PosixBackend("macos").volume(Path("/Users/user")) == platform.Volume("uuid:6A2B-DATA", "local")
     monkeypatch.setattr(posix, "_statfs", lambda path: None)
     assert PosixBackend("macos").volume(Path("/Users/user")) is None
 
 
-@pytest.mark.parametrize(
-    ("mount_point", "drive_type", "guid", "expected"),
-    [
-        ("D:\\", 3, "\\\\?\\Volume{0000AAAA-1111}\\", ("\\\\?\\volume{0000aaaa-1111}\\", "local")),
-        ("C:\\mnt\\disk\\", 3, "\\\\?\\Volume{0000BBBB-2222}\\", ("\\\\?\\volume{0000bbbb-2222}\\", "local")),
-        ("Z:\\", 4, None, ("path z:\\", "network")),  # a mapped network drive has no volume GUID
-        ("\\\\nas\\tv\\", 4, None, ("share \\\\nas\\tv\\", "network")),
-        ("E:\\", 0, "\\\\?\\Volume{0000CCCC-3333}\\", ("\\\\?\\volume{0000cccc-3333}\\", "unknown")),
-    ],
-)
-def test_windows_volume_is_the_mounted_volume_not_the_drive_letter(
-    monkeypatch, mount_point, drive_type, guid, expected
-):
-    monkeypatch.setattr(windows, "_volume_path", lambda path: mount_point)
-    monkeypatch.setattr(windows, "_drive_type", lambda root: drive_type)
-    monkeypatch.setattr(windows, "_volume_guid", lambda root: guid)
-    assert windows.volume(Path("X:\\any")) == platform.Volume(*expected)
+def test_a_mac_volume_is_its_uuid_and_unknown_without_one(monkeypatch):
+    monkeypatch.setattr(posix, "_statfs", lambda path: ("exfat", "/Volumes/USB", "/dev/disk4s1"))
+    uuid = {"value": "1111-AAAA"}
+    monkeypatch.setattr(posix, "_volume_uuid", lambda point: uuid["value"])
+    first = PosixBackend("macos").volume(Path("/Volumes/USB/TV"))
+    uuid["value"] = "2222-BBBB"  # another exFAT disk mounted as /Volumes/USB
+    second = PosixBackend("macos").volume(Path("/Volumes/USB/TV"))
+    assert first == platform.Volume("uuid:1111-AAAA", "local")
+    assert second == platform.Volume("uuid:2222-BBBB", "local")
+    uuid["value"] = None
+    assert PosixBackend("macos").volume(Path("/Volumes/USB/TV")) == platform.Volume(None, "local")
+
+
+def test_a_mac_volume_uuid_falls_back_to_diskutil(monkeypatch):
+    plist = (
+        '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>'
+        "<key>VolumeUUID</key><string>0a1b2c3d-1111-2222-3333-444455556666</string></dict></plist>"
+    )
+    asked = []
+    monkeypatch.setattr(posix, "_run", lambda args, timeout=20: asked.append(args) or plist)
+    assert posix._diskutil_uuid("/Volumes/USB") == "0A1B2C3D-1111-2222-3333-444455556666"
+    assert asked == [["/usr/sbin/diskutil", "info", "-plist", "/Volumes/USB"]]
+    monkeypatch.setattr(posix, "_run", lambda args, timeout=20: "")
+    assert posix._diskutil_uuid("/Volumes/USB") is None
+    monkeypatch.setattr(posix, "_run", lambda args, timeout=20: "not a plist")
+    assert posix._diskutil_uuid("/Volumes/USB") is None
+
+
+class _WindowsVolumes:
+    """What Windows answers about drives, mount points and shares (the module's seams)."""
+
+    def __init__(self, monkeypatch) -> None:
+        self.substs: dict[str, str] = {}
+        self.points: dict[str, str] = {}  # a path's first letters -> its mount point
+        self.types: dict[str, int] = {}
+        self.guids: dict[str, str] = {}
+        self.serials: dict[str, int] = {}
+        self.remotes: dict[str, str] = {}
+        monkeypatch.setattr(windows, "_subst_target", lambda drive: self.substs.get(drive.upper()))
+        monkeypatch.setattr(windows, "_volume_path", self._point)
+        monkeypatch.setattr(windows, "_drive_type", lambda root: self.types.get(root, 0))
+        monkeypatch.setattr(windows, "_volume_guid", lambda root: self.guids.get(root))
+        monkeypatch.setattr(windows, "_volume_serial", lambda root: self.serials.get(root))
+        monkeypatch.setattr(windows, "_remote_name", lambda drive: self.remotes.get(drive.upper()))
+
+    def _point(self, path: str) -> str | None:
+        matches = [point for point in self.points if path.lower().startswith(point.lower())]
+        return self.points[max(matches, key=len)] if matches else None
+
+
+_GUID_D = "\\\\?\\Volume{0000AAAA-1111}\\"
+_GUID_C = "\\\\?\\Volume{0000BBBB-2222}\\"
+
+
+def test_windows_volume_is_the_volume_guid_and_serial_not_the_drive_letter(monkeypatch):
+    world = _WindowsVolumes(monkeypatch)
+    world.points = {"D:\\": "D:\\", "C:\\mnt\\disk\\": "C:\\mnt\\disk\\", "E:\\": "E:\\"}
+    world.types = {"D:\\": 3, "C:\\mnt\\disk\\": 3, "E:\\": 2}
+    world.guids = {"D:\\": _GUID_D, "C:\\mnt\\disk\\": _GUID_C}
+    world.serials = {"D:\\": 0xABCD1234, "C:\\mnt\\disk\\": 0x1}
+    found = windows.volume(Path("D:\\TV"))
+    assert found == platform.Volume("win-volume:\\\\?\\volume{0000aaaa-1111}\\:abcd1234", "local")
+    # A folder a volume is mounted on: that volume, not the drive above it.
+    assert windows.volume(Path("C:\\mnt\\disk\\TV")) == platform.Volume(
+        "win-volume:\\\\?\\volume{0000bbbb-2222}\\:00000001", "local"
+    )
+    # The same partition formatted again (the same GUID, a new serial): another file system.
+    world.serials["D:\\"] = 0x5555AAAA
+    assert windows.volume(Path("D:\\TV")).identity != found.identity
+    # No GUID (or no serial): unknown, never "path e:\\".
+    assert windows.volume(Path("E:\\TV")) == platform.Volume(None, "local")
+    world.guids["E:\\"] = _GUID_D
+    assert windows.volume(Path("E:\\TV")) == platform.Volume(None, "local")
+
+
+def test_a_mapped_drive_letter_is_the_share_it_stands_for(monkeypatch):
+    # 1.33.1 review: Z: mapped to another share (the same letter) was "path z:\\" both times.
+    world = _WindowsVolumes(monkeypatch)
+    world.points = {"Z:\\": "Z:\\", "\\\\nas\\tv\\": "\\\\nas\\tv\\"}
+    world.types = {"Z:\\": 4}
+    world.remotes = {"Z:": "\\\\NAS\\TV"}
+    world.serials = {"Z:\\": 0x00C0FFEE}
+    first = windows.volume(Path("Z:\\Show"))
+    assert first == platform.Volume("win-share:\\\\nas\\tv:00c0ffee", "network")
+    world.remotes = {"Z:": "\\\\nas\\movies"}  # the same letter, another share
+    world.serials = {"Z:\\": 0x0BADCAFE}
+    assert windows.volume(Path("Z:\\Show")) == platform.Volume("win-share:\\\\nas\\movies:0badcafe", "network")
+    # A server that reports no serial: the share alone; a letter Windows cannot name: unknown.
+    world.serials = {}
+    assert windows.volume(Path("Z:\\Show")) == platform.Volume("win-share:\\\\nas\\movies", "network")
+    world.remotes = {}
+    assert windows.volume(Path("Z:\\Show")) == platform.Volume(None, "network")
+    # The share by its own path is the same share as through the letter.
+    world.remotes = {"Z:": "\\\\nas\\tv"}
+    assert windows.volume(Path("\\\\nas\\tv\\Show")) == windows.volume(Path("Z:\\Show"))
+
+
+def test_a_substituted_drive_is_the_volume_and_folder_it_stands_for(monkeypatch):
+    world = _WindowsVolumes(monkeypatch)
+    world.points = {"C:\\": "C:\\", "S:\\": "S:\\"}
+    world.types = {"C:\\": 3, "S:\\": 3}
+    world.guids = {"C:\\": _GUID_C}
+    world.serials = {"C:\\": 0x1}
+    world.substs = {"S:": "C:\\Media\\"}
+    first = windows.volume(Path("S:\\TV"))
+    assert first == platform.Volume("win-volume:\\\\?\\volume{0000bbbb-2222}\\:00000001|subst:c:\\media", "local")
+    world.substs = {"S:": "C:\\Other"}  # subst S: to another folder
+    assert windows.volume(Path("S:\\TV")).identity != first.identity
+    world.substs = {"S:": "Q:\\Gone"}  # its folder on a volume Windows cannot name
+    assert windows.volume(Path("S:\\TV")) == platform.Volume(None, "unknown")
+
+
+def test_windows_subst_targets_are_read_from_the_dos_device(monkeypatch):
+    devices = {"S:": "\\??\\C:\\Media", "U:": "\\??\\UNC\\nas\\tv\\x", "C:": "\\Device\\HarddiskVolume3"}
+    monkeypatch.setattr(windows, "_dos_device", devices.get)
+    assert windows._subst_target("S:") == "C:\\Media"
+    assert windows._subst_target("U:") == "\\\\nas\\tv\\x"
+    assert windows._subst_target("C:") is None
+    assert windows._subst_target("X:") is None
 
 
 def test_windows_volume_unknown_when_windows_cannot_tell(monkeypatch):
-    monkeypatch.setattr(windows, "_volume_path", lambda path: None)
+    world = _WindowsVolumes(monkeypatch)
     assert windows.volume(Path("X:\\any")) is None
 
     def failing(_path):
@@ -1702,28 +1865,34 @@ def test_windows_volume_unknown_when_windows_cannot_tell(monkeypatch):
 
     monkeypatch.setattr(windows, "_volume_path", failing)
     assert windows.volume(Path("X:\\any")) is None
+    assert world.points == {}
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the Windows volume calls")
-def test_this_windows_names_its_local_volume_by_guid(tmp_path):
+def test_this_windows_names_its_local_volume_by_guid_and_serial(tmp_path):
     found = platform.volume_of(tmp_path)
     assert found is not None
     assert found.kind == "local"
-    assert found.identity.startswith("\\\\?\\volume{")
+    assert found.identity is not None
+    assert found.identity.startswith("win-volume:\\\\?\\volume{")
+    assert len(found.identity.rsplit(":", 1)[1]) == 8
     assert platform.volume_of(tmp_path / "not" / "there") == found
+    assert windows._subst_target(str(tmp_path)[:2]) is None  # a real drive, no substitution
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="/proc/self/mountinfo")
 def test_this_linux_finds_the_mount_of_a_folder(tmp_path):
     found = PosixBackend("linux").volume(tmp_path)
     assert found is not None
-    assert found.identity.split(" ", 1)[1].startswith("/")
+    # A disk names its UUID; a container's overlay or a tmpfs has none.
+    assert found.identity is None or found.identity.startswith(("uuid:", "partuuid:"))
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS statfs")
 def test_this_mac_reads_statfs_of_its_root():
     fstype, mount_point, _source = posix._statfs("/")
     assert (fstype, mount_point) == ("apfs", "/")
+    assert posix._volume_uuid("/") is not None  # the system volume has a UUID
 
 
 def test_a_backend_without_the_volume_probe_answers_unknown(tmp_path):

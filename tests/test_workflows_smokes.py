@@ -276,6 +276,11 @@ def test_real_mounts_the_c03_and_c04_file_systems_on_linux_and_macos():
     assert "hdiutil create -size 64m -fs ExFAT" in macos
     assert 'hdiutil create -size 64m -fs "MS-DOS FAT32"' in macos
     assert 'echo "TOW_REAL_FS=exfat msdos"' in macos
+    # Every image leg has a twin of the same type with another UUID (1.33.1 review: a disk
+    # replaced by another of its kind at the same mount point), checked different before the test.
+    assert '"$images/$name-twin.img"' in linux
+    assert 'test "$(uuid "$images/$name.img")" != "$(uuid "$images/$name-twin.img")"' in linux
+    assert 'for copy in "" -twin; do' in macos
     test = next(step for step in job["steps"] if "pytest" in step.get("run", ""))
     assert "tests/integration/test_real_filesystems.py" in test["run"]
     assert test["timeout-minutes"] <= 10

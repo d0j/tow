@@ -426,7 +426,8 @@ jobs:
 
   # C03 and C04 on real file systems (tests/integration/test_real_filesystems.py): a tmpfs, vfat
   # and exFAT images through Linux's own drivers and exFAT through FUSE; exFAT and FAT disk images
-  # on macOS (renamex_np). The test mounts, unmounts and mounts each again itself.
+  # on macOS (renamex_np). The test mounts, unmounts and mounts each again itself, then another
+  # file system and a twin image of the same type (another UUID) at the same mount point.
   filesystems:
     name: file systems (${{ matrix.os }})
     strategy:
@@ -462,10 +463,29 @@ jobs:
           }
           images="$RUNNER_TEMP/fs-images"
           mkdir -p "$images"
-          for name in vfat exfat exfat-fuse; do truncate -s 64M "$images/$name.img"; done
-          sudo mkfs.vfat -n TOWVFAT "$images/vfat.img"
-          sudo mkfs.exfat -L TOWEXFAT "$images/exfat.img"
-          sudo mkfs.exfat -L TOWFUSE "$images/exfat-fuse.img"
+          # Each leg has a twin: the same type and label, another UUID (a disk replaced by another
+          # of its kind at the same mount point must not be the recorded volume).
+          for name in vfat exfat exfat-fuse; do
+            truncate -s 64M "$images/$name.img" "$images/$name-twin.img"
+          done
+          sudo mkfs.vfat -n TOWVFAT -i 1A2B3C4D "$images/vfat.img"
+          sudo mkfs.vfat -n TOWVFAT -i 5E6F7A8B "$images/vfat-twin.img"
+          uuid() { sudo blkid -p -o value -s UUID "$1"; }
+          for name in exfat exfat-fuse; do
+            label=$([ "$name" = exfat ] && echo TOWEXFAT || echo TOWFUSE)
+            sudo mkfs.exfat -L "$label" "$images/$name.img"
+            for attempt in 1 2 3 4 5; do  # the volume serial (its UUID) comes from the clock
+              sleep 1
+              sudo mkfs.exfat -L "$label" "$images/$name-twin.img"
+              if [ "$(uuid "$images/$name.img")" != "$(uuid "$images/$name-twin.img")" ]; then break; fi
+            done
+          done
+          for image in "$images"/*.img; do
+            echo "$(basename "$image"): UUID $(uuid "$image")"
+          done
+          for name in vfat exfat exfat-fuse; do
+            test "$(uuid "$images/$name.img")" != "$(uuid "$images/$name-twin.img")"
+          done
           uname -r
           dpkg-query -W dosfstools exfatprogs exfat-fuse
           echo "TOW_REAL_FS=tmpfs vfat exfat exfat-fuse" >> "$GITHUB_ENV"
@@ -476,8 +496,11 @@ jobs:
         run: |
           images="$RUNNER_TEMP/fs-images"
           mkdir -p "$images"
-          hdiutil create -size 64m -fs ExFAT -volname TOWEXFAT "$images/exfat.dmg"
-          hdiutil create -size 64m -fs "MS-DOS FAT32" -volname TOWFAT "$images/msdos.dmg"
+          # Each with a twin of the same type and name: hdiutil gives every volume its own UUID.
+          for copy in "" -twin; do
+            hdiutil create -size 64m -fs ExFAT -volname TOWEXFAT "$images/exfat$copy.dmg"
+            hdiutil create -size 64m -fs "MS-DOS FAT32" -volname TOWFAT "$images/msdos$copy.dmg"
+          done
           sw_vers
           echo "TOW_REAL_FS=exfat msdos" >> "$GITHUB_ENV"
           echo "TOW_REAL_FS_IMAGES=$images" >> "$GITHUB_ENV"

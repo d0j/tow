@@ -271,7 +271,8 @@ def seen_from_here(path: str, *, volume: str | None = None) -> bool:
 
 def volume_at(path: str) -> str | None:
     """The identity of the volume holding ``path``, or its nearest existing folder while it is
-    missing (``tow.platform.volume_of``); None when it cannot be told. Read-only."""
+    missing (``tow.platform.volume_of``); None when it cannot be told positively (a tmpfs, a
+    failed lookup: never a type, mount point or drive letter instead). Read-only."""
     current = os.path.normpath(str(path or "").strip())
     try:
         while not os.path.exists(current):
@@ -282,15 +283,18 @@ def volume_at(path: str) -> str | None:
     except OSError, ValueError:
         return None
     found = platform.volume_of(current)
-    return found.identity if found is not None else None
+    identity = found.identity if found is not None else None
+    return identity if identity and identity.startswith(platform.VOLUME_IDENTITY_PREFIXES) else None
 
 
 def recorded_volume(record: object, path: str) -> str | None:
     """The volume identity a download history record keeps for the save folder ``path``
     (``{"path", "id"}``, written by an applying check that confirmed a file there). None: no
-    record, or one for another folder (the topic moved: it is recorded again). A damaged record
-    is "", which no volume matches: the folder counts as not seen until a check run with
-    ``--rebind-volumes`` records it again."""
+    record, or one for another folder (the topic moved: it is recorded again). A damaged record,
+    or one of an earlier shape (1.33.1's development builds named a volume by its type and mount
+    point or a bare GUID, ``tow.platform.VOLUME_IDENTITY_PREFIXES``), is "", which no volume
+    matches: the folder counts as not seen until the owner accepts its disk again (the Volumes
+    page, or a check run with ``--rebind-volumes``)."""
     if record is None:
         return None
     if not isinstance(record, dict) or not isinstance(record.get("path"), str):
@@ -298,7 +302,9 @@ def recorded_volume(record: object, path: str) -> str | None:
     if not paths_equal(record["path"], path):
         return None
     identity = record.get("id")
-    return identity if isinstance(identity, str) and identity else ""
+    if not isinstance(identity, str) or not identity.startswith(platform.VOLUME_IDENTITY_PREFIXES):
+        return ""
+    return identity
 
 
 def _comparable(path: str) -> str:
