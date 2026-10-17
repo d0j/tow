@@ -72,6 +72,8 @@ def _normalised(page: str) -> str:
     page = re.sub(r'"_tz_name": "[^"]*"', '"_tz_name": "<zone>"', page)  # the computer's own zone
     page = re.sub(r"[\d.,]+ (B|KB|MB|GB|TB) free", "<size> free", page)
     page = re.sub(r'value="tow-[0-9a-f]{12}"', 'value="tow-<random>"', page)
+    # The blank new Site access connection's id: random per render (services.protection_settings_view).
+    page = re.sub(r"new-connection-[0-9a-f]{32}", "new-connection-<random>", page)
     # A saved password's comparison token in a form's base: keyed by the server process.
     page = re.sub(r"&#34;[0-9a-f]{8}\.[0-9a-f]{32}&#34;", "&#34;<secret-token>&#34;", page)
     # What the page knows it shows (tow.web.page_sync): digests of the times and the folders above.

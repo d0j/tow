@@ -132,8 +132,22 @@ def _merged(
     sent: dict[str, Any],
 ) -> dict[str, Any] | Response:
     """The form's save merged with Site access as saved now: the settings to save, or the
-    refusal (reload, a conflict with the draft, or an invalid merged result)."""
+    refusal (reload, a conflict with the draft, or an invalid merged result). A form that only
+    added connections while another save also only added some keeps both
+    (``settings_merge.appended_connections``); this runs under the data lock, and the result is
+    validated again below."""
     now, wanted = settings_merge.protection_now(current), settings_merge.protection_now(configured)
+    shown = edit_base.read(settings_merge.PROTECTION, settings_merge.PROTECTION.kind, base, now)
+    if shown is not None and "providers" not in shown.pending:
+        union = settings_merge.appended_connections(
+            str(shown.values.get("providers") or ""), current["providers"], configured["providers"]
+        )
+        if union is not None:
+            # Proven: what is saved now is the form's base followed by additions, which the union
+            # keeps - so the connections merge as if only this form had changed them.
+            configured = {**configured, "providers": union}
+            now = {**now, "providers": shown.values["providers"]}
+            wanted = settings_merge.protection_now(configured)
     rows = settings_merge.protection_rows(tuple(settings_merge.PROTECTION.groups), now, wanted, current, configured)
     merge = settings_merge.merged(
         settings_merge.PROTECTION,

@@ -958,23 +958,22 @@
         <legend class="sr-only">Site access</legend>
         <label class="check-field"><input type="checkbox" name="enabled" value="1"><span>Use challenge recovery</span></label>
         <div class="integration-list">
-
-          <details class="integration-card protection-card">
+          <details class="integration-card protection-card" data-sync-suggestion="new-connection-<random>">
             <summary class="integration-head">
               <h2>Add a connection</h2>
 
             </summary>
             <div class="card-body">
-            <input type="hidden" name="provider_id" value="new-connection-1">
+            <input type="hidden" name="provider_id" value="new-connection-<random>">
 
-            <div class="field"><label for="protection-kind-new-connection-1">Service type</label><select id="protection-kind-new-connection-1" name="provider_kind" class="w-m"><option value="" selected>Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select></div>
-
-
+            <div class="field"><label for="protection-kind-new-connection-<random>">Service type</label><select id="protection-kind-new-connection-<random>" name="provider_kind" class="w-m"><option value="" selected>Choose a service</option><option value="byparr">Byparr</option><option value="flare_bypasser">FlareBypasser (zendriver)</option><option value="flaresolverr">FlareSolverr</option><option value="trawl">Trawl</option></select></div>
 
 
-            <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-1"><span>Use this connection</span></label>
+
+
+            <label class="check-field"><input type="checkbox" name="provider_enabled" value="new-connection-<random>"><span>Use this connection</span></label>
             <div class="field-row">
-              <div class="field"><label for="protection-url-new-connection-1">Service address</label><input id="protection-url-new-connection-1" name="provider_url" value="" class="w-xl" placeholder="e.g. http://127.0.0.1:8191" maxlength="256" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="protection-url-hint-new-connection-1"><p class="field-hint" id="protection-url-hint-new-connection-1">127.0.0.1 is this computer; /v1 is optional.</p></div>
+              <div class="field"><label for="protection-url-new-connection-<random>">Service address</label><input id="protection-url-new-connection-<random>" name="provider_url" value="" class="w-xl" placeholder="e.g. http://127.0.0.1:8191" maxlength="256" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="protection-url-hint-new-connection-<random>"><p class="field-hint" id="protection-url-hint-new-connection-<random>">127.0.0.1 is this computer; /v1 is optional.</p></div>
               <input type="hidden" name="provider_order" value="1">
             </div>
             </div>

@@ -20,6 +20,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   of the log.
 - Open **Sites** and **Settings** pages follow a change of order made elsewhere (a site renamed, added in another
   place or reordered) without a reload; a site or section you are working in keeps its place until you leave it.
+- Two tabs or devices that each add a **Site access** connection at the same time now both keep theirs, instead
+  of the second save asking which value to keep; each open Settings page offers its own new connection. Any other
+  change made on both sides still asks.
 
 ### Security
 

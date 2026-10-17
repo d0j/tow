@@ -17,6 +17,7 @@ the route and action modules import and refuses any other way out of ``tow.web``
 from __future__ import annotations
 
 import math
+import secrets as _random
 import time
 from collections.abc import Callable, Mapping
 from functools import wraps
@@ -288,6 +289,15 @@ def diagnostic_details(record: Mapping[str, Any] | None, lang: str | None = None
     return scrub_text(details)[:8192]
 
 
+def _new_connection_id(taken: set[str]) -> str:
+    """The blank new connection's id: 128 random bits per render, so two tabs never suggest the
+    same one (their fields would come back under another tab's card), never one saved already.
+    The page's digest leaves this card's own references to it out (``data-sync-suggestion``)."""
+    while (ident := f"new-connection-{_random.token_hex(16)}") in taken:
+        pass
+    return ident
+
+
 def protection_settings_view(cfg: dict[str, Any]) -> dict[str, Any]:
     """Read saved API observations, not credentials or network health invented by rendering."""
     settings = validate_protection_settings(cfg.get("protection"))
@@ -295,10 +305,9 @@ def protection_settings_view(cfg: dict[str, Any]) -> dict[str, Any]:
     cards = [dict(item, available=item["kind"] in available, new=False) for item in settings["providers"]]
     ids = {item["id"] for item in cards}
     if available and len(cards) < 16:
-        index = 1
-        while (ident := f"new-connection-{index}") in ids:
-            index += 1
-        cards.append({"id": ident, "kind": "", "url": "", "enabled": False, "available": True, "new": True})
+        cards.append(
+            {"id": _new_connection_id(ids), "kind": "", "url": "", "enabled": False, "available": True, "new": True}
+        )
     names = {kind: spec.title for kind, spec in protection_registry().items()}
     now = time.time()
     unreadable = False
