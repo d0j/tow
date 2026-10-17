@@ -523,6 +523,10 @@ details.add > summary { color: var(--acc); font-weight: 650; }
 .add-title { margin: 0; font-size: 1.05rem; line-height: 1.3; }
 details.advanced > summary { width: fit-content; color: var(--acc); font-size: 12.5px; }
 .check-label { display: flex; align-items: center; gap: var(--sp-2); min-height: 1.5rem; color: var(--fg); font-size: 12.5px; }
+/* A refused save's choice (_conflict.html): a group per changed value, no browser frame; its legend
+   (with Settings' theme legend, below) 3 px above what it says, each radio at its label's 6 px. */
+.edit-conflict fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.edit-conflict .check-label > input { margin: 0; }
 /* First start: what TOW is and the next steps (setup page, empty Home). */
 .first-steps { text-align: left; max-width: 44rem; margin-inline: auto; }
 .steps { padding-left: var(--sp-5); display: grid; gap: var(--sp-2); }
@@ -1229,7 +1233,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .inline-save { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
 /* A legend is no item of its fieldset's grid: its own 3 px place it above the choice. */
 .theme-field { display: grid; gap: var(--sp-1); min-width: 0; margin: 0; padding: 0; border: 0; }
-.theme-field > legend { margin: 0 0 var(--sp-1); padding: 0; color: var(--mut); font-size: 12px; line-height: 1.45; }
+.theme-field > legend, .edit-conflict legend {
+  margin: 0 0 var(--sp-1); padding: 0; color: var(--mut); font-size: 12px; line-height: 1.45;
+}
 /* As wide as its segments (it still wraps when the line is narrower): the language's track had
    stretched to its note's width, ending in empty space (QA Q7). */
 .theme-field .theme-choice { justify-self: start; margin: 0; }
