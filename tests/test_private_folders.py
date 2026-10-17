@@ -131,6 +131,7 @@ def test_a_folder_of_this_account_loses_what_it_inherits_and_is_read_back(fake_w
         f"*{USER}:(OI)(CI)F",
         "*S-1-5-18:(OI)(CI)F",
         "*S-1-5-32-544:(OI)(CI)F",
+        "/C",
         "/Q",
     ]
     assert windows.folder_shared(folder) is False
@@ -160,7 +161,10 @@ def test_a_change_that_does_not_read_back_private_is_a_failure(fake_windows, mon
     folder, _acl, calls = fake_windows
     monkeypatch.setattr(windows, "_run", lambda args, timeout=20: calls.append(list(args)) or "")
     assert windows.make_private(folder) is False
-    assert len(calls) == 1
+    # The close, then the removal of the others it still reads (it changes nothing here either).
+    assert calls[0][2] == "/inheritance:r"
+    assert len(calls) > 1
+    assert {call[2] for call in calls[1:]} == {"/remove:g"}
 
 
 def test_unknown_permissions_are_not_reported_as_open(monkeypatch, tmp_path):
