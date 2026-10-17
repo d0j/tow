@@ -469,6 +469,8 @@ def test_sites_settings_and_history_follow_their_fragments_without_overwriting_t
         "lifecycleIdempotent",
         "keyedListInsertRemoveReplace",
         "protectedSectionsWaitWithNote",
+        "serverOrderMovesFragments",
+        "protectedOrderWaitsAndIsRetried",
         "ownLinesAdopted",
         "historyMergedOncePerEventWithinBounds",
         "pageAreaAppliedFromItsRevision",

@@ -94,6 +94,11 @@
   // fragment the server no longer has goes, a changed one is drawn again, a new one comes after the
   // one before it in the server's order - except under the owner's hands (``isProtected``): kept,
   // with a note, and ``waiting`` says so.
+  // With ``move`` (Sites and Settings), the page then takes the server's order (a site renamed or
+  // reordered elsewhere): each fragment out of place goes right after the one before it. A fragment
+  // under the owner's hands never moves, nor does another one across it (that would shift it on
+  // the screen): such a move waits (``deferred``) and is tried again on the next pass, also when no
+  // digest changed. A fragment kept with "removed" stays where it is.
   const reconcile = ({
     current,
     wanted,
@@ -104,8 +109,10 @@
     note = () => {}, // (item, "changed" | "removed" | "")
     adopt = () => {}, // (item, fragment): the page's own drawing of it, its digest now known
     partial = () => {}, // (item, fragment): what of a protected one may change (Settings' cards)
+    move = null, // (item, previousKey | null): put it right after that one (null: first)
   }) => {
-    const result = { placed: [], removed: [], waiting: [], kept: [] };
+    const result = { placed: [], removed: [], waiting: [], kept: [], deferred: [] };
+    const order = []; // the keys in the page's order as this pass leaves it
     const want = new Map();
     wanted.forEach((fragment) => {
       if (fragment && typeof fragment.id === "string" && typeof fragment.html === "string" && !want.has(fragment.id)) want.set(fragment.id, fragment);
@@ -119,9 +126,11 @@
       }
       if (want.has(item.key)) {
         present.set(item.key, item);
+        order.push(item.key);
       } else if (isProtected(item)) {
         note(item, "removed");
         result.kept.push(item.key);
+        order.push(item.key);
       } else {
         remove(item);
         result.removed.push(item.key);
@@ -133,6 +142,7 @@
       if (!item) {
         insert(fragment, previous);
         result.placed.push(fragment.id);
+        order.splice(previous === null ? 0 : order.indexOf(previous) + 1, 0, fragment.id);
       } else if (!item.hash) {
         adopt(item, fragment);
       } else if (item.hash !== fragment.hash) {
@@ -149,7 +159,40 @@
       }
       previous = fragment.id;
     }
+    if (typeof move === "function") placeInOrder({ order, want, present, isProtected, move, result });
     return result;
+  };
+  const placeInOrder = ({ order, want, present, isProtected, move, result }) => {
+    const guarded = new Map(); // key -> under the owner's hands (asked once per pass)
+    const busy = (key) => {
+      if (result.kept.includes(key)) return true; // kept "removed": under the owner's hands
+      if (!present.has(key)) return false; // new in this pass: never in use
+      if (!guarded.has(key)) guarded.set(key, Boolean(isProtected(present.get(key))));
+      return guarded.get(key);
+    };
+    // A fragment whose move waits stays where it is: the others are placed around it.
+    const settled = (other) => !want.has(other) || result.deferred.includes(other);
+    let previous = null;
+    for (const key of want.keys()) {
+      const at = order.indexOf(key);
+      const after = previous === null ? -1 : order.indexOf(previous);
+      const before = previous;
+      // In place: right after the one before it, or after it with only kept or waiting ones between.
+      if (at > after && order.slice(after + 1, at).every(settled)) {
+        previous = key;
+        continue;
+      }
+      const crossed = at > after ? order.slice(after + 1, at) : order.slice(at + 1, after + 1);
+      if (busy(key) || crossed.some(busy)) {
+        result.deferred.push(key);
+        continue;
+      }
+      previous = key;
+      move(present.get(key) || { key }, before);
+      order.splice(at, 1);
+      order.splice(before === null ? 0 : order.indexOf(before) + 1, 0, key);
+      if (!result.placed.includes(key)) result.placed.push(key);
+    }
   };
 
   // ------------------------------------------------------------------ History's lines, without the page
@@ -229,7 +272,8 @@
         page(failed.payload).catch(() => {});
         did = true;
       }
-      if (!last || !(last.result?.waiting?.length || last.result?.kept?.length)) return did;
+      const result = last?.result;
+      if (!result || !(result.waiting?.length || result.kept?.length || result.deferred?.length)) return did;
       last = { body: last.body, result: apply(last.body) };
       return true;
     };
@@ -237,7 +281,7 @@
       page,
       settle,
       cancel: () => { generation += 1; asking = 0; last = null; failed = null; },
-      waiting: () => [...(last?.result?.waiting || []), ...(last?.result?.kept || [])],
+      waiting: () => [...(last?.result?.waiting || []), ...(last?.result?.kept || []), ...(last?.result?.deferred || [])],
     };
   };
 
@@ -459,6 +503,19 @@
     remove: (slot) => {
       takeOut(slot.nodes);
       [slot.start, ...slot.nodes, slot.end].forEach((node) => node.remove());
+    },
+    // The same nodes moved (read again: a replace in this pass drew new ones between the comments),
+    // so their state and listeners stay.
+    move: (slot, previousKey) => {
+      const all = slots();
+      const moving = all.find((each) => each.key === slot.key);
+      if (!moving) return;
+      const after = previousKey ? all.find((each) => each.key === previousKey) : null;
+      const before = after ? after.end.nextSibling : all[0]?.start || null;
+      if (before === moving.start) return;
+      const piece = document.createDocumentFragment();
+      piece.append(moving.start, ...moving.nodes, moving.end);
+      list.container.insertBefore(piece, before);
     },
     note: (slot, kind) => {
       const element = elementsOf(slot.nodes)[0];
