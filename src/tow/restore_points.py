@@ -265,7 +265,13 @@ def create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any]
 
 
 def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any]:
+    from tow.locations import MANUAL, LocationError, refuse_unseen_volume, remember_volume
+
     root = restore_points_dir()
+    try:
+        refuse_unseen_volume(MANUAL, root)  # its disk unmounted: nothing created on the disk below
+    except LocationError as exc:
+        raise RestorePointError(str(exc), kind=CREATE_FAILED) from exc
     try:
         root.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -305,6 +311,9 @@ def _create_restore_point(*, protected: set[str] | None = None) -> dict[str, Any
         view["cleanup_warning"] = t("backup.restore_point.cleanup_warning", owner_language())
         logging.getLogger("tow.restore_points").warning("%s", view["cleanup_warning"])
     _record_cleanup(bool(view.get("cleanup_warning")), root)
+    # The verified point proves its folder's volume (recorded once; a missing note goes).
+    with contextlib.suppress(OSError, ValueError, UnicodeError, RecursionError, RuntimeError):
+        remember_volume(MANUAL, root)
     return view
 
 

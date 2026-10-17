@@ -202,6 +202,15 @@ def _apply_config_overrides(parsed: dict[str, Any], overrides: dict[str, Any]) -
     parsed["config"] = effective_config
 
 
+def _forget_volumes(state: dict[str, Any]) -> None:
+    """The volumes the exporting computer recorded for its backup folders, and its notes of
+    missing ones, are its own observations: an import keeps neither."""
+    state.pop("backup_volumes", None)
+    for topic in state.get("topics") or []:
+        if isinstance(topic, dict):
+            topic.pop("volume_unseen", None)
+
+
 def _without_volumes(history: Any) -> Any:
     """The history without the volume each save folder was on (tow.folders.recorded_volume): that
     is the exporting computer's observation, never this one's. An imported topic records its own
@@ -266,6 +275,7 @@ def _import_bundle(
         parsed["secrets"] = effective_secrets
     mappings = parse_path_maps(path_maps)
     mapped_state, warnings = apply_path_maps(parsed["state"], mappings)
+    _forget_volumes(mapped_state)
     state_bytes = json_bytes(mapped_state, readable=True)  # as tow.store writes each file
     history_bytes = json_bytes(_without_volumes(parsed["history"]))
     members = sorted(name for name in parsed["members"] if name != "manifest.json")

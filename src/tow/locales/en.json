@@ -1377,7 +1377,8 @@
     "no_space": "there is no free space on the disk",
     "protected_system": "copies are not put into system folders (/etc, /usr, /System …) or the folders programs start from",
     "other_system": "this is a path of another system (D:\\… or \\\\server\\… on Linux and macOS, /mnt/… on Windows): give a folder of this computer",
-    "other_system_config": "{key}: {value} in config.yaml is a folder of another system (for {title}); TOW does not create it inside its folder. Choose a folder of this computer in Settings (or remove {key} from config.yaml for the default one)"
+    "other_system_config": "{key}: {value} in config.yaml is a folder of another system (for {title}); TOW does not create it inside its folder. Choose a folder of this computer in Settings (or remove {key} from config.yaml for the default one)",
+    "volume_missing": "the disk of the {title} folder is not connected, or the folder is on another disk now: nothing was written there"
   },
   "log": {
     "cleanup": {

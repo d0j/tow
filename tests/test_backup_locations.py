@@ -464,3 +464,115 @@ def test_only_a_windows_share_counts_as_one():
         assert not any(map(is_network_share, [r"D:\backup", "backup/night", ""]))
     with platform.use(PosixBackend("linux")):
         assert not is_network_share("//srv/backup")
+
+
+# --- the volume a backup folder was recorded on (an unmounted disk is never written to) ------------
+
+
+def _disk(monkeypatch, identity):
+    """The volume every folder is on now (None: it cannot be told)."""
+    from tow import platform
+
+    current = {"id": identity}
+    monkeypatch.setattr(
+        platform, "volume_of", lambda path: platform.Volume(current["id"], "local") if current["id"] else None
+    )
+    return current
+
+
+def _volumes():
+    from tow.store import load_state
+
+    return load_state().get("backup_volumes") or {}
+
+
+def test_a_verified_night_copy_records_its_folders_volume(night, monkeypatch):
+    from tow.snapshots import create_snapshot
+
+    _disk(monkeypatch, "usb-disk")
+    create_snapshot()
+    assert _volumes()["night"] == {"path": str(resolve(str(night), NIGHT)), "id": "usb-disk"}
+
+
+def test_a_night_copy_is_never_written_to_another_volume(night, monkeypatch):
+    from tow.snapshots import SnapshotError, create_snapshot, list_snapshots, status
+
+    disk = _disk(monkeypatch, "usb-disk")
+    create_snapshot()
+    before = sorted(path.name for path in night.iterdir())
+    disk["id"] = "system-disk"  # unmounted: the folder is on the disk below now
+    with pytest.raises(SnapshotError) as refused:
+        create_snapshot()
+    assert str(refused.value) == t("locations.volume_missing", "ru", title=NIGHT.title)
+    assert sorted(path.name for path in night.iterdir()) == before  # nothing written, nothing created
+    assert status()["last_error"] == str(refused.value)
+    assert isinstance(_volumes()["night"]["unseen_at"], int)
+    assert _volumes()["night"]["id"] == "usb-disk"  # never rebound by itself
+    disk["id"] = None  # the volume cannot be told: refused as well
+    with pytest.raises(SnapshotError):
+        create_snapshot()
+    disk["id"] = "usb-disk"  # back: copies go on, the note goes
+    create_snapshot()
+    assert "unseen_at" not in _volumes()["night"]
+    assert len(list_snapshots()) == 2
+
+
+def test_a_restore_point_is_never_written_to_another_volume(tmp_path, monkeypatch):
+    from tow.restore_points import RestorePointError, create_restore_point
+
+    folder = tmp_path.parent / f"{tmp_path.name}-points"
+    cfg = load_config()
+    cfg["restore_points_dir"] = str(folder)
+    save_config(cfg)
+    disk = _disk(monkeypatch, "usb-disk")
+    create_restore_point()
+    assert _volumes()["manual"]["id"] == "usb-disk"
+    disk["id"] = "system-disk"
+    for path in folder.iterdir():
+        path.unlink()
+    folder.rmdir()  # the unmounted disk took its folder along
+    with pytest.raises(RestorePointError, match=re.escape(t("locations.volume_missing", "ru", title=MANUAL.title))):
+        create_restore_point()
+    assert not folder.exists()  # not created on the disk below
+    assert isinstance(_volumes()["manual"]["unseen_at"], int)
+
+
+def test_free_space_of_a_backup_folder_off_its_volume_is_unknown(night, monkeypatch):
+    from tow.locations import free_bytes
+    from tow.snapshots import create_snapshot
+
+    disk = _disk(monkeypatch, "usb-disk")
+    path = resolve(str(night), NIGHT)
+    assert isinstance(free_bytes(path), int)  # no record yet: as before
+    create_snapshot()
+    assert isinstance(free_bytes(path), int)
+    disk["id"] = "system-disk"
+    assert free_bytes(path) is None  # never the disk below's space
+    disk["id"] = None
+    assert free_bytes(path) is None
+
+
+def test_a_moved_backup_folder_records_anew_and_a_damaged_record_matches_nothing(night, monkeypatch, tmp_path):
+    from tow.locations import recorded_volume, volume_unseen
+    from tow.store import load_state, save_state
+
+    _disk(monkeypatch, "usb-disk")
+    state = load_state()
+    state["backup_volumes"] = {"night": {"path": str(tmp_path / "elsewhere"), "id": "old"}}
+    path = resolve(str(night), NIGHT)
+    assert recorded_volume(state, NIGHT, path) is None  # a record of another folder: none
+    state["backup_volumes"] = {"night": {"path": str(path), "id": 7}}
+    assert recorded_volume(state, NIGHT, path) == ""
+    assert volume_unseen(state, NIGHT, path)  # damaged: nothing matches it
+    save_state(state)
+
+
+def test_an_import_keeps_no_backup_volumes_of_the_exporting_computer():
+    from tow.bundle.importer import _forget_volumes
+
+    state = {
+        "topics": [{"id": "1", "volume_unseen": {"folder": "/srv/tv", "at": 1}}, {"id": "2"}],
+        "backup_volumes": {"night": {"path": "/mnt/b", "id": "ext4 /mnt/b"}},
+    }
+    _forget_volumes(state)
+    assert state == {"topics": [{"id": "1"}, {"id": "2"}]}

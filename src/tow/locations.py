@@ -11,8 +11,10 @@ import errno
 import os
 import re
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from tow.folders import is_windows_device_path, protected_kind, windows_name_problem
 from tow.i18n import t
@@ -152,9 +154,114 @@ _OS_ERROR_KEYS = {
 }
 
 
+# state.json: {"night" | "manual": {"path", "id"[, "unseen_at"]}} - the volume each backup folder
+# was on when a copy was last written and read back there (tow.folders.recorded_volume), and since
+# when it is missing or another one (said in Needs attention until a copy is written there again).
+VOLUMES_KEY = "backup_volumes"
+
+
+def kind_of(location: Location) -> str:
+    """``night`` or ``manual``: the location's name in LOCATIONS."""
+    return next(kind for kind, known in LOCATIONS.items() if known is location)
+
+
+def recorded_volume(state: Mapping[str, Any], location: Location, path: Path) -> str | None:
+    """The volume recorded for the backup folder ``path`` (None: none for this folder)."""
+    from tow.folders import recorded_volume as recorded
+
+    volumes = state.get(VOLUMES_KEY)
+    entry = volumes.get(kind_of(location)) if isinstance(volumes, dict) else None
+    return recorded(entry, str(path))
+
+
+def volume_unseen(state: Mapping[str, Any], location: Location, path: Path) -> bool:
+    """The backup folder has a recorded volume and is not on it now (unmounted, another disk,
+    or the volume cannot be told): nothing written there would be the backup, nothing free there
+    is its space. Read-only."""
+    from tow.folders import volume_at
+
+    expected = recorded_volume(state, location, path)
+    return expected is not None and volume_at(str(path)) != expected
+
+
+def refuse_unseen_volume(location: Location, path: Path) -> None:
+    """Before a copy is written (the data lock held): ``LocationError`` when the folder is not on
+    its recorded volume, and the state notes since when (Needs attention says it). Nothing is
+    created or written in the folder: a copy on the disk below an unmounted one is no copy."""
+    import time
+
+    from tow.store import save_state
+
+    state = _state_as_it_is()
+    if state is None or not volume_unseen(state, location, path):
+        return
+    entry = state[VOLUMES_KEY][kind_of(location)]
+    if isinstance(entry, dict) and not isinstance(entry.get("unseen_at"), int):
+        entry["unseen_at"] = int(time.time())
+        save_state(state)
+    raise LocationError(t("locations.volume_missing", owner_language(), title=location.title))
+
+
+def remember_volume(location: Location, path: Path) -> None:
+    """After a copy was written and read back in ``path`` (the data lock held): its volume is
+    recorded when none is for this folder (a moved folder records anew), and a note that it was
+    missing goes. A recorded volume is never replaced here: only the owner's explicit accept does
+    that (``accept_volume``). A failure here leaves the verified copy as it is."""
+    from tow.folders import volume_at
+    from tow.store import save_state
+
+    state = _state_as_it_is()
+    if state is None:
+        return
+    volumes = state.setdefault(VOLUMES_KEY, {})
+    if not isinstance(volumes, dict):
+        return
+    kind = kind_of(location)
+    entry = volumes.get(kind)
+    if recorded_volume(state, location, path) is None:
+        identity = volume_at(str(path))
+        if not identity:
+            return
+        volumes[kind] = {"path": str(path), "id": identity}
+    elif isinstance(entry, dict) and "unseen_at" in entry:
+        entry.pop("unseen_at")
+    else:
+        return
+    save_state(state)
+
+
+def _state_as_it_is() -> dict[str, Any] | None:
+    """state.json as it is, never quarantined or repaired here (a copy that fails on a damaged
+    store leaves it as it was); None when it cannot be read."""
+    from tow.store import StoreCorruptionError, load_state
+
+    try:
+        return load_state(quarantine=False)
+    except OSError, ValueError, StoreCorruptionError:
+        return None
+
+
+def _recorded_for(path: Path) -> str | None:
+    """The volume recorded for whichever backup folder ``path`` is, read without writing."""
+    state = _state_as_it_is()
+    if state is None:
+        return None
+    for location in LOCATIONS.values():
+        if (expected := recorded_volume(state, location, path)) is not None:
+            return expected
+    return None
+
+
 def free_bytes(path: Path) -> int | None:
+    """Free space where a copy would go; None when it cannot be known - also for a backup folder
+    that is not on its recorded volume (the disk below an unmounted one is not its space)."""
     import shutil
 
+    from tow.folders import volume_at
+
+    expected = _recorded_for(path)
+    if expected is not None and volume_at(str(path)) != expected:
+        return None
     probe = path
     while not probe.exists() and probe.parent != probe:
         probe = probe.parent
