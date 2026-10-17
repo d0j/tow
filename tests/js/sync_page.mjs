@@ -352,6 +352,24 @@ verdict.hintScopedWithoutData = true;
 }
 verdict.messagesAppliedOnlyOnceListTaken = true;
 
+// ---- the Undo area asks messages.js for the list only for a new Undo (its time running on asks
+// nothing: the messages area says when the list changed).
+{
+  let asked = 0;
+  window.towMessages.refresh = () => { asked += 1; };
+  const undo = (rev, until) => answer({ undo: { rev, undo: { stamp: "S9", until_ts: until, kind: "topic_pause", label: "the pause of B", local_only: false } } });
+  undo(REV(8).replace(/8/g, "a"), clock.now() / 1000 + 120);
+  while (syncAnswers.length) await run(50);
+  await run(200);
+  assert.equal(asked, 1);
+  undo(REV(8).replace(/8/g, "b"), clock.now() / 1000 + 180);
+  while (syncAnswers.length) await run(50);
+  await run(200);
+  assert.equal(asked, 1);
+  window.towMessages.refresh = () => {};
+}
+verdict.undoAsksForTheListOnlyWhenNew = true;
+
 // ---- signing out ends one session for every request and settler of the page: fragments of the
 // page area (pages.js, here on a History list) whose body arrives after it are not put in, nor
 // asked for again; a request asked afterwards is not sent; the sign-out's listeners are told once.
