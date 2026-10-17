@@ -123,9 +123,18 @@ def test_size_is_bounded_during_read_not_only_by_stat(tmp_path, monkeypatch):
             assert size == diagnostic_json.MAX_BYTES + 1
             return super().read(size)
 
-    monkeypatch.setattr(Path, "open", lambda self, mode: Handle(b" " * (diagnostic_json.MAX_BYTES + 2)))
+    record = tmp_path / "record.json"
+    opened = Path.open
+    # Only the record: every other read (a language catalog) stays real.
+    monkeypatch.setattr(
+        Path,
+        "open",
+        lambda self, *args, **kwargs: (
+            Handle(b" " * (diagnostic_json.MAX_BYTES + 2)) if self == record else opened(self, *args, **kwargs)
+        ),
+    )
     with pytest.raises(ValueError, match="size limit"):
-        diagnostic_json.read_object(tmp_path / "record.json")
+        diagnostic_json.read_object(record)
     assert requested == [diagnostic_json.MAX_BYTES + 1]
 
 
@@ -205,10 +214,15 @@ def test_known_container_and_scalar_shapes_are_validated(name, payload):
 
 @pytest.mark.parametrize("name", READERS)
 def test_io_failure_is_not_first_start(name, monkeypatch):
-    _write(name, b"{}")
+    path = _write(name, b"{}")
+    opened = Path.open
 
     def denied(self, *args, **kwargs):
-        raise PermissionError("synthetic denial")
+        # Only the record: a denied language catalog would be cached empty for every later test
+        # (keys instead of texts, English pages; 1.33.1 CI seed 3132797).
+        if self == path:
+            raise PermissionError("synthetic denial")
+        return opened(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "open", denied)
     value = _read(name)
