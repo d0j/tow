@@ -22,6 +22,7 @@ from tow.net_errors import humanize
 from tow.paths import data_dir
 from tow.platform import locks
 from tow.records import ErrorFields
+from tow.scrub import scrub_credentials
 from tow.store import init_lock_file
 
 # 5 MiB x (1 + 4 rotated) keeps months of history (1 MiB x 3 kept about ten days).
@@ -158,7 +159,9 @@ def scrub_text(value: str) -> str:
         except ValueError:
             return "[REDACTED_URL]" + suffix
 
-    cleaned = _MAGNET_RE.sub(_magnet, value)
+    # Every credential tow.scrub knows first (also a quoted "token": "..." and a %-escaped query
+    # name), then each link down to its host.
+    cleaned = _MAGNET_RE.sub(_magnet, scrub_credentials(value))
     cleaned = _URL_RE.sub(replace, cleaned)
     cleaned = _SECRET_HEADER_RE.sub("[REDACTED_HEADER]", cleaned)
     cleaned = _SECRET_VALUE_RE.sub(lambda match: f"{match.group(1)}=***", cleaned)

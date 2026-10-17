@@ -24,9 +24,14 @@ from tow.store import save_state
 from tow.web import app
 
 SECRETS = ("SECRETUK", "SECRETPK", "hunter2", "PASSKEY0123456789abcdef", "tok-abc-123")
+# 1.33.1 review: a query name written with %-escapes, a diagnostic echoing JSON or a Python
+# mapping (quoted names), one cut off inside its value, and a secret by its key among the values.
+SECRETS += ("ENCODEDPK42", "JSONTOKEN77", "PYPASSWORD88", "CUTAPIKEY99", "MAPTOKEN55")
 LINK = "https://owner:hunter2@tracker.example/dl.php?t=5&uk=SECRETUK&pk=SECRETPK"
 ANNOUNCE = "http://bt.example/PASSKEY0123456789abcdef/announce"
-PLAIN = f"HTTP 403 from {LINK} (announce {ANNOUNCE}, token=tok-abc-123)"
+ENCODED = "https://tracker.example/dl.php?t=6&%70k=ENCODEDPK42"
+ECHOED = '{"token":"JSONTOKEN77","ok":false} {\'password\': \'PYPASSWORD88\'} {"api_key":"CUTAPIKEY99'
+PLAIN = f"HTTP 403 from {LINK} (announce {ANNOUNCE}, token=tok-abc-123) via {ENCODED} said {ECHOED}"
 
 
 def _leaks(text: str) -> list[str]:
@@ -44,6 +49,11 @@ def test_the_credentials_scrub_keeps_the_rest_of_the_text():
         "magnet:?xt=urn:btih:abc"
     )
     assert scrub_credentials("Authorization: Bearer xyz") == "Authorization: ***"
+    assert "dl.php?t=6&%70k=***" in shown  # the name as written, its value gone
+    assert '{"token":"***","ok":false}' in shown  # the echo stays readable
+    assert "{'password': '***'}" in shown
+    assert shown.endswith('{"api_key":"***"')
+    assert scrub_credentials("the token is fine, a key=value stays") == "the token is fine, a key=value stays"
     network = scrub_display(PLAIN + r" in D:\TV\Show A")
     assert _leaks(network) == []
     assert r"D:\TV" not in network
@@ -55,12 +65,32 @@ def test_message_values_lose_their_credentials_in_messages_inside_messages():
     assert credentials_out(params)["tracker"] == "rutor"
 
 
+def test_a_value_named_as_a_secret_is_dropped_whatever_it_holds():
+    params = {
+        "tracker": "rutor",
+        "token": "MAPTOKEN55",
+        "Bot-Token": "MAPTOKEN55",
+        "credentials": {"password": 123, "user": "owner"},
+        "cookies": ["MAPTOKEN55"],
+        "error": {"$msg": {"code": "mirrors.local", "params": {"api_key": "MAPTOKEN55", "error": "x"}}},
+        "key": "settings.title",  # a catalog key, no secret: "key" alone says too little
+        "pass": None,
+    }
+    out = credentials_out(params)
+    assert _leaks(str(out)) == []
+    assert out["token"] == out["Bot-Token"] == out["cookies"] == "***"
+    assert out["credentials"] == {"password": "***", "user": "owner"}
+    assert out["error"]["$msg"]["params"] == {"api_key": "***", "error": "x"}  # a message stays one
+    assert (out["tracker"], out["key"], out["pass"]) == ("rutor", "settings.title", None)
+    assert params["token"] == "MAPTOKEN55"  # the caller's values are never changed
+
+
 def test_a_checks_error_is_stored_without_credentials():
     row: dict = {}
     check_rows.set_error(row, RuntimeError(PLAIN))
     assert _leaks(str(row)) == []
     typed: dict = {}
-    check_rows.set_error(typed, TowError("mirrors.local", tracker="rutor", error=PLAIN))
+    check_rows.set_error(typed, TowError("mirrors.local", tracker="rutor", error=PLAIN, token="MAPTOKEN55"))
     assert _leaks(str(typed)) == []
     assert typed["error_record"]["code"] == "mirrors.local"
 
