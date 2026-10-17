@@ -61,6 +61,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A browser that saved TOW's sign-in password no longer fills it into a torrent client's or a site's password,
   a messenger's token, webhook or key, or a site sign-in on **Home**, where a Save then stored it. These fields
   now ask for their own password, and a save that carries TOW's password is refused with a note.
+- No device, this computer included, is shown the sign-in, passkey or secret query of a link in an error any
+  more: not on **Home**'s rows and their tooltips, a topic's panel, **Needs attention**, History, the log,
+  Recent messages or Settings. New errors are saved without them, and those saved before are cleaned when shown;
+  the rest of the link and your folders stay visible on this computer.
 
 ### Added
 

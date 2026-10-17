@@ -24,6 +24,7 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 from tow import i18n
+from tow.scrub import scrub_credentials
 
 # Every status class (log.cls.<class> names them; AGENTS.md says which colour each one is).
 STATUS_CLASSES = (
@@ -269,10 +270,10 @@ def render(
     A record that lacks a value its text names (here or in a message among its values: an older
     TOW or another producer wrote it) is shown as ``incomplete`` (default: ``fallback``), the text
     stored with it. Without one, that value is left out with what only framed it (``without_unfilled``):
-    a ``{name}`` is never shown."""
+    a ``{name}`` is never shown. No device is shown a credential in it (``scrub_credentials``)."""
     text, complete = _rendered(record, lang, fallback, 0)
     stored = fallback if incomplete is None else incomplete
-    return text if complete or not stored else stored
+    return scrub_credentials(text if complete or not stored else stored)
 
 
 def _rendered(record: Mapping[str, Any] | None, lang: str | None, fallback: str, depth: int) -> tuple[str, bool]:
@@ -292,7 +293,7 @@ def render_stored(
 ) -> str:
     """``render`` for a code and its values kept in two fields (``last_error_code`` / ``_params``)."""
     if not code:
-        return fallback
+        return scrub_credentials(fallback)
     record = {"code": code, "params": params if isinstance(params, Mapping) else {}}
     return render(record, lang, fallback, incomplete=incomplete)
 
@@ -308,7 +309,7 @@ def diagnostic_details(record: Mapping[str, Any] | None, lang: str | None = None
     params = record.get("params")
     if not isinstance(params, Mapping):
         return ""
-    return _shown(params.get("details"), lang or i18n.current())[0].strip()
+    return scrub_credentials(_shown(params.get("details"), lang or i18n.current())[0].strip())
 
 
 def summary_record(record: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
@@ -364,7 +365,7 @@ def codes_in(record: Mapping[str, Any] | None) -> Iterator[str]:
 def text_of(value: Any, lang: str | None = None) -> str:
     """Any error-ish value as text in ``lang``: an error or a message, a stored record, a plain text."""
     if isinstance(value, (TowError, Msg)):
-        return value.text(lang)
+        return scrub_credentials(value.text(lang))
     if isinstance(value, Mapping):
         return render(value, lang, str(value.get("text") or ""))
-    return "" if value is None else str(value)
+    return "" if value is None else scrub_credentials(str(value))

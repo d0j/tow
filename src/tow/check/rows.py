@@ -11,15 +11,17 @@ from tow.errors import TowError
 from tow.i18n import t
 from tow.log import error_class, owner_language
 from tow.records import Topic
+from tow.scrub import credentials_out, scrub_credentials
 from tow.store import StoreCorruptionError, load_state
 
 
 def set_error(row: dict[str, Any], error: BaseException | str) -> None:
     """A failed row keeps the error's text (the language of the moment), its record (code and
     values, rendered again in the reader's language) and its class."""
-    row["error"] = str(error)
-    row["error_record"] = errors.record_of(error) if isinstance(error, BaseException) else None
-    row["error_class"] = error_class(error)
+    row["error_class"] = error_class(error)  # from the whole error, before its credentials go
+    row["error"] = scrub_credentials(str(error))  # no link's sign-in or passkey is ever stored
+    record = errors.record_of(error) if isinstance(error, BaseException) else None
+    row["error_record"] = {**record, "params": credentials_out(record.get("params"))} if record else None
 
 
 def row_error(row: dict[str, Any]) -> Any:
