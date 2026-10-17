@@ -47,6 +47,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Two tabs or devices that each add a **Site access** connection at the same time now both keep theirs, instead
   of the second save asking which value to keep; each open Settings page offers its own new connection. Any other
   change made on both sides still asks.
+- An open page that was hidden and shown again while TOW had asked it to wait ("too many requests") no longer
+  stops following changes until a reload; the same after the computer's clock was set back. It asks again when
+  the wait ends.
 
 ### Security
 
