@@ -389,7 +389,7 @@ def test_a_network_share_is_named_only_on_this_computer(monkeypatch):
     touched: list[object] = []
     monkeypatch.setattr(locations, "problem", lambda *_args: None)  # the share's syntax is fine everywhere
     monkeypatch.setattr("tow.web.services.folder_write_problem", lambda path: touched.append(path))
-    monkeypatch.setattr("tow.web.services.free_bytes", lambda _path: None)
+    monkeypatch.setattr("tow.web.services.free_bytes", lambda _path, state=None: None)
     monkeypatch.setenv("TOW_LAN_AUTH_TOKEN", "t" * 32)
     cfg = load_config()
     cfg["allow_lan"] = True

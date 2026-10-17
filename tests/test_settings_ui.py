@@ -727,7 +727,7 @@ def test_a_backup_folders_free_space_never_leaves_its_separator_behind(monkeypat
     "свободно 1,0 ТБ" alone below it. The free space and its " · " are one unbreakable piece."""
     from bs4 import BeautifulSoup
 
-    monkeypatch.setattr("tow.web.services.free_bytes", lambda _path: 2**40)
+    monkeypatch.setattr("tow.web.services.free_bytes", lambda _path, state=None: 2**40)
     page = BeautifulSoup(TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text, "html.parser")
     for kind in ("night", "manual"):
         hint = page.select_one(f"#backup-path-{kind}-where")
