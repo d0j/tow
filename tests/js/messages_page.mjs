@@ -458,6 +458,26 @@ for (const withSync of [true, false]) {
 }
 verdict.hiddenTabRetriesWhenShown = true;
 
+// The list and its markers name this tab to the server (X-TOW-Tab) with the name sync.js made for
+// its poll, so a tab's requests count in that tab's rate bucket; without sync.js none is named.
+{
+  const TAB = "0123456789abcdef01234567";
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", subject: "Show A", text: "Check failed", at: 1800000100 }]);
+  const live = page({ storage: memoryStorage(), server, extra: { towSync: { tab: TAB, client: { stopped: () => false } } } });
+  await settle();
+  live.document.dispatch(live.$("[data-messages-read]"), "click");
+  await settle();
+  live.document.dispatch(live.$("[data-messages-clear]"), "click");
+  await settle();
+  assert.deepEqual(server.requests.map((request) => request.url), ["/messages.json", "/messages/read", "/messages/clear"]);
+  assert.ok(server.requests.every((request) => request.headers["X-TOW-Tab"] === TAB), JSON.stringify(server.requests));
+  const alone = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", subject: "Show A", text: "Check failed", at: 1800000100 }]);
+  page({ storage: memoryStorage(), server: alone });
+  await settle();
+  assert.equal(alone.requests[0].headers["X-TOW-Tab"], undefined);
+}
+verdict.requestsNameTheTab = true;
+
 // The per-tab history of 1.32 and older: removed with one notice, never sent anywhere; a reload
 // says nothing again.
 {

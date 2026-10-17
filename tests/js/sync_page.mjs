@@ -137,6 +137,9 @@ answer({
 await run(5100);
 assert.ok(sent.some((r) => r.url.startsWith("/sync.json")), "the first poll within 5 s");
 assert.equal(sent[0].init.headers["X-TOW-Tab"].length, 24);
+// The same name for the page's other scripts (messages.js names its requests with it): one per tab.
+assert.equal(sync.tab, sent[0].init.headers["X-TOW-Tab"]);
+verdict.tabNameShared = true;
 {
   const sites = [...document.querySelectorAll(".hdr-sites .trk")];
   assert.equal(sites[0], rutor); // the page's own icon, patched in place

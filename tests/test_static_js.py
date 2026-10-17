@@ -32,7 +32,7 @@ def test_recent_messages_time_pause_read_store_and_undo_by_a_fake_clock():
 def test_the_page_shows_a_message_once_and_the_install_shared_list_with_shared_read_and_clear():
     verdict = _verdict("messages_page.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 29
+    assert len(verdict) == 30
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
@@ -424,6 +424,7 @@ def test_a_page_reloads_for_a_new_language_or_version_only_when_idle_and_never_l
 def test_the_page_follows_header_jobs_undo_preferences_version_and_new_rows():
     verdict = _verdict("sync_page.mjs")
     keys = (
+        "tabNameShared",
         "headerPatchedTogether",
         "jobsElsewhereShownAndCleaned",
         "undoLiveAndRemoteEligibility",
