@@ -17,6 +17,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - `tow doctor` and the **Diagnostics** page warn when the live `data/` folder is on a network file system (NFS, SMB,
   9p, SSHFS and the like), where TOW's locks may not keep a second TOW on another computer out. A device on the
   network sees the warning without the folder's path.
+- **Recent messages** also warn when the cleanup after a check has to wait for the next one, as they already did
+  for nightly backups, and when the messenger message about a topic that failed to add could not be sent.
 
 ### Fixed
 
