@@ -14,6 +14,7 @@ from tow.i18n import t
 from tow.log import log_event
 from tow.paths import data_dir
 from tow.platform import is_plain_file
+from tow.scrub import scrub_credentials
 from tow.snapshots.errors import SnapshotError
 from tow.snapshots.location import PREFIX, backup_root
 from tow.snapshots.manifest import owned_manifest, signing_key
@@ -155,5 +156,6 @@ def record_status(**fields: Any) -> None:
 
 
 def record_failure(error: str) -> None:
+    error = scrub_credentials(error)  # a share's link may carry a sign-in: never stored, never shown
     record_status(last_error=error[:300], last_error_at=round(time.time(), 3))
     log_event("backup_failed", error=error[:300], how="auto")
