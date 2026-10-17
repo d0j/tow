@@ -82,7 +82,7 @@
   "DeliveryError": "class(reason: 'str | Msg', *, transient: 'bool', drop: 'bool' = False) -> 'None'",
   "Field": "class(name: 'str', label: 'str', kind: 'str' = 'text', placeholder: 'str' = '', pattern: 'str' = '', error: 'str' = '', required: 'bool' = True, default: 'str' = '', width: 'str' = 'm') -> None",
   "OUTBOX_LIMIT": "value int",
-  "cards": "def(secrets: 'dict[str, Any]', state: 'dict[str, Any]') -> 'list[dict[str, Any]]'",
+  "cards": "def(secrets: 'dict[str, Any]', state: 'dict[str, Any]', *, local: 'bool' = True) -> 'list[dict[str, Any]]'",
   "check_message": "def(lang: 'str | None' = None) -> 'str'",
   "connected": "def(secrets: 'dict[str, Any]') -> 'list[tuple[str, Notifier, dict[str, Any]]]'",
   "deliver_queued": "def(secrets: 'dict[str, Any]') -> 'dict[str, tuple[bool, str]]'",

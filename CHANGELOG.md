@@ -16,6 +16,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   itself when the master key stops or starts matching (for example after `tow keys` on another device), instead
   of only after a reload.
 
+### Security
+
+- On **Settings**, a messenger's last delivery error and a failed nightly backup no longer show folders, files or
+  a link's secret query to a device on the network, as everywhere else; and no device, this computer included, is
+  shown the credentials in a link of such an error. Your configured folders still show as before.
+
 ## [1.33.0] — 2026-10-17
 
 ### Changed

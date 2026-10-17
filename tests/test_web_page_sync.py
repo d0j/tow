@@ -460,6 +460,70 @@ def test_the_network_never_gets_this_computers_settings_fragments(monkeypatch):
     assert 'action="/settings/access"' not in remote_access["html"]
 
 
+CARD_ERROR = (
+    r"cannot write D:\Copies\night\x.part (see /home/owner/tow/state.json)"
+    " via https://api.telegram.org/bot123456:SECRETTOKEN/sendMessage?key=SECRETKEY"
+)
+CREDENTIALS = ("SECRETTOKEN", "SECRETKEY", "123456:")
+LOCAL_WORDS = (r"D:\Copies\night\x.part", "/home/owner/tow/state.json")
+
+
+@pytest.mark.parametrize("coded", [True, False])
+def test_settings_card_errors_are_scrubbed_for_the_network_and_credentials_for_everyone(monkeypatch, coded, tmp_path):
+    """A messenger card's last delivery error and the night copy's failure: a network device
+    sees no folder, file or link secret in them (the values are scrubbed before the sentence is
+    formatted, then the sentence); this PC keeps the paths, and nobody gets a link's
+    credentials. The configured folder, a setting the device may edit, stays; nothing stored
+    changes."""
+    from tow.snapshots.record import record_status
+
+    _seed()
+    secrets = load_secrets()
+    secrets["telegram"] = {"token": "123456:fake-token", "chat_ids": ["1001"]}
+    save_secrets(secrets)
+    folder = str(tmp_path / "Copies")
+    cfg = load_config()
+    cfg["backup_dir"] = folder
+    save_config(cfg)
+    state = load_state()
+    status = {"ok": False, "at": 1800000000, "error": CARD_ERROR}
+    if coded:
+        status.update(
+            error="Telegram: no answer",
+            error_code="notifier.common.delivery_unknown",
+            error_params={"what": "Telegram", "error": CARD_ERROR},
+        )
+    state["notify_status"] = {"telegram:1001": status}
+    save_state(state)
+    record_status(last_error=CARD_ERROR, last_error_at=1800000000.0)
+    stored = load_state()["notify_status"]
+    lan = _lan(monkeypatch)
+    local = TestClient(app, headers=ORIGIN)
+
+    def sections(client: TestClient) -> list[str]:
+        page = dict(
+            re.findall(
+                r"<!--frag:([A-Za-z0-9_-]+):[0-9a-f]{32}-->(.*?)<!--/frag:\1-->",
+                client.get("/settings").text,
+                re.DOTALL,
+            )
+        )
+        found = {
+            f["id"]: f["html"] for f in client.get("/page/fragments", params={"page": "/settings"}).json()["fragments"]
+        }
+        return [page["acc-bots"], page["acc-transfer"], found["acc-bots"], found["acc-transfer"]]
+
+    for html in sections(lan):
+        assert "api.telegram.org" in html  # the link's host stays
+        assert not [word for word in (*CREDENTIALS, *LOCAL_WORDS) if word in html]
+    remote = sections(lan)
+    assert folder in remote[1]  # the configured folder: a setting, not an error
+    for html in sections(local):
+        assert not [word for word in CREDENTIALS if word in html]
+        assert [word for word in LOCAL_WORDS if word in html]
+    assert load_state()["notify_status"] == stored
+
+
 # --------------------------------------------------------------------------- History
 
 
