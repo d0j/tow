@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from tow.platform import _common
+from tow.platform._common import Volume
 
 # Folders a download or backup never goes to, as typed or as resolved. /var as a whole is not
 # among them: download folders live there (/var/lib/transmission-daemon/downloads, macOS's
@@ -160,6 +161,97 @@ def _rename_no_replace(source: str, destination: str, system: str) -> int:
     if call(*arguments) == 0:
         return 0
     return ctypes.get_errno() or errno.EIO
+
+
+def _resolve(path: Path) -> str:
+    return posixpath.realpath(os.fspath(path))
+
+
+# File system types as /proc/self/mountinfo (Linux) or statfs (macOS) name them. FUSE as such
+# is neither: it carries local and network file systems alike, so only a named one counts.
+_NETWORK_FILESYSTEMS = frozenset(
+    {"nfs", "nfs4", "cifs", "smb3", "smbfs", "9p", "ncpfs", "afs", "afpfs", "webdav", "davfs", "ceph"}
+    | {"glusterfs", "lustre", "gpfs", "beegfs", "orangefs", "sshfs", "fuse.sshfs", "fuse.glusterfs"}
+    | {"fuse.cephfs", "fuse.rclone", "fuse.s3fs", "fuse.gcsfuse", "fuse.davfs2"}
+)
+_LOCAL_FILESYSTEMS = frozenset(
+    {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "jfs", "reiserfs", "bcachefs", "nilfs2"}
+    | {"vfat", "msdos", "exfat", "ntfs", "ntfs3", "fuseblk", "hfs", "hfsplus", "apfs", "ufs", "tmpfs"}
+)
+
+
+def _volume(fstype: str, mount_point: str, source: str) -> Volume:
+    """A mount as a Volume: a network one is named by its source too (the share it shows)."""
+    name = fstype.casefold()
+    kind = "network" if name in _NETWORK_FILESYSTEMS else "local" if name in _LOCAL_FILESYSTEMS else "unknown"
+    return Volume(f"{fstype} {mount_point}" + (f" {source}" if kind == "network" else ""), kind)
+
+
+def _unescape_mount(text: str) -> str:
+    """mountinfo writes a space, a tab, a newline and a backslash as octal escapes."""
+    return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), text)
+
+
+def linux_volume(path: str, mountinfo: str) -> Volume | None:
+    """The mount holding the resolved ``path``, from /proc/self/mountinfo: the longest mount
+    point above it, the last listed of equal ones (mounts stack). A volume that is not mounted is
+    not listed, so its empty mount point folder is on the mount above it."""
+    best: tuple[str, str, str] | None = None
+    for line in mountinfo.splitlines():
+        before, separator, after = line.partition(" - ")
+        fields, tail = before.split(), after.split()
+        if not separator or len(fields) < 5 or len(tail) < 2:
+            continue
+        point = _unescape_mount(fields[4])
+        if path != point and not path.startswith(point.rstrip("/") + "/"):
+            continue
+        if best is None or len(point) >= len(best[1]):
+            best = (tail[0], point, _unescape_mount(tail[1]))
+    return _volume(*best) if best is not None else None
+
+
+def _statfs(path: str) -> tuple[str, str, str] | None:
+    """(type, mount point, source) of the file system holding ``path``: macOS statfs, through
+    the C library with the 64-bit-inode struct statfs (sys/mount.h); None when it fails."""
+    import ctypes
+
+    class StatFs(ctypes.Structure):
+        _fields_ = (
+            ("f_bsize", ctypes.c_uint32),
+            ("f_iosize", ctypes.c_int32),
+            ("f_blocks", ctypes.c_uint64),
+            ("f_bfree", ctypes.c_uint64),
+            ("f_bavail", ctypes.c_uint64),
+            ("f_files", ctypes.c_uint64),
+            ("f_ffree", ctypes.c_uint64),
+            ("f_fsid", ctypes.c_int32 * 2),
+            ("f_owner", ctypes.c_uint32),
+            ("f_type", ctypes.c_uint32),
+            ("f_flags", ctypes.c_uint32),
+            ("f_fssubtype", ctypes.c_uint32),
+            ("f_fstypename", ctypes.c_char * 16),
+            ("f_mntonname", ctypes.c_char * 1024),
+            ("f_mntfromname", ctypes.c_char * 1024),
+            ("f_flags_ext", ctypes.c_uint32),
+            ("f_reserved", ctypes.c_uint32 * 7),
+        )
+
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        # Intel Macs name the 64-bit-inode call statfs$INODE64; Apple silicon has only that one.
+        call = getattr(libc, "statfs$INODE64", None) or libc.statfs
+        call.argtypes = (ctypes.c_char_p, ctypes.POINTER(StatFs))
+        call.restype = ctypes.c_int
+        found = StatFs()
+        if call(os.fsencode(path), ctypes.byref(found)) != 0:
+            return None
+        return (
+            os.fsdecode(found.f_fstypename),
+            os.fsdecode(found.f_mntonname),
+            os.fsdecode(found.f_mntfromname),
+        )
+    except AttributeError, OSError, TypeError, ValueError:
+        return None
 
 
 def _parent_pid() -> int:
@@ -645,6 +737,14 @@ class PosixBackend:
         except OSError, ValueError:
             return None
         return blocks * 512 if type(blocks) is int and blocks >= 0 else None
+
+    def volume(self, path: Path) -> Volume | None:
+        """The mount holding the existing ``path``: /proc/self/mountinfo on Linux, statfs on macOS."""
+        real = _resolve(path)
+        if self.name == "linux":
+            return linux_volume(real, _read("/proc/self/mountinfo"))
+        found = _statfs(real)
+        return _volume(*found) if found is not None else None
 
     # --- handing a folder back to its owner (tow permissions fix) ---------------------------------
 

@@ -459,3 +459,30 @@ def test_a_probe_answered_with_429_saves_the_servers_deadline(monkeypatch):
     assert time.time() + 500 < deadline <= time.time() + 600
     assert not has_available_host("demo", ["https://a.example"], ignore_cool=True)
     assert load_state()["doctor"]["probes"][0]["error"] == "rate_limited"
+
+
+@pytest.mark.parametrize(
+    ("volume", "warned"),
+    [
+        (("nfs4 /srv nas:/export", "network"), True),
+        (("ext4 /", "local"), False),
+        (("fuse /srv", "unknown"), False),  # FUSE in general: not known to be a network one
+        (None, False),  # the file system cannot be told
+    ],
+)
+def test_a_data_folder_on_a_network_file_system_is_warned_about(monkeypatch, volume, warned):
+    from tow import doctor, platform
+    from tow.i18n import t
+    from tow.log import owner_language
+    from tow.paths import data_dir
+
+    asked = []
+    monkeypatch.setattr(
+        platform, "volume_of", lambda path: asked.append(path) or (platform.Volume(*volume) if volume else None)
+    )
+    found = doctor._network_data()
+    assert asked == [data_dir(create=False)]  # the live data folder, looked at, never created
+    assert found == (str(data_dir(create=False)) if warned else "")
+    text = doctor.doctor_text({"ok": True, "data_network": found})
+    note = t("doctor_report.data_network", owner_language(), value=str(data_dir(create=False)))
+    assert (note in text) is warned

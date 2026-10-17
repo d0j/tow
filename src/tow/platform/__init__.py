@@ -21,6 +21,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+from tow.platform._common import Volume
+
 NAMES = ("windows", "linux", "macos")
 
 
@@ -80,6 +82,9 @@ class Backend(Protocol):
 
     # What a file takes on disk, as the file system says it (``allocated_file_bytes``).
     def allocated_bytes(self, path: Path) -> int | None: ...
+
+    # The file system an existing path is on (``volume_of``).
+    def volume(self, path: Path) -> Volume | None: ...
 
     # `tow permissions`: who owns a folder, and giving an install back to its owner.
     def elevated(self) -> bool: ...
@@ -278,6 +283,15 @@ def ordinary_path(path: Path | str) -> Path:
     return Path(ordinary_windows_path(os.fspath(path))) if current().name == "windows" else Path(path)
 
 
+def volume_of(path: Path | str) -> Volume | None:
+    """The file system the existing ``path`` is on (its identity, and whether it is a local or a
+    network one), or None when it cannot be told. Read-only: nothing is written or mounted."""
+    try:
+        return current().volume(Path(path))
+    except OSError, ValueError:
+        return None
+
+
 def allocated_file_bytes(path: Path | str, *, info: os.stat_result | None = None) -> int | None:
     """Bytes the regular file at ``path`` already reserves on disk, never its unallocated
     logical holes, and never more than its size; ``info`` is its ``lstat`` when the caller has
@@ -421,6 +435,7 @@ __all__ = [
     "NAMES",
     "PRIVATE_UMASK",
     "Backend",
+    "Volume",
     "backend_for",
     "child_path",
     "console_codec",
@@ -439,4 +454,5 @@ __all__ = [
     "use_private_files",
     "user_id",
     "user_name",
+    "volume_of",
 ]

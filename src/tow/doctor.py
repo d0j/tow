@@ -62,6 +62,7 @@ def _inventory(cfg: dict[str, Any], secrets: dict[str, Any], state: dict[str, An
         "autostart": _autostart(),
         "open_root": _open_root(),
         "open_folders": _open_folders(),
+        "data_network": _network_data(),
         "ok": True,
     }
 
@@ -87,6 +88,21 @@ def _open_folders() -> list[str]:
         return [folder.name for folder in private_folders(install_folders(), repair=False)]
     except OSError, RuntimeError:
         return []
+
+
+def _network_data() -> str:
+    """The live data folder when it is on a network file system (NFS, SMB, 9p, SSHFS...), where
+    TOW's locks may not keep a second TOW out (docs/PORTABLE.md), else "". A file system not
+    known either way (FUSE in general) is not called a network one."""
+    from tow.paths import data_dir
+    from tow.platform import volume_of
+
+    try:
+        folder = data_dir(create=False)
+    except OSError, RuntimeError:
+        return ""
+    found = volume_of(folder)
+    return str(folder) if found is not None and found.kind == "network" else ""
 
 
 def _autostart() -> dict[str, Any]:
@@ -324,6 +340,8 @@ def doctor_text(report: dict[str, Any] | None = None) -> str:
         lines.append(t("doctor_report.open_root", lang, value=r["open_root"]))
     if r.get("open_folders"):
         lines.append(t("doctor_report.open_folders", lang, value=", ".join(map(str, r["open_folders"]))))
+    if r.get("data_network"):
+        lines.append(t("doctor_report.data_network", lang, value=r["data_network"]))
     if stale_autostart(r.get("autostart")):
         lines.append(t("doctor_report.autostart_stale", lang, where=r["autostart"].get("where") or "TOW"))
     for p in r.get("probes") or []:

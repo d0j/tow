@@ -8,7 +8,17 @@ import time
 import webbrowser
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import IO
+from typing import IO, NamedTuple
+
+
+class Volume(NamedTuple):
+    """The file system holding a path. ``identity`` names it the same way after a reboot or a
+    remount: a Windows volume GUID (a share's path), on Linux and macOS its type and mount point
+    (and the source of a network one). ``kind`` is "local", "network" or "unknown" (a type not
+    known to be either: FUSE in general, for one, also carries local file systems)."""
+
+    identity: str
+    kind: str
 
 
 def run_quiet(args: list[str], *, timeout: float = 20, creationflags: int = 0) -> str:

@@ -920,6 +920,7 @@
     "open_root": "WARNING: other accounts on this computer can change the TOW folder {value} and the program in it (and so read the master key); run tow permissions to see why and tow permissions fix to close it",
     "open_folders": "WARNING: other accounts on this computer can open: {value} (the master key opens every saved password); run tow permissions to see why and tow permissions fix to close them",
     "autostart_stale": "WARNING: this account's autostart entry “{where}” points to a TOW folder that was moved or deleted, so it starts nothing; run tow autostart on to take it over",
+    "data_network": "WARNING: the data folder {value} is on a network file system, where TOW's locks may not keep a second TOW on another computer out; keep data/ on a local disk (docs/PORTABLE.md)",
     "probe_ok": "ok",
     "probe": "site {tracker} {host}: {result}"
   },
