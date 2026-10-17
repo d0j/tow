@@ -932,6 +932,22 @@ def test_a_network_device_never_sees_a_raw_error_in_history_or_diagnostics(monke
     assert r"D:\Apps\TOW\autostart.cmd" in local.get("/doctor").text
 
 
+def test_a_long_folder_cut_to_its_end_never_reaches_a_network_device(monkeypatch, clock):
+    """Re-check 1.33.0: a folder over 80 characters was cut to its last 79 before the scrub, and
+    the cut tail (no drive, no root) matched no path pattern: History showed it to a network
+    device. The folder is now left out before it is cut; this PC still reads its end."""
+    _seed()
+    folder = "D:\\" + "\\".join(["Library"] * 9) + "\\Show Name\\UniqueTailFolderXYZ"
+    assert len(folder) > 80
+    services.log_event("topic_edit", topic="t1", path=folder, how="manual")
+    lan = _lan(monkeypatch)
+    local = TestClient(app, headers=ORIGIN)
+    for address in ("/history", "/page/fragments?page=/history", "/log.json", "/settings"):
+        assert "UniqueTailFolderXYZ" not in lan.get(address).text, address
+    for address in ("/history", "/log.json"):
+        assert "UniqueTailFolderXYZ" in local.get(address).text, address
+
+
 def test_settings_and_history_polls_never_wait_for_the_data_or_the_logs_lock(clock):
     """Final review 1.33.0 #8: the Settings inventory read the night copies' cleanup under the
     data lock (whose taking runs the recovery steps), and History's lines took the log's lock -

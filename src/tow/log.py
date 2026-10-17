@@ -896,9 +896,11 @@ def format_event(
     *,
     title_index: Mapping[str, str] | None = None,
     site_titles: Mapping[str, str] | None = None,
+    paths: bool = True,
 ) -> dict[str, str]:
     """One line of the log for History and the Log: when (``at`` written out, ``iso`` as stored),
-    what (``label``) and its details.
+    what (``label``) and its details. ``paths=False`` (a network device): a folder is "…" here,
+    before it is cut to its end - a cut tail has no drive or root left for a scrub to know.
     ``title_index`` names topics (``index_event_titles``), ``site_titles`` sites
     (``index_site_titles``) as they are named now."""
     rec = _with_site_title(rec, site_titles)
@@ -966,7 +968,10 @@ def format_event(
         bits.append(h[:8])
     if rec.get("path"):
         path = str(rec["path"])
-        bits.append(path if len(path) <= 80 else "…" + path[-79:])  # the folder's own name is at the end
+        if not paths:
+            bits.append("…")
+        else:
+            bits.append(path if len(path) <= 80 else "…" + path[-79:])  # the folder's own name is at the end
     u = scrub_text(str(rec.get("url") or "")).strip()
     if u and not u.startswith(("***",)):
         bits.append(u[:90])
