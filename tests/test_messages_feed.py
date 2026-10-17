@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from helpers import open_network
+from log_kinds import scan as scan_logged_kinds
 
 from tow import log, messages_feed
 from tow.paths import data_dir, ui_state_path
@@ -859,6 +860,36 @@ def test_a_message_says_what_happened_as_a_sentence(kind, fields, en, ru):
     snapshot = messages_feed.feed().refresh()
     assert messages_feed.render(snapshot.projection, lang="en")["items"][0]["text"].startswith(en)
     assert messages_feed.render(snapshot.projection, lang="ru")["items"][0]["text"].startswith(ru)
+
+
+def test_every_logged_kind_is_decided_and_every_decision_is_logged():
+    """The kinds the code logs (derived from the code alone, tests/log_kinds.py) are exactly the
+    matrix's, the recoveries' success kinds and HISTORY_ONLY: a new kind is decided explicitly,
+    never left out by a default, and no decision names a kind nothing logs (1.33.1 QA-03, QA-04)."""
+    scanned = scan_logged_kinds()
+    assert scanned.unresolved == []
+    logged = set(scanned.kinds)
+    synthetic = {message for *_, message in messages_feed.RECOVERIES}
+    shown = (set(messages_feed.MATRIX) - synthetic) | {success for _, success, _, _ in messages_feed.RECOVERIES}
+    assert not shown & messages_feed.HISTORY_ONLY
+    undecided = sorted(logged - shown - messages_feed.HISTORY_ONLY)
+    assert undecided == [], f"put each in messages_feed.MATRIX or HISTORY_ONLY: {undecided}"
+    dead = sorted((shown | messages_feed.HISTORY_ONLY) - logged)
+    assert dead == [], f"nothing logs these any more: {dead}"
+    assert not synthetic & logged  # a recovery is the feed's own entry, never logged
+
+
+@pytest.mark.parametrize(
+    ("kind", "category", "severity"),
+    [
+        ("check_persistence_cleanup_pending", "operations", "warn"),  # as backup_cleanup_pending
+        ("add_check_notify_fail", "delivery", "warn"),  # the message about a failed add was not sent
+    ],
+)
+def test_cleanups_that_wait_and_a_lost_add_message_are_messages(kind, category, severity):
+    _raw(kind, topic="t1", how="manual")
+    (item,) = _feed()["items"]
+    assert (item["category"], item["kind"]) == (category, severity)
 
 
 @pytest.mark.parametrize("lang", ["en", "ru"])
