@@ -268,3 +268,33 @@ def test_the_web_app_keeps_its_temporary_files_in_the_data_folder(tmp_path):
     with TestClient(app) as client:  # runs the app's startup
         assert client.get("/healthz").status_code == 200
     assert tempfile.gettempdir() == str(tmp_path / "tmp")
+
+
+def test_expand_user_expands_only_a_leading_tilde(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    assert paths.expand_user("~") == tmp_path
+    assert paths.expand_user(os.path.join("~", "backups")) == tmp_path / "backups"
+    assert paths.expand_user(os.path.join("backup", "~night")) == Path("backup", "~night")
+    assert paths.expand_user("night") == Path("night")
+
+
+def test_backup_locations_expand_the_home_through_paths(monkeypatch, tmp_path):
+    from tow import locations
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    assert locations.resolve("~/night", locations.NIGHT) == tmp_path / "night"
+    assert locations.resolve("night", locations.NIGHT) == locations.install_dir() / "night"
+
+
+def test_only_paths_names_a_home_folder():
+    src = Path(__file__).resolve().parents[1] / "src" / "tow"
+    found = [
+        f"{file.relative_to(src).as_posix()}:{number}"
+        for file in sorted(src.rglob("*.py"))
+        if file.name != "paths.py" or file.parent != src
+        for number, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1)
+        if "expanduser(" in line
+    ]
+    assert found == []
