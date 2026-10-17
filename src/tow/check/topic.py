@@ -228,6 +228,8 @@ class CheckRun:
     readd_removed: bool = False
     # When the owner asked for that check, if it waited in a queue (``removal_seen_by``).
     readd_since: float | None = None
+    # The owner's --rebind-volumes: save folders record the volume a file is confirmed on now.
+    rebind_volumes: bool = False
     # allow_private_tracker_hosts: a page's magnet may name trackers in the home network.
     private_tracker_hosts: bool = False
     # (site, error code) -> {"error", "topics"}: topics not asked because of their site (SITE_SKIP_CODES).

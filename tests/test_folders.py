@@ -201,3 +201,81 @@ def test_macos_data_volume_paths_are_the_folders_they_stand_for(monkeypatch):
     )
     monkeypatch.setattr(folders, "os", SimpleNamespace(path=macos_path))
     assert folders._real_path("/home/user/Media") == "/home/user/Media"
+
+
+# --- the volume a save folder was recorded on (an unmounted disk is not "seen") ----------------------
+
+
+def _volumes(monkeypatch, by_folder):
+    """volume_of answers from ``by_folder`` (the folder actually looked at -> identity or None)."""
+    asked = []
+
+    def volume_of(path):
+        asked.append(os.path.normpath(str(path)))
+        identity = by_folder.get(os.path.normpath(str(path)))
+        return platform.Volume(identity, "local") if identity else None
+
+    monkeypatch.setattr(platform, "volume_of", volume_of)
+    return asked
+
+
+def test_a_folder_on_its_recorded_volume_is_seen(tmp_path, monkeypatch):
+    folder = tmp_path / "disk" / "tv"
+    folder.mkdir(parents=True)
+    _volumes(monkeypatch, {str(folder): "usb-disk"})
+    assert seen_from_here(str(folder), volume="usb-disk")
+
+
+def test_an_existing_empty_mount_point_on_another_volume_is_not_seen(tmp_path, monkeypatch):
+    # The disk is unmounted, its mount point folder is still there: on the system disk now.
+    folder = tmp_path / "mnt" / "disk"
+    folder.mkdir(parents=True)
+    asked = _volumes(monkeypatch, {str(folder): "system-disk"})
+    assert not seen_from_here(str(folder), volume="usb-disk")
+    assert asked == [str(folder)]
+
+
+def test_a_missing_folder_is_judged_by_its_nearest_existing_folder(tmp_path, monkeypatch):
+    mount = tmp_path / "mnt" / "disk"
+    mount.mkdir(parents=True)
+    asked = _volumes(monkeypatch, {str(mount): "usb-disk"})
+    # A new subfolder the client has not made yet, on the recorded disk: seen.
+    assert seen_from_here(str(mount / "tv" / "Show"), volume="usb-disk")
+    assert asked == [str(mount)]
+    # The same, with the disk gone and its folder with it: the parent is another volume.
+    mount.rmdir()
+    asked = _volumes(monkeypatch, {str(mount.parent): "system-disk"})
+    assert not seen_from_here(str(mount / "tv" / "Show"), volume="usb-disk")
+    assert asked == [str(mount.parent)]
+
+
+def test_an_unreadable_volume_is_not_seen_when_one_was_recorded(tmp_path, monkeypatch):
+    _volumes(monkeypatch, {})
+    assert not seen_from_here(str(tmp_path), volume="usb-disk")
+    assert seen_from_here(str(tmp_path))  # without a record: as before, nothing is asked
+
+
+def test_without_a_record_the_volume_is_never_asked(tmp_path, monkeypatch):
+    monkeypatch.setattr(platform, "volume_of", lambda path: pytest.fail("volume asked without a record"))
+    assert seen_from_here(str(tmp_path / "new" / "folder"))
+
+
+@pytest.mark.parametrize(
+    ("record", "path", "expected"),
+    [
+        (None, "/srv/tv", None),
+        ({"path": "/srv/tv", "id": "ext4 /srv"}, "/srv/tv", "ext4 /srv"),
+        ({"path": "/srv/tv/", "id": "ext4 /srv"}, "/srv/tv", "ext4 /srv"),
+        ({"path": "/srv/old", "id": "ext4 /srv"}, "/srv/tv", None),  # the topic moved: recorded again
+        ({"path": "D:\\TV", "id": "vol"}, "d:/tv", "vol"),  # a Windows folder ignores case
+        ({"path": "/srv/TV", "id": "ext4 /srv"}, "/srv/tv", None),  # a POSIX one does not
+        ({"path": "/srv/tv", "id": ""}, "/srv/tv", ""),  # damaged: nothing matches it
+        ({"path": "/srv/tv", "id": 7}, "/srv/tv", ""),
+        ({"id": "ext4 /srv"}, "/srv/tv", ""),
+        ("ext4 /srv", "/srv/tv", ""),
+    ],
+)
+def test_the_recorded_volume_of_a_folder(record, path, expected):
+    from tow.folders import recorded_volume
+
+    assert recorded_volume(record, path) == expected

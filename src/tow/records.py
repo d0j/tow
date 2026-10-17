@@ -173,6 +173,9 @@ class HistoryRecord(TypedDict, total=False):
     client_absence_observed: bool
     season_complete_at: str
     verifying: bool
+    # The volume the save folder was on when an applying check last confirmed a file there:
+    # {"path": the folder, "id": tow.platform Volume.identity} (tow.folders.recorded_volume).
+    volume: dict[str, Any]
 
 
 class DownloadHistory(TypedDict, total=False):

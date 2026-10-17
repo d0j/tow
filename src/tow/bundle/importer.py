@@ -202,6 +202,19 @@ def _apply_config_overrides(parsed: dict[str, Any], overrides: dict[str, Any]) -
     parsed["config"] = effective_config
 
 
+def _without_volumes(history: Any) -> Any:
+    """The history without the volume each save folder was on (tow.folders.recorded_volume): that
+    is the exporting computer's observation, never this one's. An imported topic records its own
+    at its next applying check that confirms a file."""
+    if not isinstance(history, dict) or not isinstance(history.get("topics"), dict):
+        return history
+    topics = {
+        key: {name: value for name, value in record.items() if name != "volume"} if isinstance(record, dict) else record
+        for key, record in history["topics"].items()
+    }
+    return {**history, "topics": topics}
+
+
 def _import_bundle(
     input_path: Path,
     passphrase: str,
@@ -254,7 +267,7 @@ def _import_bundle(
     mappings = parse_path_maps(path_maps)
     mapped_state, warnings = apply_path_maps(parsed["state"], mappings)
     state_bytes = json_bytes(mapped_state, readable=True)  # as tow.store writes each file
-    history_bytes = json_bytes(parsed["history"])
+    history_bytes = json_bytes(_without_volumes(parsed["history"]))
     members = sorted(name for name in parsed["members"] if name != "manifest.json")
     result = {
         "ok": True,

@@ -130,6 +130,7 @@ def _add_check(sub: Subcommands) -> None:
     c.add_argument("--apply", action="store_true", help=t("cli.help.check_apply"))
     c.add_argument("--dry-run", action="store_true", help=t("cli.help.check_dry_run"))
     c.add_argument("--notify", action="store_true", help=t("cli.help.check_notify"))
+    c.add_argument("--rebind-volumes", action="store_true", help=t("cli.help.check_rebind_volumes"))
     # Accepted as before; a run without a scope flag is a person's own anyway (``_how``).
     c.add_argument("--manual", action="store_true", help=argparse.SUPPRESS)
     # G2: the progress pass of `tow run` - completions from the torrent client only, no tracker requests.
@@ -185,6 +186,7 @@ def _check(args: argparse.Namespace) -> int:
             if args.site_retry_only
             else "",
             space_only=args.space_only,
+            rebind_volumes=args.rebind_volumes,
         )
     except SecretStoreError as exc:
         if apply:

@@ -2174,6 +2174,20 @@ def test_cli_check_says_whether_a_person_ran_it(monkeypatch, argv, how):
     assert list(BY_NAME["check"].argv or ()) == ["check", "--apply", "--notify", "--global-only", "--json"]
 
 
+@pytest.mark.parametrize(
+    ("argv", "rebind"), [(["check", "--apply"], False), (["check", "--apply", "--rebind-volumes"], True)]
+)
+def test_only_the_owners_flag_rebinds_save_folder_volumes(monkeypatch, argv, rebind):
+    from tow import cli
+    from tow.supervisor.jobs import BY_NAME
+
+    seen = {}
+    monkeypatch.setattr(check, "run_check", lambda **kwargs: seen.update(kwargs) or {"results": []})
+    assert cli.main([*argv, "--json"]) == 0
+    assert seen["rebind_volumes"] is rebind
+    assert all("--rebind-volumes" not in (job.argv or ()) for job in BY_NAME.values())  # never scheduled
+
+
 def test_cli_check_refuses_a_client_only_pass_with_a_scope_before_recording_anything(monkeypatch, capsys):
     from tow import cli
 
@@ -2302,7 +2316,7 @@ def test_an_add_that_cannot_fit_is_added_stopped_and_waits(monkeypatch, tmp_path
         lambda _blob: SimpleNamespace(infohash="HASH-NEW", client_hash="HASH-NEW", name="Show", files=(big,)),
     )
     monkeypatch.setattr(shutil, "disk_usage", lambda _p: SimpleNamespace(total=0, used=0, free=10 * 1024**3))
-    monkeypatch.setattr("tow.folders.seen_from_here", lambda _p: True)  # M: is this computer's drive
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda _p, volume=None: True)  # M: is this computer's drive
     monkeypatch.setattr(check_apply, "free_space_problem", FREE_SPACE_PROBLEM)
     _seed_watched_topic(hash="")
 
@@ -2373,7 +2387,7 @@ def test_free_space_is_not_checked_when_it_cannot_be_known(monkeypatch):
 
     monkeypatch.setattr(shutil, "disk_usage", lambda _p: (_ for _ in ()).throw(OSError("unreachable")))
     # The share "exists" without asking the network: a real \\nas lookup takes seconds.
-    monkeypatch.setattr("tow.folders.seen_from_here", lambda _p: True)
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda _p, volume=None: True)
     monkeypatch.setattr(Path, "exists", lambda _self, **_kw: True)
 
     assert check.free_space_problem(r"\\nas\media", (TorrentFile(0, "a.mkv", 10**12),), [0]) is None

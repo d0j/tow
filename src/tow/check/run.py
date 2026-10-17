@@ -155,12 +155,16 @@ def run_check(
     scheduled_scope: str = "",
     space_only: bool = False,
     readd_since: float | None = None,
+    rebind_volumes: bool = False,
 ) -> dict[str, Any]:
     """Run one check; applying checks never overlap (scheduled, progress, web, CLI).
 
     ``readd_since``: when the owner asked for this row check (epoch seconds), for a request that
     waited in a queue - a torrent gone from its client is added back only when a check had
     already seen it gone by then, never one removed after the request.
+
+    ``rebind_volumes``: the owner's ``tow check --rebind-volumes`` - a save folder's volume is
+    recorded again from a file confirmed now, whatever was recorded (``tow.progress.reconcile``).
 
     ``space_only``: the supervisor's space pass - only the topics whose revision waits in the
     client for disk space, asked of the client alone (``tow.check.space``), no site traffic.
@@ -188,6 +192,7 @@ def run_check(
             scheduled_scope=scheduled_scope,
             space_only=space_only,
             readd_since=readd_since,
+            rebind_volumes=rebind_volumes,
         )
     with check_run_lock(wait=wait):
         return _run_check(
@@ -200,6 +205,7 @@ def run_check(
             scheduled_scope=scheduled_scope,
             space_only=space_only,
             readd_since=readd_since,
+            rebind_volumes=rebind_volumes,
         )
 
 
@@ -375,6 +381,7 @@ def _run_check(
     scheduled_scope: str = "",
     space_only: bool = False,
     readd_since: float | None = None,
+    rebind_volumes: bool = False,
 ) -> dict[str, Any]:
     cfg = load_config()
     secrets, secrets_stamp = read_secrets()
@@ -450,6 +457,7 @@ def _run_check(
         # and the scheduled checks only report it.
         readd_removed=how == "manual" and ids is not None,
         readd_since=readd_since,
+        rebind_volumes=rebind_volumes,
         private_tracker_hosts=as_bool(cfg.get("allow_private_tracker_hosts")),
     )
     results: list[CheckRow] = []

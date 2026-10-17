@@ -392,9 +392,9 @@ def test_a_drive_that_is_not_there_for_now_does_not_start_the_waiting_torrent(wo
     # that was unplugged or a share that was asleep.
     _check()
     with monkeypatch.context() as gone:
-        gone.setattr("tow.folders.seen_from_here", lambda _path: False)
+        gone.setattr("tow.folders.seen_from_here", lambda _path, volume=None: False)
         _space_pass()
-        gone.setattr("tow.folders.seen_from_here", lambda _path: True)
+        gone.setattr("tow.folders.seen_from_here", lambda _path, volume=None: True)
         gone.setattr(shutil, "disk_usage", lambda _p: (_ for _ in ()).throw(OSError("asleep")))
         _space_pass()
     assert world.client.starts == []
@@ -469,7 +469,7 @@ def test_an_unconfirmed_stopped_add_is_not_started_by_its_recovery_without_room(
 
 
 def test_a_folder_not_seen_from_here_never_waits(world, monkeypatch):
-    monkeypatch.setattr("tow.folders.seen_from_here", lambda _path: False)
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda _path, volume=None: False)
     row = _check()
     assert world.client.adds == [(NEW, True)]
     assert row["ok"] is True
@@ -614,7 +614,7 @@ def test_the_forms_hint_measures_the_folder_as_an_add_does(tmp_path, monkeypatch
     assert shown["free"] > 0
     assert shown["margin"] == space.FREE_SPACE_MARGIN
     with monkeypatch.context() as remote:
-        remote.setattr("tow.folders.seen_from_here", lambda _path: False)  # a remote client's /downloads
+        remote.setattr("tow.folders.seen_from_here", lambda _path, volume=None: False)  # a remote client's /downloads
         assert space.folder_free("/downloads/tv") == {"free": None, "margin": space.FREE_SPACE_MARGIN}
     assert space.folder_free("") == {"free": None, "margin": space.FREE_SPACE_MARGIN}
     answer = TestClient(app).get("/content/space", params={"path": str(tmp_path)}, headers={"X-TOW-Space": "1"})
@@ -649,7 +649,7 @@ def test_the_hint_never_opens_a_share_or_a_device_an_add_would_refuse(monkeypatc
     from tow.web import app
 
     looked: list[str] = []
-    monkeypatch.setattr("tow.folders.seen_from_here", lambda path: looked.append(path) or False)
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda path, volume=None: looked.append(path) or False)
     share = r"\\203.0.113.7\share\tv"
     for path in (share, "//203.0.113.7/share", r"\\.\PhysicalDrive0", r"\\?\C:\TV", "tv\\relative", "D:\\TV\x00"):
         assert space.folder_free(path) == {"free": None, "margin": space.FREE_SPACE_MARGIN}
@@ -834,3 +834,37 @@ def test_the_waiting_message_is_not_sent_again_after_a_client_outage(world, pass
 
     assert len([text for text in world.sent if "ждёт места" in text]) == 1
     assert _topic()["last_error_code"] == "check.waiting_space"
+
+
+# --- the volume recorded for the save folder -------------------------------------------------------
+
+
+def test_a_folder_off_its_recorded_volume_has_no_free_space_here(tmp_path, monkeypatch):
+    from tow import platform
+
+    monkeypatch.setattr(platform, "volume_of", lambda path: platform.Volume("system-disk", "local"))
+    monkeypatch.setattr(shutil, "disk_usage", lambda _p: pytest.fail("the system disk's space credited"))
+    wanted = [((), 10 * GIB, 0)]
+    assert space._measured(str(tmp_path / "mnt" / "disk"), wanted, volume="usb-disk") == (False, None)
+    assert space.measure(str(tmp_path / "mnt" / "disk"), wanted, volume="usb-disk") is None
+
+
+def test_the_recorded_volume_comes_from_the_topics_history(tmp_path):
+    save_download_history(
+        {"schema_version": 1, "topics": {"t1": {"items": {}, "volume": {"path": str(tmp_path), "id": "usb-disk"}}}}
+    )
+    assert space.recorded_volume_of({"id": "t1"}, str(tmp_path)) == "usb-disk"
+    assert space.recorded_volume_of({"id": "t1"}, str(tmp_path / "other")) is None
+    assert space.recorded_volume_of({"id": "t2"}, str(tmp_path)) is None
+
+
+def test_a_waiting_torrent_on_an_unmounted_disk_keeps_waiting(world, monkeypatch):
+    # The space pass measures with the folder's recorded volume: another one is "not known now".
+    seen = []
+    monkeypatch.setattr(space, "recorded_volume_of", lambda topic, dest: "usb-disk")
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda path, volume=None: seen.append(volume) or False)
+    assert space._measured("/mnt/disk", [((), GIB, 0)], volume=space.recorded_volume_of({}, "/mnt/disk")) == (
+        False,
+        None,
+    )
+    assert seen == ["usb-disk"]

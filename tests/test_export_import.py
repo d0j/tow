@@ -965,3 +965,23 @@ def test_a_failed_second_rollback_does_not_undo_later_edits(tmp_path, monkeypatc
         pass
 
     assert load_state()["topics"] == [{"id": "edited-after-rollback"}]
+
+
+def test_an_import_leaves_the_exporting_computers_volumes_behind():
+    # The volume a save folder was on is that computer's observation: the importing one records
+    # its own at its next applying check that confirms a file.
+    from tow.bundle.importer import _without_volumes
+
+    history = {
+        "schema_version": 1,
+        "topics": {
+            "1": {"items": {"a": {"status": "completed"}}, "volume": {"path": "/srv/tv", "id": "ext4 /srv"}},
+            "2": {"items": {}},
+        },
+    }
+    assert _without_volumes(history) == {
+        "schema_version": 1,
+        "topics": {"1": {"items": {"a": {"status": "completed"}}}, "2": {"items": {}}},
+    }
+    assert history["topics"]["1"]["volume"]["id"] == "ext4 /srv"  # the bundle's own copy is not changed
+    assert _without_volumes({"topics": []}) == {"topics": []}
