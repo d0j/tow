@@ -241,9 +241,10 @@ def _state_as_it_is() -> dict[str, Any] | None:
         return None
 
 
-def _recorded_for(path: Path) -> str | None:
-    """The volume recorded for whichever backup folder ``path`` is, read without writing."""
-    state = _state_as_it_is()
+def _recorded_for(path: Path, state: Mapping[str, Any] | None = None) -> str | None:
+    """The volume recorded for whichever backup folder ``path`` is, read without writing (from
+    ``state`` when the caller has it)."""
+    state = state if state is not None else _state_as_it_is()
     if state is None:
         return None
     for location in LOCATIONS.values():
@@ -252,14 +253,15 @@ def _recorded_for(path: Path) -> str | None:
     return None
 
 
-def free_bytes(path: Path) -> int | None:
+def free_bytes(path: Path, *, state: Mapping[str, Any] | None = None) -> int | None:
     """Free space where a copy would go; None when it cannot be known - also for a backup folder
-    that is not on its recorded volume (the disk below an unmounted one is not its space)."""
+    that is not on its recorded volume (the disk below an unmounted one is not its space).
+    ``state``: the state the caller already read (else it is read here)."""
     import shutil
 
     from tow.folders import volume_at
 
-    expected = _recorded_for(path)
+    expected = _recorded_for(path, state)
     if expected is not None and volume_at(str(path)) != expected:
         return None
     probe = path
