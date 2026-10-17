@@ -398,18 +398,27 @@ def leg_orphan(install: Install) -> None:
     say("   the next `tow start` took it over and runs its own server")
 
 
+# Another program's listener. On Linux and macOS the stopped server's closed connections stay in
+# TIME_WAIT on the port for a minute, and a bind without SO_REUSEADDR fails there although nothing
+# listens (as every server sets it, TOW's too); it still never binds over a listening socket. On
+# Windows SO_REUSEADDR would let it take a port that is in use, so it is not set there.
+LISTENER = (
+    "import os, socket, sys\n"
+    "s = socket.socket()\n"
+    "if os.name != 'nt':\n"
+    "    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+    "s.bind(('127.0.0.1', int(sys.argv[1]))); s.listen(16)\n"
+    "print('listening', flush=True)\n"
+    "while True:\n"
+    "    c, _ = s.accept(); c.close()\n"
+)
+
+
 def leg_unrelated(install: Install) -> None:
     install.stop()
     expect(not port_open(install.port), f"port {install.port} is still in use after `tow stop`")
-    code = (
-        "import socket, sys, time\n"
-        "s = socket.socket(); s.bind(('127.0.0.1', int(sys.argv[1]))); s.listen(16)\n"
-        "print('listening', flush=True)\n"
-        "while True:\n"
-        "    c, _ = s.accept(); c.close()\n"
-    )
     listener = subprocess.Popen(
-        [sys.executable, "-c", code, str(install.port)], stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True
+        [sys.executable, "-c", LISTENER, str(install.port)], stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True
     )
     try:
         expect(
