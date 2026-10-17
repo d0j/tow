@@ -214,7 +214,9 @@ The web package (`src/tow/web/`):
 - `routes_<topic>.py` — one `router = APIRouter()` per topic: `routes_home`, `routes_topics`, `routes_content`
   (a topic's contents: the file list from the site, a `.torrent` or a magnet), `routes_topic_login`, `routes_check`,
   `routes_undo`, `routes_sites`, `routes_settings`, `routes_clients`, `routes_notifiers`, `routes_backup`,
-  `routes_service`, `routes_password`, `routes_auth`, `routes_health`, `routes_history`. A section of Settings
+  `routes_service`, `routes_password`, `routes_auth`, `routes_health`, `routes_history`, `routes_messages` (Recent
+  messages), `routes_sync` (`/sync.json`, `/topics/rows`, `/page/fragments`), `routes_protection` (Site access) and
+  `routes_volumes` (folders off their disk). A section of Settings
   with cards of its own has its own module (`routes_clients`, `routes_notifiers`); the cards themselves come
   from the family's `view.cards` (`tow.clients.view`, `tow.notifiers.view`).
   Importing a module registers nothing.
@@ -227,7 +229,9 @@ The web package (`src/tow/web/`):
   cards of Settings), `check_jobs.py` and `check_actions.py` (the manual check queue), `text.py`,
   `templating.py`, `site_form.py` (what the site forms accept, and the site's configuration from them),
   `site_store.py` (several stores in one transaction), `site_actions.py` and `topic_actions.py` (what the site
-  and topic forms do; a topic's record itself comes from `tow.topic_form`). Anything another module uses has a
+  and topic forms do; a topic's record itself comes from `tow.topic_form`), `sync.py` and `page_sync.py` (what open
+  pages follow), `edit_base.py` with `topic_merge.py`, `site_merge.py` and `settings_merge.py` (an edit form's base
+  and the merge of its save with what is saved now). Anything another module uses has a
   name without a leading underscore (`tests/test_module_boundaries.py`), and what two route modules share lives
   in a helper: a route module never imports another (`tests/test_web_boundary.py`).
 
@@ -247,9 +251,15 @@ The web package (`src/tow/web/`):
    `static/messages.js`, shows a message the same way; a lasting problem is a note (`_note.html`), not a message. A page
    is a template in `src/tow/templates/` rendered with `TEMPLATES.TemplateResponse(request, "name.html", {...})`; its
    texts are catalog keys.
-4. A new module goes into `ROUTERS` in `app.py`. Order is matching order: a fixed path before a parameterized one
+4. A page that should follow other tabs and devices while it is open marks what may change as fragments
+   (`<!--frag:<id>-->` … `<!--/frag:<id>-->` inside the page's `<!--frags:/<page>-->`, `tow.web.page_sync`): only
+   those are drawn again, never one the owner is working in; what changes by itself (free disk space, a random
+   suggestion) carries `data-sync-volatile`. A form that edits saved data carries its base (a `Spec` of its groups
+   in `tow.web.edit_base`, the hidden `base` field): a save changes only what the owner changed and returns a
+   conflict instead of overwriting a change made elsewhere. A save without a valid base is refused.
+5. A new module goes into `ROUTERS` in `app.py`. Order is matching order: a fixed path before a parameterized one
    that would also match it (`/sites/new` before `/sites/{name}`), GET before POST for the same path.
-5. Add the path to `ROUTES` in `tests/test_routes.py`; the test checks the set of paths and that none is shadowed.
+6. Add the path to `ROUTES` in `tests/test_routes.py`; the test checks the set of paths and that none is shadowed.
 
 In tests, replace the outside world in one place — `monkeypatch.setattr("tow.web.services.run_check", fake)` —
 patch a web helper where it is looked up (`"tow.web.routes_home.topic_rows"`), and import route functions from
@@ -259,7 +269,7 @@ are enforced by `tests/test_ui_standard.py` and the CSP.
 ## Issue
 
 **Today:** `data_lost`, `check_stale`, `check_blocked`, `client_down`, `history_rebuilt`, `history_trimmed`,
-`site_needs_login`.
+`site_needs_login`, `topic_error`, `volume_missing`.
 
 An issue is something that needs the owner now, said from saved state: Home's "Needs attention" lists it as a
 link to the problem, and `tow status` counts it. A kind is one module in `src/tow/issues/kinds/`, found by
@@ -278,15 +288,17 @@ Each `Issue` (`issues/model.py`) carries:
 - `severity` — a `tow.status` tone, `"bad"` or `"warn"`; from an error class, `tow.status.error_tone(cls)`;
 - `message` — a catalog key (`issues.<kind>`, in every language file) and its values; a value named `at` is a time
   in epoch seconds. Say what is wrong, or the action the link takes ("Sign in to {site}"), never "open X";
-- `target` — `Target(page, open, filter, anchor, note)`: the page (`home`, `settings`, `history`, `sites`), what it
-  opens (a Settings section, a Home topic, a site), the page's own filters, and the id of the element that shows the
-  problem in full.
+- `target` — `Target(page, open, filter, anchor, note)`: the page (`home`, `settings`, `history`, `sites`, `volumes`),
+  what it opens (a Settings section, a Home topic, a site), the page's own filters, and the id of the element that
+  shows the problem in full.
   An empty `anchor` lands on the issue's own note on that page (History shows those). `note=True` when that element
   does not say what is wrong by itself (a Settings card): the page puts the issue's text inside it with
   `{{ issue_notes_at(notes, '<anchor>') }}` (`_issue_notes.html`, the page's `notes` from `views.issue_notes`);
 - `fix` — `Fix(action, subject, label)`, the control that resolves it, or `None` when there is nothing to do. The
   page marks that control with `{{ fix_attrs('<action>', subject) }}` (and a `<details>` that holds it with
-  `{{ fix_open(...) }}`); the link's `?fix=` focuses it, with or without a script.
+  `{{ fix_open(...) }}`); the link's `?fix=` focuses it, with or without a script. A fix only this computer may
+  make (a POST behind `access.require_local`) goes into `LOCAL_FIXES` in `tow/web/views.py`: a device on the
+  network gets the link without it.
 
 **Steps:**
 
