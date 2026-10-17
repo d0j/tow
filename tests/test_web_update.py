@@ -488,7 +488,7 @@ def test_web_install_route_confirms_queue_and_enforces_origin(monkeypatch):
     monkeypatch.setattr(
         services,
         "start_web_update",
-        lambda version: calls.append(version) or {"ok": True, "id": "synthetic", "target": version},
+        lambda version, **_options: calls.append(version) or {"ok": True, "id": "synthetic", "target": version},
     )
     client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
     response = client.post("/updates/install", data={"version": "1.22.21"})
@@ -497,6 +497,55 @@ def test_web_install_route_confirms_queue_and_enforces_origin(monkeypatch):
     assert calls == ["1.22.21"]
     assert TestClient(app).post("/updates/install", data={"version": "1.22.21"}).status_code == 403
     assert calls == ["1.22.21"]
+
+
+@pytest.mark.parametrize(("asked_ago", "grace"), [(None, 0.0), (1.0, 6.0), (29.0, 6.0), (31.0, 0.0)])
+def test_an_update_gives_open_pages_a_grace_only_when_a_page_asked_lately(monkeypatch, asked_ago, grace):
+    # 1.33.1 B25 F-1: a ~10 s update was answered for 1.6 s before TOW stopped, so a page on its
+    # 5 s poll never saw it and kept the previous update's result through the restart.
+    from tow.web import sync
+
+    sync.reset()
+    if asked_ago is not None:
+        sync.note_page_poll(now=time.monotonic() - asked_ago)
+    calls = []
+    monkeypatch.setattr(
+        services,
+        "start_web_update",
+        lambda version, **options: calls.append(options) or {"ok": True, "id": "synthetic", "target": version},
+    )
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    assert client.post("/updates/install", data={"version": "1.22.21"}).status_code == 202
+    assert calls == [{"grace": grace}]
+    sync.reset()
+
+
+def test_a_sync_poll_is_what_counts_as_an_open_page(monkeypatch):
+    from tow.web import sync
+
+    sync.reset()
+    assert sync.page_polled_within(sync.PAGE_SEEN_SEC) is False
+    assert TestClient(app).get("/updates/status").status_code in {200, 503}  # not a page's poll
+    assert sync.page_polled_within(sync.PAGE_SEEN_SEC) is False
+    TestClient(app).get("/sync.json")
+    assert sync.page_polled_within(sync.PAGE_SEEN_SEC) is True
+    sync.reset()
+    assert sync.page_polled_within(sync.PAGE_SEEN_SEC) is False
+
+
+@pytest.mark.parametrize(("asked", "stored"), [(6.0, 6.0), (2.5, 2.5), (60.0, 6.0), (0.0, None), (-3.0, None)])
+def test_the_job_carries_its_bounded_grace(install, asked, stored):
+    runtime, _calls, _backend = install
+    web_update.start("v1.22.21", grace=asked)
+    job = json.loads((runtime / "runtime" / "web-update" / "job.json").read_text())
+    assert job.get("grace") == stored
+    assert update_worker._grace(job) == (stored or 0.0)
+
+
+def test_a_nonfinite_grace_is_none(install):
+    runtime, _calls, _backend = install
+    web_update.start("v1.22.21", grace=float("nan"))
+    assert "grace" not in json.loads((runtime / "runtime" / "web-update" / "job.json").read_text())
 
 
 def test_worker_is_still_python_311_compatible():

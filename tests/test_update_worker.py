@@ -132,6 +132,123 @@ def test_detached_runner_uses_real_update_and_rollback_on_throwaway_git(
             locks.unlock(handle)
 
 
+class _Clock:
+    """The worker's monotonic clock and its pauses (``update_worker._clock``, ``_pause``)."""
+
+    def __init__(self) -> None:
+        self.now = 100.0
+        self.slept: list[float] = []
+        self.during: list[float] = []  # a hook run at every pause
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        for hook in self.during:
+            hook(seconds)
+        self.now += seconds
+
+
+def _graced_run(git_install, monkeypatch, grace, *, preparing_takes: float = 0.0, during=None, machines=None):
+    """A real update (throwaway git install) of a job carrying ``grace``; returns the clock, the
+    code and every journal write as (status, clock). ``machines`` gets the faked machine."""
+    updater = _load()
+    machines = [] if machines is None else machines
+
+    class Machine(Fake):
+        def __init__(self, app):
+            super().__init__(app)
+            machines.append(self)
+
+    updater.System = Machine
+    clock = _Clock()
+    if during is not None:
+        clock.during.append(during)
+    monkeypatch.setattr(update_worker, "_clock", clock.monotonic)
+    monkeypatch.setattr(update_worker, "_pause", clock.sleep)
+    path = git_install["root"] / "worker-job.json"
+    job_id = "a" * 32
+    job = {"id": job_id, "status": "queued", "target": "1.21.0"}
+    if grace is not None:
+        job["grace"] = grace
+    path.write_text(json.dumps(job))
+    writes = []
+    real_write = update_worker.write_job
+
+    def record(target, job):
+        writes.append((job["status"], clock.now))
+        real_write(target, job)
+
+    fetch = updater.GitCode.prepare
+
+    def slow(code, ref):
+        clock.now += preparing_takes  # the release is fetched and checked meanwhile
+        return fetch(code, ref)
+
+    monkeypatch.setattr(update_worker, "write_job", record)
+    monkeypatch.setattr(updater.GitCode, "prepare", slow)
+    code = update_worker.run(git_install["app"], path, job_id, "1.21.0", updater)
+    return clock, code, writes
+
+
+@pytest.mark.parametrize(
+    ("grace", "preparing_takes", "waited"),
+    [
+        (6.0, 0.0, 6.0),  # a quick preparation: the rest of the grace
+        (6, 2.5, 3.5),
+        (6.0, 10.0, 0.0),  # a slow download was the grace already
+        (60.0, 0.0, 6.0),  # never more than one page poll and a sample
+        (None, 0.0, 0.0),  # no page asked lately: no wait at all
+        (0, 0.0, 0.0),
+        (-1, 0.0, 0.0),
+        (True, 0.0, 0.0),
+        ("6", 0.0, 0.0),
+    ],
+)
+def test_open_pages_get_a_bounded_grace_to_see_the_job_before_tow_stops(
+    git_install, monkeypatch, grace, preparing_takes, waited
+):
+    def still_running(_seconds):
+        # TOW still runs and answers; the page reads "preparing"; nothing is recorded yet.
+        assert machines[0].calls == []
+        assert json.loads(path.read_text())["status"] == "preparing"
+        assert not (git_install["root"] / "update-state.json").exists()
+
+    path = git_install["root"] / "worker-job.json"
+    machines: list = []
+    clock, code, writes = _graced_run(
+        git_install, monkeypatch, grace, preparing_takes=preparing_takes, during=still_running, machines=machines
+    )
+    assert code == 0
+    assert sum(clock.slept) == pytest.approx(waited)
+    assert all(0 < pause <= 1.0 for pause in clock.slept)  # a bounded wait, in short steps
+    statuses = [status for status, _ in writes]
+    assert statuses[:2] == ["preparing", "stopping"]
+    start, stopping = writes[0][1], writes[1][1]
+    assert stopping - start == pytest.approx(preparing_takes + waited)
+    assert statuses[-1] == "ok"
+
+
+def test_the_grace_is_never_longer_than_the_web_side_asks_for():
+    from tow import web_update
+
+    assert update_worker.GRACE_MAX_SEC == web_update.GRACE_MAX_SEC == 6.0
+
+
+def test_an_update_cut_off_during_the_grace_changes_nothing(git_install, monkeypatch):
+    def cut(_seconds):
+        raise KeyboardInterrupt
+
+    before = fixture_module.git(git_install["app"], "rev-parse", "HEAD")
+    with pytest.raises(KeyboardInterrupt):
+        _graced_run(git_install, monkeypatch, 6.0, during=cut)
+    path = git_install["root"] / "worker-job.json"
+    assert json.loads(path.read_text())["status"] == "preparing"  # the page says "interrupted"
+    assert fixture_module.git(git_install["app"], "rev-parse", "HEAD") == before
+    assert not (git_install["root"] / "update-state.json").exists()
+
+
 def _prepare_lease(path: Path, job_id: str) -> Path:
     folder = path.parent / job_id
     folder.mkdir()

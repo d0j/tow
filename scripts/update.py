@@ -1837,9 +1837,10 @@ class Update:
         self.ref = ref
         # Undoing a cut-off update may put its snapshot back over data changed after it.
         self.discard_newer_data = discard_newer_data
-        # Told each phase (stopping, backup, installing, checking, rolling_back) and then the
-        # outcome update-state.json records; the web update's worker shows them. A failure to
-        # record a phase before the rollback ends the update (rolled back), never a rollback.
+        # Told "prepared" (the target is ready, TOW still runs), each phase (stopping, backup,
+        # installing, checking, rolling_back) and then the outcome update-state.json records; the
+        # web update's worker shows them. A failure to record a phase before the rollback ends the
+        # update (rolled back), never a rollback; one at "prepared" changes nothing.
         self.progress: Callable[[str], None] = progress or (lambda _name: None)
         self.health_timeout = health_timeout
         self.wait_minutes = wait_minutes
@@ -2377,6 +2378,10 @@ class Update:
                     self.refuse_pending_receipts(target)
                     self.refuse_pending_content_refs(target)
                     self.refuse_unusable_uv_config(target)
+                    # Ready to stop TOW, which still runs; nothing is recorded or stopped yet. The
+                    # web update's worker lets open pages see the job here (update_worker._run);
+                    # whatever cuts this short discards the prepared code below.
+                    self.progress("prepared")
             except BaseException:
                 code.discard()
                 raise

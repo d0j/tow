@@ -25,7 +25,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   all, and changes the page only after it has read it.
 - While an update runs, an open **Settings** page shows each of its steps: it asks for them every 2 seconds
   instead of 5 while you can see the tab, so a short update no longer jumps from "Restore point saved" straight
-  to its result. A hidden tab, or a TOW that does not answer, is still asked every 5 seconds.
+  to its result. A hidden tab, or a TOW that does not answer, is still asked every 5 seconds. While a page of
+  TOW is open, TOW keeps running up to 6 seconds longer once the release is ready, so every open page, on
+  another device too, shows the update before TOW restarts.
 
 ### Fixed
 

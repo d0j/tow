@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, Response
 
 from tow import __version__, access
 from tow.clock import format_ui_timestamp
-from tow.web import _context, services
+from tow.web import _context, services, sync
 from tow.web.templating import header_health
 from tow.web.text import t, time_parts, zone_minutes
 from tow.web_update import WebUpdateError
@@ -75,7 +75,9 @@ def updates_status() -> Response:
 @router.post("/updates/install")
 def updates_install(version: str = Form("")) -> Response:
     try:
-        result = services.start_web_update(version)
+        # A page asked lately: TOW keeps running a few seconds more, so every open page sees the
+        # job and follows its steps (tow.web.sync.update_grace, update_worker).
+        result = services.start_web_update(version, grace=sync.update_grace())
     except WebUpdateError as exc:
         return JSONResponse({"ok": False, "error": _said(exc)}, status_code=409)
     # The job's id is the operation id its result is logged with (tow.messages_feed.reconcile_update).

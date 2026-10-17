@@ -22,6 +22,13 @@ from typing import Any
 
 _LEASE_WAIT = 1.0
 _LEASE_POLL = 0.05
+# The longest a job's ``grace`` (tow.web_update.GRACE_MAX_SEC) keeps TOW running once the release
+# is prepared: from "preparing" on, every open page (tow.web.sync: a poll every 5 s on a sample at
+# most 1 s old) sees the job and follows its steps, and then the restart. Waited in short steps.
+GRACE_MAX_SEC = 6.0
+_GRACE_STEP = 0.5
+_clock = time.monotonic
+_pause = time.sleep
 _JOB_MAX_BYTES = 65536
 _JSON_MAX_DEPTH = 128
 # The phases update.py reports while it works (its outcome comes last).
@@ -207,14 +214,39 @@ def worker_lease(path: Path, job: dict[str, Any]) -> Iterator[bool]:
                 locks.unlock(handle)
 
 
+def _grace(job: dict[str, Any]) -> float:
+    """The job's ``grace`` in seconds, at most ``GRACE_MAX_SEC``; 0 without a usable one."""
+    value: Any = job.get("grace")
+    if type(value) not in {int, float}:
+        return 0.0
+    seconds = float(value)
+    return min(seconds, GRACE_MAX_SEC) if math.isfinite(seconds) and seconds > 0 else 0.0
+
+
+def _wait_until(deadline: float) -> None:
+    """Until ``deadline`` on the monotonic clock, in short steps; no lock is taken meanwhile (the
+    job's lease and update.py's .update.lock stay held, as through the whole update)."""
+    while (left := deadline - _clock()) > 0:
+        _pause(min(left, _GRACE_STEP))
+
+
 def _run(app: Path, job_path: Path, job: dict[str, Any], version: str, updater: Any) -> int:
     job.update(pid=os.getpid(), status="preparing")
     write_job(job_path, job)
+    # Open pages learn of the job by their poll: TOW stops no sooner than ``grace`` after it is
+    # seen, the time the release is fetched and checked included (update.py tells "prepared").
+    grace = _grace(job)
+    seen_until = _clock() + grace
     outcome = "failed"
     rolling_back = False
 
     def progress(name: str) -> None:
         nonlocal outcome, rolling_back
+        if name == "prepared":
+            if grace and _clock() < seen_until:
+                print(f"letting open pages see the update for {seen_until - _clock():.1f} s", flush=True)
+                _wait_until(seen_until)
+            return
         if name not in _PHASES:
             outcome = name  # what update-state.json records at the end
             return
