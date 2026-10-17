@@ -211,6 +211,48 @@ def test_interrupted_job_is_visible_and_not_silently_replaced(install):
     assert len(install[1]) == 1
 
 
+def _worker_ends_during_the_lease_probe(install, monkeypatch, result: dict) -> Path:
+    """job.json says "preparing" when it is read; the worker writes ``result`` and lets go of its
+    lease while the reader probes that lease (CI installers 39078311179: a refused checksum read
+    back as "interrupted")."""
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job.update(status="preparing", pid=8028)
+    path.write_text(json.dumps(job))
+    probe = web_update._lease_active
+
+    def worker_ends_now(job_id: str) -> bool:
+        current = json.loads(path.read_text())
+        if current["status"] == "preparing":
+            path.write_text(json.dumps({**current, **result}))  # the result, then the lease goes
+        return probe(job_id)
+
+    monkeypatch.setattr(web_update, "_lease_active", worker_ends_now)
+    return path
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {"status": "refused", "finished_at": 1792279120.8, "error": ""},
+        {"status": "ok", "finished_at": 1792279120.8, "error": ""},
+        {"status": "failed", "finished_at": 1792279120.8, "error": "releases.update_failed"},
+    ],
+)
+def test_a_result_written_while_the_lease_is_probed_is_not_an_interrupted_update(install, monkeypatch, result):
+    path = _worker_ends_during_the_lease_probe(install, monkeypatch, result)
+    status = web_update.status()
+    expected = "superseded" if result["status"] == "ok" else result["status"]  # 1.22.21 is not installed here
+    assert (status["status"], status["active"], status["finished_at"]) == (expected, False, result["finished_at"])
+    assert json.loads(path.read_text())["status"] == result["status"]  # a read writes nothing
+
+
+def test_a_new_update_after_a_result_written_while_the_lease_is_probed_is_not_refused(install, monkeypatch):
+    _worker_ends_during_the_lease_probe(install, monkeypatch, {"status": "refused", "finished_at": 1.0e9, "error": ""})
+    assert web_update.start("1.22.22")["ok"] is True
+
+
 @pytest.mark.parametrize("phase", ["preparing", "stopping", "backup", "installing", "checking", "rolling_back"])
 def test_unheld_worker_lease_does_not_mistake_a_reused_pid_for_an_active_update(install, phase):
     web_update.start("1.22.21")

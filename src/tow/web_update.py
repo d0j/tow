@@ -158,6 +158,21 @@ def _activity(job: dict[str, Any]) -> tuple[bool, bool]:
     )
 
 
+def _settled_job() -> tuple[dict[str, Any], bool, bool]:
+    """job.json with ``_activity``. The worker writes its result before it lets go of its lease, so
+    a job read as running whose lease is already free is read once more: a result written between
+    the read and the probe (a refusal 2 s after the start) is that result, never "interrupted"."""
+    path = _job_file()
+    job = _read(path)
+    active, unverified = _activity(job)
+    if job.get("status") in _ACTIVE and not active:
+        again = _read(path)
+        if again != job:
+            job = again
+            active, unverified = _activity(job)
+    return job, active, unverified
+
+
 def _lease_active(job_id: str) -> bool:
     folder = _job_file().parent / job_id
     path = folder / "worker.lock"
@@ -206,9 +221,8 @@ def status() -> dict[str, Any]:
         _runtime_app()
     except WebUpdateError as exc:
         return {"supported": False, "reason": str(exc), "current": __version__, "status": "idle", "previous": ""}
-    job = _read(_job_file())
+    job, active, unverified = _settled_job()
     updater = _updater_record()
-    active, unverified = _activity(job)
     job = _recover_completed(job, updater, active)
     previous = updater.get("previous_version") if updater.get("status") == "ok" else ""
     parsed = releases.version_parts(previous)
@@ -252,11 +266,6 @@ def finished_job() -> dict[str, Any] | None:
     if job.get("status") in {"failed", "refused", "rolled_back"}:
         job = _recover_completed(job, _updater_record(), False)
     return job
-
-
-def _completed_job(job: dict[str, Any], updater: dict[str, Any]) -> dict[str, Any]:
-    """A finished terminal recovery can unblock a dead job; GET itself writes nothing."""
-    return _recover_completed(job, updater, _active(job))
 
 
 def _recover_completed(job: dict[str, Any], updater: dict[str, Any], active: bool) -> dict[str, Any]:
@@ -462,9 +471,9 @@ def start(version: str, *, grace: float = 0.0) -> dict[str, Any]:
         raise WebUpdateError("releases.not_published") from exc
     with persistence_lock():
         path = _job_file()
-        old = _read(path)
-        old = _completed_job(old, _updater_record())
-        if _active(old):
+        old, active, _unverified = _settled_job()
+        old = _recover_completed(old, _updater_record(), active)
+        if active:
             raise WebUpdateError("releases.busy")
         if old.get("status") in _ACTIVE:
             raise WebUpdateError("releases.interrupted")

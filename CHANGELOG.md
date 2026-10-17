@@ -33,6 +33,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- An update that ended just as **Settings** asked about it (a release refused at its check, about 2 seconds
+  after the start) could be shown as interrupted, and a new update was then refused; it now shows how it ended.
 - If a language file, or the folder that holds them, could not be read for a moment at start (for example while
   an antivirus scanned it), TOW showed text keys or offered English only until it restarted; it now reads it again.
 - Windows: TOW limits its folder to your account again when another account's rule sits on the folder itself
