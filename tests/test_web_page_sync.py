@@ -152,6 +152,21 @@ def _fields(html: str) -> list[dict]:
     return parser.fields
 
 
+def _form(html: str, action: str) -> dict[str, str]:
+    """What a form posts as drawn (its boxes ticked, its selects' marked options)."""
+    found = re.search(rf'<form[^>]*action="{re.escape(action)}"[^>]*>.*?</form>', html, re.DOTALL)
+    assert found is not None, action
+    sent: dict[str, str] = {}
+    for field in _fields(found.group(0)):
+        if field["disabled"] or not field["name"] or field.get("type") in {"submit", "button"}:
+            continue
+        if field["tag"] == "select":
+            sent[field["name"]] = next((o["value"] for o in field["options"] if o["defaultSelected"]), "")
+        elif field.get("type") not in {"checkbox", "radio"} or field["checked"]:
+            sent[field["name"]] = field["value"]
+    return sent
+
+
 def _changed(fields: list[dict], tmp_path: Path) -> list[str]:
     """The fields static/sync.js's one rule (pages.js's too) counts as changed on a page that has
     just loaded them (tests/js/drawn_fields.mjs)."""
@@ -316,6 +331,33 @@ def test_an_idle_settings_page_follows_another_devices_clients_and_site_access(c
     assert 'value="47"' in changed["acc-protection"]
     for section, fragment in changed.items():
         assert _changed(_fields(fragment), tmp_path) == [], section
+
+
+def test_a_settings_conflict_page_knows_the_revision_the_poll_serves(clock):
+    """Final QA 1.33.0 F2: a refused save's page (?conflict=) took its revision and digests from
+    what it drew (the owner's draft in the section), while the poll draws the plain page: the
+    section looked changed at once and said "Changed on another device or by TOW". Nothing changed
+    since: the page's revision and digests are what /page/fragments serves."""
+    _seed()
+    a = TestClient(app, headers=ORIGIN)
+    b = TestClient(app, headers=ORIGIN)
+    b_form = _form(b.get("/settings").text, "/settings/interval")
+    a_form = _form(a.get("/settings").text, "/settings/interval")
+    saved = a.post("/settings/interval", data={**a_form, "interval_min": "30"}, follow_redirects=False)
+    assert saved.status_code == 303
+    refused = b.post("/settings/interval", data={**b_form, "interval_min": "90"}, follow_redirects=False)
+    location = refused.headers["location"]
+    assert "conflict=" in location
+    clock.tick()
+    page = b.get(location).text
+    assert "edit-conflict" in page
+    assert 'value="90"' in page  # the owner's draft is what the page shows
+    rev, digests = _marks(page)
+    assert rev == _page_rev(b, "/settings")
+    found = b.get("/page/fragments", params={"page": "/settings", "rev": rev}).json()
+    assert found["rev"] == rev
+    assert found["stale"] is False
+    assert {item["id"]: item["hash"] for item in found["fragments"]} == digests
 
 
 # --------------------------------------------------------------------------- the fragments' answer

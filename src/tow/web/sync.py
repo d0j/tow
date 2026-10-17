@@ -749,8 +749,12 @@ def _page(
 
 def annotated_page(request: Request, page: str, html: str) -> str:
     """A Sites or Settings page as its route drew it, knowing its own revision and each fragment's
-    digest (``page_sync.annotate``): it asks for nothing until what it shows changes."""
-    found = page_sync.fragments(html)
+    digest (``page_sync.annotate``): it asks for nothing until what it shows changes. A refused
+    save's page (``?conflict=``) draws the owner's draft in its form, which the poll's plain page
+    does not: it knows the digests of the plain page, so that only a change made since counts (the
+    section with the conflict stays the owner's: ``.edit-conflict`` protects it in pages.js)."""
+    plain = page_sync.render(request, page) if request.query_params.get("conflict") else html
+    found = page_sync.fragments(plain)
     return page_sync.annotate(html, page_revision(viewer(request), page, page_sync.projection(found)), found)
 
 
