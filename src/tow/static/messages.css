@@ -48,22 +48,26 @@ header.app .msg-menu.err > summary.ico { color: var(--bad); }
 .msg-menu.warn .msg-count { background: var(--warn); }
 .msg-menu.err .msg-count { background: var(--bad); }
 /* Under the header, on the page's edge (app.css .attention-panel); its head, note and list 6 px apart,
-   the entries 6 px apart, an entry's head, words and buttons 3 px. */
+   the entries 6 px apart, an entry's head, words and buttons 3 px. A column that clips: its head (the
+   title, Mark all read, Clear) stays, the list alone scrolls - up to 50 shared entries run past it. */
 .msg-panel {
   position: absolute; top: calc(100% + var(--sp-1)); left: max(var(--gutter), calc((100% - 90rem) / 2)); z-index: 12;
   box-sizing: border-box; width: min(28rem, calc(100% - 2 * var(--gutter))); max-height: min(26rem, 60dvh);
-  display: grid; gap: var(--sp-2); line-height: 1.45;
-  overflow: auto; overscroll-behavior: contain; padding: var(--sp-3) var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-2); line-height: 1.45;
+  overflow: hidden; padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel);
   box-shadow: var(--shadow); font-size: 13px;
 }
-.msg-panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.msg-panel-head { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .msg-panel-tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 /* One line each (26 px): the tools move under the title rather than squeeze their words. */
 .msg-panel-tools > button, .flash-undo > button, .msg-entry-actions button { white-space: nowrap; }
 .msg-empty { color: var(--mut); }
 .msg-empty[hidden] { display: none; }
-.msg-list { list-style: none; padding: 0; display: grid; gap: var(--sp-2); }
+.msg-list {
+  list-style: none; padding: 0; display: grid; align-content: start; gap: var(--sp-2);
+  min-block-size: 0; overflow: auto; overscroll-behavior: contain;
+}
 .msg-list:empty { display: none; }
 /* This tab's own feedback, under the install's list: a heading, not an entry. */
 .msg-section { color: var(--mut); font-size: 12px; font-weight: 600; }
