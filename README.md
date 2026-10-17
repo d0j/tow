@@ -37,9 +37,9 @@ every new version to your torrent client.
 - **Site behind a browser check?** Optional services for a Cloudflare challenge (on Windows also an installed module
   that starts on demand); off by default, mirrors and sign-in come first. [Site access](docs/PROTECTION.md).
 - **Notifications.** One message per topic per check, quiet hours, a daily digest, a queue that survives restarts.
-- **One message per action.** A check or change ends in one message that names its topic (green, amber or red);
-  it folds into Recent messages in the header, and lasting problems stay in Needs attention until fixed. Checks of
-  several topics in a row stay on the page and update each row in place.
+- **One message per action, live pages.** A check or change ends in one message that names its topic (green, amber
+  or red); it folds into Recent messages, one list for every signed-in device, and lasting problems stay in Needs
+  attention. Open pages follow other tabs and devices by themselves; a field changed on two of them asks which to keep.
 - **History and undo.** Every file and version is recorded; a change can be undone from its own message.
 - **Backups and updates.** Signed nightly backups, restore points, encrypted TOW files (`.towx`); updates from the
   Settings page that put the previous version back by themselves if anything fails.
@@ -53,7 +53,7 @@ every new version to your torrent client.
 | **Sites** | Rutor, Kinozal, NNM-Club, RuTracker, Tapochek, UnionPeer, Fast-Torrent; others by hand |
 | **Torrent clients** | qBittorrent (Web UI), Transmission 3.0+, Deluge 2.x |
 | **Notifications** | Telegram, Discord, WhatsApp (CallMeBot), ntfy |
-| **Systems** | Windows 10/11 (x64), Linux, macOS (Apple silicon) — all three in CI |
+| **Systems** | Windows 10/11 (x64), Linux (x86-64), macOS 11+ (Apple silicon) — all three in CI; [others](docs/PORTABLE.md#1b-supported-systems-the-dependency-contract-1331) |
 
 ## Install
 
@@ -131,7 +131,8 @@ Its plain name (`http://pc:8787`) and `pc.local` work too; any other name (`pc.l
 
 Requests from public internet addresses are refused, so a router port forward does not work. Do not put TOW behind a
 reverse proxy on the same machine: the proxy's requests look local and get no password prompt. `tow access off`
-closes network access.
+closes network access. A device on the network sees errors without folder and file paths:
+[Several devices and tabs](docs/guide.md#several-devices-and-tabs).
 
 ## Update and backups
 
@@ -146,7 +147,8 @@ closes network access.
 | Remove | [docs/install.md](docs/install.md#remove-tow) | the same | the same |
 
 An update stops TOW, snapshots `data/` and `config.yaml`, switches the code, starts TOW and checks the version. If
-anything fails it rolls back by itself. Without git it downloads the release from GitHub and checks it against the
+anything fails it rolls back by itself. Started from an update file or a terminal, it runs in its own process:
+closing the window does not stop it. Without git it downloads the release from GitHub and checks it against the
 release's `SHA256SUMS`. In a git clone on Windows, if PowerShell says that running scripts is disabled, use
 `powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -Ref <tag>`.
 
