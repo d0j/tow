@@ -596,6 +596,7 @@
         <div class="integration-card access-card" id="access-card">
           <div class="card-body">
           <form method="post" action="/settings/access" class="settings-form form-grid setup-form" data-return-target="acc-access">
+            <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;access&#34;,&#34;id&#34;:&#34;access&#34;,&#34;f&#34;:{&#34;revision&#34;:&#34;<secret-token>&#34;},&#34;p&#34;:[]}">
             <div class="check-field">
               <input id="allow-lan" name="allow_lan" value="1" type="checkbox" aria-describedby="allow-lan-hint">
               <label for="allow-lan">Open TOW from other devices</label>
@@ -650,6 +651,7 @@
               <button type="submit" data-busy-label="Making a copy…">Back up now</button>
             </form>
             <form method="post" action="/settings/backup/automatic" class="compact-form immediate-form" data-return-target="acc-transfer" data-auto-submit>
+              <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;backup-automatic&#34;,&#34;id&#34;:&#34;backup-automatic&#34;,&#34;f&#34;:{&#34;backup_enabled&#34;:true},&#34;p&#34;:[]}">
               <label class="check-field" for="backup-automatic">
                 <input id="backup-automatic" type="checkbox" name="enabled" value="1" checked aria-describedby="backup-automatic-hint" data-auto-submit-control>
                 <span>Automatic nightly backups</span>
@@ -658,6 +660,8 @@
               <noscript><button type="submit">Save</button></noscript>
             </form>
             <form method="post" action="/settings/backup/retention" data-return-target="acc-transfer" class="settings-form form-grid backup-retention">
+              <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;backup-retention&#34;,&#34;id&#34;:&#34;backup-retention&#34;,&#34;f&#34;:{&#34;backup_days&#34;:7},&#34;p&#34;:[]}">
+
               <div class="field">
                 <label for="backup-days">Keep nightly backups, days</label>
                 <div class="inline-save">
@@ -673,6 +677,8 @@
 
         <form method="post" action="/settings/backup/location" class="settings-form form-grid backup-folder" data-return-target="acc-transfer">
           <input type="hidden" name="kind" value="night">
+          <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;backup-folder&#34;,&#34;id&#34;:&#34;night&#34;,&#34;f&#34;:{&#34;path&#34;:&#34;&#34;},&#34;p&#34;:[]}">
+
           <div class="field">
             <label for="backup-path-night" class="sr-only">Folder for nightly backups</label>
             <input id="backup-path-night" name="path" value="" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-night-where backup-path-night-hint">
@@ -727,6 +733,8 @@
 
         <form method="post" action="/settings/backup/location" class="settings-form form-grid backup-folder" data-return-target="acc-transfer">
           <input type="hidden" name="kind" value="manual">
+          <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;backup-folder&#34;,&#34;id&#34;:&#34;manual&#34;,&#34;f&#34;:{&#34;path&#34;:&#34;&#34;},&#34;p&#34;:[]}">
+
           <div class="field">
             <label for="backup-path-manual" class="sr-only">Folder for backups made with “Create a backup”</label>
             <input id="backup-path-manual" name="path" value="" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-manual-where">
@@ -840,6 +848,7 @@
       </summary>
       <div class="settings-panel">
         <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
+          <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;autostart&#34;,&#34;id&#34;:&#34;autostart&#34;,&#34;f&#34;:{&#34;enabled&#34;:true,&#34;without_login&#34;:false},&#34;p&#34;:[]}">
           <input type="hidden" name="enabled" value="0">
           <input type="hidden" name="without_login" value="0">
           <div class="check-field">
@@ -942,6 +951,8 @@
       </div>
     </details>
     <form method="post" action="/settings/protection" class="settings-form form-grid protection-form" data-return-target="acc-protection">
+      <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;protection&#34;,&#34;id&#34;:&#34;protection&#34;,&#34;f&#34;:{&#34;enabled&#34;:false,&#34;timeout_sec&#34;:30,&#34;min_interval_sec&#34;:1800,&#34;max_attempts&#34;:2,&#34;providers&#34;:&#34;4f53cda18c2baa0c0354bb5f9a3ecbe5&#34;},&#34;p&#34;:[]}">
+
       <fieldset>
         <legend class="sr-only">Site access</legend>
         <label class="check-field"><input type="checkbox" name="enabled" value="1"><span>Use challenge recovery</span></label>

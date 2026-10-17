@@ -2316,6 +2316,7 @@
     },
     "edit": {
       "reload": "nothing saved: this form is out of date (opened before an update of TOW, or damaged) — it now shows what is saved; make your change again",
+      "changed": "nothing saved: this was changed on another device after you opened it — it now shows what is saved; make your change again",
       "conflict": "not saved: changed on another device meanwhile — choose which value to keep",
       "conflict_note": "Changed on another device after you opened this form. Choose which value to keep for each field below, then save again.",
       "now_saved": "Saved now: {value}",

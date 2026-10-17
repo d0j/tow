@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Form
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 
 from tow import access, undo
 from tow.config import whole_number
 from tow.store_transaction import StoreTransaction
-from tow.web import services
+from tow.web import edit_base, services, settings_merge
 from tow.web.messages import flash_redirect
 from tow.web.site_store import save_together
 
@@ -46,8 +46,24 @@ def settings_protection(
     provider_order: Annotated[list[str] | None, Form()] = None,
     provider_enabled: Annotated[list[str] | None, Form()] = None,
     provider_remove: Annotated[list[str] | None, Form()] = None,
+    base: Annotated[str, Form()] = "",
+    resolutions: dict[str, str] = edit_base.RESOLUTIONS,
 ) -> Response:
-    """Saving never contacts, installs or starts an external service."""
+    """Saving never contacts, installs or starts an external service. Only what this form
+    changed since it was rendered is saved, on Site access as it is now (``settings_merge``): a
+    limit changed in another tab survives, and a connection removed elsewhere comes back only
+    when the owner chooses it in a conflict."""
+    sent = {
+        "enabled": enabled,
+        "timeout_sec": timeout_sec,
+        "min_interval_sec": min_interval_sec,
+        "max_attempts": max_attempts,
+        "provider_id": provider_id or [],
+        "provider_kind": provider_kind or [],
+        "provider_url": provider_url or [],
+        "provider_order": provider_order or [],
+        "provider_enabled": provider_enabled or [],
+    }
     provider_id, provider_kind = provider_id or [], provider_kind or []
     provider_url, provider_order = provider_url or [], provider_order or []
     provider_enabled, provider_remove = provider_enabled or [], provider_remove or []
@@ -86,9 +102,16 @@ def settings_protection(
     except ValueError, TypeError:
         return flash_redirect(_TARGET, "protection_ui.invalid", "err")
     cfg = services.load_config()
-    if configured == services.validate_protection_settings(cfg.get("protection")):
+    try:
+        current = services.validate_protection_settings(cfg.get("protection"))
+    except ValueError, TypeError:
+        return flash_redirect(_TARGET, "protection_ui.invalid", "err")
+    merged = _merged(current, configured, base, resolutions, sent)
+    if isinstance(merged, Response):
+        return merged
+    if merged == current:
         return flash_redirect(_TARGET, "web.common.no_changes", "ok")
-    cfg["protection"] = configured
+    cfg["protection"] = merged
     state = services.load_state()
 
     def write(txn: StoreTransaction) -> None:
@@ -99,6 +122,42 @@ def settings_protection(
     if refused := save_together(_TARGET, write):
         return refused
     return flash_redirect(_TARGET, "protection_ui.saved", "ok")
+
+
+def _merged(
+    current: dict[str, Any],
+    configured: dict[str, Any],
+    base: str,
+    resolutions: dict[str, str],
+    sent: dict[str, Any],
+) -> dict[str, Any] | Response:
+    """The form's save merged with Site access as saved now: the settings to save, or the
+    refusal (reload, a conflict with the draft, or an invalid merged result)."""
+    now, wanted = settings_merge.protection_now(current), settings_merge.protection_now(configured)
+    rows = settings_merge.protection_rows(tuple(settings_merge.PROTECTION.groups), now, wanted, current, configured)
+    merge = settings_merge.merged(
+        settings_merge.PROTECTION,
+        _TARGET,
+        base,
+        now,
+        wanted,
+        resolutions,
+        {},
+        settings_merge.protection_draft(sent),
+        rows=rows,
+    )
+    if isinstance(merge, RedirectResponse):
+        return merge
+    names = ("enabled", "timeout_sec", "min_interval_sec", "max_attempts")
+    result = {**current, **{name: merge.values[name] for name in names}}
+    result["providers"] = configured["providers"] if "providers" in merge.changed else current["providers"]
+    try:
+        result = services.validate_protection_settings(result)
+    except ValueError, TypeError:
+        return flash_redirect(_TARGET, "protection_ui.invalid", "err")
+    if result["enabled"] and not any(item["enabled"] for item in result["providers"]):
+        return flash_redirect(_TARGET, "protection_ui.invalid", "err")
+    return result
 
 
 @router.post("/settings/protection/remove", dependencies=[access.require_local(_TARGET, "protection_ui.local_only")])

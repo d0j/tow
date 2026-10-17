@@ -340,7 +340,8 @@ def touched_draft(spec: Spec, merged: Merge, draft: Mapping[str, Any]) -> dict[s
     draft, it would read as the owner's change and put back what another device saved."""
     kept = merged.changed | set(merged.conflicts)
     untouched = {name for group, names in spec.groups.items() if group not in kept for name in names}
-    return {key: value for key, value in draft.items() if key not in untouched}
+    # A field of many values keeps them under ``<field>:<part>`` (Site access's connections).
+    return {key: value for key, value in draft.items() if str(key).split(":", 1)[0] not in untouched}
 
 
 def conflict_redirect(
@@ -370,6 +371,12 @@ def conflict_redirect(
 def reload_redirect(target: str) -> RedirectResponse:
     """A save without a valid base: nothing saved, the form opens as saved now."""
     return flash_redirect(target, "web.edit.reload", "err")
+
+
+def changed_redirect(target: str) -> RedirectResponse:
+    """An indivisible card changed elsewhere since its form was rendered: nothing saved, the
+    form opens as saved now (no merge, no draft: a password is never kept)."""
+    return flash_redirect(target, "web.edit.changed", "warn")
 
 
 def clear() -> None:

@@ -27,7 +27,7 @@ from tow.bind import network_bind
 from tow.config import as_bool
 from tow.store import SecretStoreError
 from tow.store_transaction import StoreTransaction, TransactionError
-from tow.web import _context, services
+from tow.web import _context, services, settings_merge
 from tow.web.messages import flash_redirect
 from tow.web.site_store import save_together
 from tow.web.templating import TEMPLATES
@@ -130,9 +130,12 @@ def _back(message: Any, kind: str = "ok", /, **params: Any) -> RedirectResponse:
     return flash_redirect("/settings?open=access", message, kind, **params)
 
 
+_PASSWORD_TARGET = "/settings?open=access&card=password"
+
+
 def _refused(message: Any, kind: str = "err", /, **params: Any) -> RedirectResponse:
     """Back to Settings with the password form open again (it is folded once a password is set)."""
-    return flash_redirect("/settings?open=access&card=password", message, kind, **params)
+    return flash_redirect(_PASSWORD_TARGET, message, kind, **params)
 
 
 @router.post("/settings/password")
@@ -143,6 +146,7 @@ def settings_password(
     lan_password: str = Form(""),
     lan_password2: str | None = Depends(repeated_password),
     hint: str = Form(""),
+    base: str = Form(""),
 ) -> Response:
     local = access.is_local(request)
     try:
@@ -150,6 +154,10 @@ def settings_password(
     except SecretStoreError:
         return _refused("web.password.store_unavailable")
     record = access.password_record(secrets)
+    # The network access card is indivisible (its switch, its address, the password): a form
+    # opened before another device changed it saves nothing.
+    if refused := settings_merge.access_guard(services.load_config(), record, base, _PASSWORD_TARGET):
+        return refused
     # The current password, checked: from the network always. This computer resets a forgotten
     # one without it (its form has no such field); an older page may still send it there to
     # change the reminder alone, which is then compared with it.

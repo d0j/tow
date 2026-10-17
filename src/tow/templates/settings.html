@@ -313,6 +313,7 @@
           {{ note(t('settings.access.local_only')) }}
           {% elif lan_password_set or allow_lan %}
           <form method="post" action="/settings/access" class="compact-form immediate-form" data-return-target="acc-access" data-auto-submit>
+            {{ base_field(bases.access) }}
             <div class="check-field">
               <input id="allow-lan" name="allow_lan" value="1" type="checkbox"{% if allow_lan %} checked{% endif %} aria-describedby="allow-lan-hint" data-auto-submit-control>
               <label for="allow-lan">{{ t('settings.access.allow') }}</label>
@@ -324,6 +325,7 @@
           {#- The password fields count only with the box ticked (data-enabled-by: disabled, so neither
               sent nor checked, while it is clear); setup-form hides them then, as on the first start. -#}
           <form method="post" action="/settings/access" class="settings-form form-grid setup-form" data-return-target="acc-access">
+            {{ base_field(bases.access) }}
             <div class="check-field">
               <input id="allow-lan" name="allow_lan" value="1" type="checkbox" aria-describedby="allow-lan-hint">
               <label for="allow-lan">{{ t('settings.access.allow') }}</label>
@@ -353,6 +355,7 @@
             <summary>{% if lan_password_set %}{{ t('settings.access.password_set') }} · {{ t('settings.access.change') }}{% else %}{{ t('settings.access.password_unset') }} · {{ t('settings.access.set') }}{% endif %}</summary>
             <div class="details-body">
             <form method="post" action="/settings/password" class="settings-form form-grid" data-return-target="acc-access">
+              {{ base_field(bases.access) }}
               <fieldset>
                 <legend class="sr-only">{{ t('settings.access.password_title') }}</legend>
                 {#- The current password only from another device (§2): this computer resets a
@@ -413,9 +416,12 @@
         {% macro folder_form(f, hint) %}
         <form method="post" action="/settings/backup/location" class="settings-form form-grid backup-folder" data-return-target="acc-transfer">
           <input type="hidden" name="kind" value="{{ f.kind }}">
+          {%- set fc = edit_conflict if edit_conflict and edit_conflict.kind == 'backup-folder' and edit_conflict.ident == f.kind else none %}
+          {{ base_field(fc.base if fc else bases['folder:' ~ f.kind]) }}
+          {{ conflict_box(fc, 'backup-folder-' ~ f.kind) }}
           <div class="field">
             <label for="backup-path-{{ f.kind }}" class="sr-only">{{ t('settings.backups.folder', title=f.title) }}</label>
-            <input id="backup-path-{{ f.kind }}" name="path" value="{{ f.value }}" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-{{ f.kind }}-where{% if hint %} backup-path-{{ f.kind }}-hint{% endif %}">
+            <input id="backup-path-{{ f.kind }}" name="path" value="{{ fc.draft.get('path', f.value) if fc else f.value }}" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-{{ f.kind }}-where{% if hint %} backup-path-{{ f.kind }}-hint{% endif %}">
             {#- Where the copies go, always: an empty field is the default folder, not "no copies". -#}
             {% set where = t('common.default_path', path=f.default_path) if not f.value else (t('settings.backups.now', path=f.path) if f.path != f.value else '') %}
             <p class="field-hint" id="backup-path-{{ f.kind }}-where">{{ where }}{% if f.free %}{% if where %} <span class="nowrap">· {% else %}<span class="nowrap">{% endif %}<span data-sync-volatile>{{ t('settings.backups.free', free=f.free) }}</span></span>{% endif %}</p>
@@ -442,6 +448,7 @@
               <button type="submit" data-busy-label="{{ t('common.busy.copying') }}">{{ t('settings.backups.make_now') }}</button>
             </form>
             <form method="post" action="/settings/backup/automatic" class="compact-form immediate-form" data-return-target="acc-transfer" data-auto-submit>
+              {{ base_field(bases.backup_automatic) }}
               <label class="check-field" for="backup-automatic">
                 <input id="backup-automatic" type="checkbox" name="enabled" value="1"{% if backups.automatic %} checked{% endif %} aria-describedby="backup-automatic-hint" data-auto-submit-control>
                 <span>{{ t('settings.backups.automatic') }}</span>
@@ -450,10 +457,13 @@
               <noscript><button type="submit">{{ t('settings.common.save') }}</button></noscript>
             </form>
             <form method="post" action="/settings/backup/retention" data-return-target="acc-transfer" class="settings-form form-grid backup-retention">
+              {%- set rc = edit_conflict if edit_conflict and edit_conflict.kind == 'backup-retention' else none %}
+              {{ base_field(rc.base if rc else bases.backup_retention) }}
+              {{ conflict_box(rc, 'backup-retention') }}
               <div class="field">
                 <label for="backup-days">{{ t('settings.backups.retention_days_label') }}</label>
                 <div class="inline-save">
-                  <input id="backup-days" type="number" name="days" value="{{ backups.retention.days }}" class="w-xs" min="1" max="3650" required aria-describedby="backup-days-hint">
+                  <input id="backup-days" type="number" name="days" value="{{ rc.draft.get('backup_days', backups.retention.days) if rc else backups.retention.days }}" class="w-xs" min="1" max="3650" required aria-describedby="backup-days-hint">
                   <button class="ghost" type="submit">{{ t('settings.common.save') }}</button>
                 </div>
                 <p class="field-hint" id="backup-days-hint">{{ t('settings.backups.retention_note') }}{% if backups.retention.mode == 'count' %} {{ t('settings.backups.retention_legacy', count=backups.retention.keep) }}{% endif %}</p>
@@ -623,6 +633,7 @@
       </summary>
       <div class="settings-panel">{{ issue_notes_at(notes, 'acc-service') }}
         <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
+          {{ base_field(bases.autostart) }}
           <input type="hidden" name="enabled" value="0">
           <input type="hidden" name="without_login" value="{{ '1' if service.without_login else '0' }}">
           <div class="check-field">
@@ -636,6 +647,7 @@
         {% if service.autostart_stale %}{{ note(t('doctor.autostart_stale', where=(service.autostart_detail or {}).get('where') or 'TOW'), 'warn') }}{% endif %}
         {% if service.supports_without_login and service.autostart %}
         <form method="post" action="/settings/service/autostart" class="compact-form immediate-form" data-return-target="acc-service" data-auto-submit>
+          {{ base_field(bases.autostart) }}
           <input type="hidden" name="enabled" value="1">
           <input type="hidden" name="without_login" value="0">
           <div class="check-field">

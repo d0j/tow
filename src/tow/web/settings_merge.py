@@ -8,25 +8,92 @@ form showed and what its save asks for.
   password must never go to an address it was not typed for): a credential card.
 - A messenger's card: all its fields are one group (a token belongs to its chat): a credential
   card. Passwords and tokens are opaque comparison tokens, never in the page.
+- Site access (protection): its switch and each limit on their own; its connections one group
+  (their order ties them together), compared as a digest - a stale form never brings back a
+  connection removed elsewhere.
+- Nightly backups: the automatic switch, the retention and each folder, one value each.
+- Autostart: the switch and "without signing in", each on its own (read from the OS).
+- Network access and its password: one indivisible card, guarded by its revision (an opaque
+  token of the switch, the address and the password's record): a form opened before another
+  device changed it saves nothing.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from typing import Any
 
+from fastapi.responses import RedirectResponse
+
+from tow.backup_retention import retention_settings
 from tow.config import as_bool, flash_ttl, interval_sec_of, whole_number
 from tow.i18n import AUTO, canonical, setting
 from tow.notifiers import kinds as notifier_kinds
 from tow.notifiers import storage_scope
-from tow.web.edit_base import Row, Spec, secret_intent, secret_token
+from tow.web import edit_base
+from tow.web.edit_base import Row, Spec, digest, secret_intent, secret_token
 from tow.web.text import t
 
 INTERVALS = Spec("intervals", {"interval": ("interval_min",), "messages": ("flash_ttl_min",)})
 LANGUAGE = Spec("language", {"language": ("language",)})
 UPDATES = Spec("updates", {"updates": ("check_updates",)})
 CLIENT = Spec("client", {"connection": ("host", "port", "username", "password")}, secret=frozenset({"password"}))
+PROTECTION = Spec(
+    "protection",
+    {
+        "enabled": ("enabled",),
+        "timeout": ("timeout_sec",),
+        "interval": ("min_interval_sec",),
+        "attempts": ("max_attempts",),
+        "providers": ("providers",),
+    },
+)
+BACKUP_AUTOMATIC = Spec("backup-automatic", {"automatic": ("backup_enabled",)})
+BACKUP_RETENTION = Spec("backup-retention", {"retention": ("backup_days",)})
+BACKUP_FOLDER = Spec("backup-folder", {"folder": ("path",)})  # one per kind of copy (its ident)
+AUTOSTART = Spec("autostart", {"autostart": ("enabled",), "without_login": ("without_login",)})
+ACCESS = Spec("access", {"card": ("revision",)}, secret=frozenset({"revision"}))
+
+
+def merged(
+    spec: Spec,
+    target: str,
+    base: str,
+    now: dict[str, Any],
+    wanted: dict[str, Any],
+    resolutions: dict[str, str],
+    labels: dict[str, str],
+    draft: dict[str, str],
+    *,
+    ident: str | None = None,
+    rows: list[Row] | None = None,
+) -> edit_base.Merge | RedirectResponse:
+    """A Settings form merged with what is saved now: the merge, or the refusal (a missing or
+    invalid base: "reload"; a conflict: the form again with the draft and both values)."""
+    ident = spec.kind if ident is None else ident
+    got = edit_base.read(spec, ident, base, now)
+    if got is None:
+        return edit_base.reload_redirect(target)
+    result = edit_base.merge(spec, got, now, wanted, resolutions)
+    if result.conflicts:
+        shown = rows if rows is not None else value_rows(spec, result.conflicts, labels, now, wanted)
+        shown = [row for row in shown if row.group in result.conflicts]
+        return edit_base.conflict_redirect(spec, ident, target, now=now, merged=result, draft=draft, rows=shown)
+    return result
+
+
+def guard_refusal(spec: Spec, ident: str, target: str, base: str, now: dict[str, Any]) -> RedirectResponse | None:
+    """An indivisible card's guard: None when the form shows the card as saved now; otherwise
+    nothing is saved and the form opens again as saved now ("reload", or "changed on another
+    device meanwhile")."""
+    got = edit_base.read(spec, ident, base, now)
+    if got is None:
+        return edit_base.reload_redirect(target)
+    if any(not spec.group_same(group, got.values, now) for group in spec.groups):
+        return edit_base.changed_redirect(target)
+    return None
 
 
 def shown_minutes(seconds: int) -> int:
@@ -170,3 +237,94 @@ def _shown(value: object) -> str:
         return t("web.edit.value.on" if value else "web.edit.value.off")
     text = str(value if value is not None else "")
     return text.removeprefix("invalid:") or t("web.edit.value.empty")
+
+
+def protection_now(settings: Mapping[str, Any]) -> dict[str, Any]:
+    """Site access as its form shows it (``settings``: validated): the connections as one digest."""
+    return {
+        "enabled": bool(settings.get("enabled")),
+        "timeout_sec": settings.get("timeout_sec"),
+        "min_interval_sec": settings.get("min_interval_sec"),
+        "max_attempts": settings.get("max_attempts"),
+        "providers": digest(list(settings.get("providers") or [])),
+    }
+
+
+def protection_draft(fields: Mapping[str, Any]) -> dict[str, str]:
+    """What a refused save of Site access brings back: its fields, each connection's under
+    ``providers:<id>:<field>`` (kept only when the connections are the owner's change)."""
+    out = {name: str(fields.get(name) or "") for name in ("timeout_sec", "min_interval_sec", "max_attempts")}
+    out["enabled"] = "1" if fields.get("enabled") == "1" else ""
+    ids, enabled = list(fields.get("provider_id") or []), set(fields.get("provider_enabled") or [])
+    columns = {name: list(fields.get(f"provider_{name}") or []) for name in ("kind", "url", "order")}
+    for index, ident in enumerate(ids[:16]):
+        for name, values in columns.items():
+            if index < len(values):
+                out[f"providers:{ident}:{name}"] = str(values[index])[:256]
+        out[f"providers:{ident}:enabled"] = "1" if ident in enabled else ""
+    return out
+
+
+def protection_rows(
+    groups: tuple[str, ...],
+    now: Mapping[str, Any],
+    wanted: Mapping[str, Any],
+    saved: Mapping[str, Any],
+    sent: Mapping[str, Any],
+) -> list[Row]:
+    """Site access's conflict, group by group; the connections by their addresses."""
+    labels = {
+        "enabled": t("protection_ui.enabled"),
+        "timeout": t("protection_ui.timeout"),
+        "interval": t("protection_ui.interval"),
+        "attempts": t("protection_ui.attempts"),
+    }
+    out = value_rows(PROTECTION, tuple(group for group in groups if group != "providers"), labels, now, wanted)
+    if "providers" in groups:
+        saved_text, sent_text = _connections(saved.get("providers")), _connections(sent.get("providers"))
+        out.append(Row("providers", t("protection_ui.title"), saved_text, sent_text))
+    return out
+
+
+def _connections(providers: object) -> str:
+    rows = providers if isinstance(providers, list) else []
+    off = t("web.edit.value.off")
+    shown = [str(item.get("url")) + ("" if item.get("enabled") else f" ({off})") for item in rows]
+    return ", ".join(shown) or t("web.edit.value.empty")
+
+
+def backup_automatic_now(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    return {"backup_enabled": as_bool(cfg.get("backup_enabled"), True)}
+
+
+def backup_retention_now(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    return {"backup_days": retention_settings(dict(cfg))["days"]}
+
+
+def backup_folder_now(value: str) -> dict[str, Any]:
+    """A folder of copies as its form shows it ("" for the default folder)."""
+    return {"path": value.strip().strip('"')}
+
+
+def autostart_now(status: Mapping[str, Any]) -> dict[str, Any]:
+    return {"enabled": bool(status.get("autostart")), "without_login": bool(status.get("without_login"))}
+
+
+def access_now(cfg: Mapping[str, Any], record: object) -> dict[str, Any]:
+    """The network access card's revision: an opaque token of its switch, its address and the
+    password's record (never the record itself in the page)."""
+    card = json.dumps(
+        [as_bool(cfg.get("allow_lan")), str(cfg.get("bind") or "127.0.0.1"), record],
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    return {"revision": secret_token("access", "access", "revision", card)}
+
+
+def access_guard(
+    cfg: Mapping[str, Any], record: object, base: str, target: str = "/settings?open=access"
+) -> RedirectResponse | None:
+    """The network access card's guard (its switch, its address and the password together): None
+    when the form shows the card as saved now, else the refusal."""
+    return guard_refusal(ACCESS, "access", target, base, access_now(cfg, record))
