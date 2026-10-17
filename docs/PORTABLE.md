@@ -1028,6 +1028,12 @@ Built so far (this workstream):
   a Cyrillic name. That job is `.github/workflows/autostart.yml`, which the release workflow runs
   as well, for the commit it checked: a release is published only after it passed on all three
   systems, and there and in the weekly run a runner that cannot run it fails instead of skipping.
+  Since 1.33.1 it runs on Ubuntu 26.04 too, and then updates the install while autostart is on:
+  on Windows through Settings (the task starts the new version; a broken one is rolled back under
+  it), on Linux and macOS from the terminal through systemd or launchd, where Settings' update is
+  refused as designed. A Windows runner also drives a pinned qBittorrent (its version, SHA-256
+  and signature recorded) with save paths in a Cyrillic folder, and Linux and macOS run the
+  native probes with each fallback forced (`tests/integration/test_real_probes.py`).
   These tests carry `@pytest.mark.real_system("TOW_REAL_...")`: skipped unless that variable is 1,
   which only these workflows set; then the test guard lets them through.
 - Releases (`.github/workflows/release.yml`, 1.22): a `v*` tag (or a dispatch with a tag) must be

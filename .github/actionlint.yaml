@@ -1,0 +1,5 @@
+# actionlint (1.7.12) knows the GitHub-hosted runner labels of its release; newer hosted labels
+# this repository uses are listed here so that it checks the rest of those jobs.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
