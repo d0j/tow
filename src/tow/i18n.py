@@ -11,7 +11,8 @@
   A regional variant is ``pt-BR.json`` (any case: ``pt-br`` in config.yaml finds it).
 - A damaged language file never breaks TOW: it is skipped with a warning (English: the keys show).
   A file that cannot be read for a moment (held by an antivirus, half written) is read again a few
-  seconds later; a file read once stays as it was read until ``reload()``.
+  seconds later, and so is a language folder that cannot be listed; a file read once stays as it
+  was read until ``reload()``.
 - Code and templates never hold user-facing text, only keys: ``t("home.add.title")``,
   ``t("settings.clients.count", n=3)`` for plurals, ``t("x.y", name=title)`` for values.
 - A plugin (a messenger, a torrent client) keeps its texts under its own section
@@ -24,10 +25,12 @@ the owner's browser last asked for.
 
 from __future__ import annotations
 
+import fnmatch
 import functools
 import json
 import logging
 import math
+import os
 import re
 import threading
 import time
@@ -133,17 +136,43 @@ def _usable_meta(meta: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-@functools.cache
 def _files() -> dict[str, Path]:
-    """Every language file by its code in lower case (``pt-br`` -> ``pt-BR.json``)."""
-    found: dict[str, Path] = {}
+    """Every language file by its code in lower case (``pt-br`` -> ``pt-BR.json``); none while
+    the folder cannot be listed."""
+    found = _listed()
+    return {} if found is None else found
+
+
+def _listed() -> dict[str, Path] | None:
+    """The language files, or None while the folder could not be listed: a listing that failed
+    is tried again RETRY_SEC after the failed try, as a file that could not be read."""
+    if _LISTED:
+        return _LISTED[0]
+    failed = _UNLISTED[0] if _UNLISTED else None
+    if failed is not None and _clock() - failed[0] < RETRY_SEC:
+        return None
+    folder = LOCALES_DIR
     try:
-        paths = sorted(LOCALES_DIR.glob("*.json"))
-    except OSError:
-        paths = []
+        with os.scandir(folder) as entries:
+            paths = sorted(folder / entry.name for entry in entries if fnmatch.fnmatch(entry.name, "*.json"))
+    except OSError as exc:
+        why = type(exc).__name__
+        if failed is None or failed[1] != why:
+            _LOG.warning("language folder %s cannot be read, tried again later: %s", folder, why)
+        with _READING:
+            _UNLISTED[:] = [(_clock(), why)]
+        return None
+    found: dict[str, Path] = {}
     for path in paths:
         if _CODE.match(path.stem):
             found.setdefault(path.stem.lower(), path)
+    with _READING:
+        if not _LISTED:
+            _LISTED.append(found)
+        found = _LISTED[0]
+        _UNLISTED.clear()
+    if failed is not None:
+        _read_again()
     return found
 
 
@@ -156,6 +185,8 @@ RETRY_SEC = 5.0
 _clock = time.monotonic
 _KEPT: dict[str, _Catalog] = {}
 _UNREAD: dict[str, tuple[float, str]] = {}  # code -> (when it was tried, why it failed)
+_LISTED: list[dict[str, Path]] = []  # [the language files], once the folder was listed
+_UNLISTED: list[tuple[float, str]] = []  # [(when listing the folder was tried, why it failed)]
 _READING = threading.Lock()
 
 
@@ -190,9 +221,12 @@ def _read_again() -> None:
 
 
 def _retry_due() -> None:
-    """Try the files that could not be read, once their window is over (nothing to do normally)."""
-    if not _UNREAD:
+    """Try the folder and the files that could not be read, once their window is over (nothing to
+    do normally)."""
+    if not _UNREAD and not _UNLISTED:
         return
+    if _UNLISTED:
+        _listed()
     now = _clock()
     for code, (tried, _why) in list(_UNREAD.items()):
         if now - tried >= RETRY_SEC:
@@ -201,9 +235,12 @@ def _retry_due() -> None:
 
 def _read_file(code: str, *, told: str | None) -> tuple[_Catalog, str | None]:
     """(catalog, why it could not be read now or None). A missing or damaged file is a catalog
-    (unusable, kept); only a read that failed - the file held or half written - is tried again.
-    The warning of a failed read is said once, not at every try."""
-    path = _files().get(code)
+    (unusable, kept); only a read that failed - the file or its folder held, the file half
+    written - is tried again. The warning of a failed read is said once, not at every try."""
+    found = _listed()
+    if found is None:
+        return _UNUSABLE, "unlisted"  # the folder: its warning is said by _listed()
+    path = found.get(code)
     if path is None:
         return _UNUSABLE, None
     try:
@@ -246,8 +283,9 @@ def version() -> int:
 def reload() -> None:
     """Forget loaded catalogs (tests, or after editing a language file)."""
     _VERSION[0] += 1
-    _files.cache_clear()
     with _READING:
+        _LISTED.clear()
+        _UNLISTED.clear()
         _KEPT.clear()
         _UNREAD.clear()
     _available.cache_clear()
