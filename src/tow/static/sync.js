@@ -21,6 +21,7 @@
   const VISIBLE_MS = 5000;
   const BACKOFF_MS = [5000, 10000, 20000, 40000, 60000];
   const TIMEOUT_MS = 10000;
+  const READER_MS = 30000; // a reader's promise (messages.js: at most two requests of 10 s each)
   const HINT_MS = 250;
   const MAX_IDS = 200; // rows per /topics/rows request (the server's limit too)
   const ROWS_AT_ONCE = 2; // /topics/rows requests on their way at the same time
@@ -103,10 +104,11 @@
       plan(waitUntil);
     };
     // An area is offered to its readers; it is applied (named in ``have``) once every reader took
-    // it: none threw, and a reader's promise did not settle false or fail. Otherwise it is kept and
-    // offered again after a later successful poll - also a 304, which brings it no more - 5, 10, 20,
-    // 40, then every 60 s, never sooner; a newer revision is offered at once. A ``manual`` area is
-    // its owner's: applied with ack(), asked again by the owner (Home's rows, the page area).
+    // it: none threw, and a reader's promise settled within 30 s, neither false nor failed. Otherwise
+    // it is kept and offered again after a later successful poll - also a 304, which brings it no
+    // more - 5, 10, 20, 40, then every 60 s, never sooner; a newer revision is offered at once. A
+    // ``manual`` area is its owner's: applied with ack(), asked again by the owner (Home's rows, the
+    // page area).
     const offer = (area, payload, nowTs) => {
       const known = retries[area];
       const same = Boolean(known && known.rev === payload.rev);
@@ -142,7 +144,13 @@
       }
       state.running = true;
       retries[area] = state;
-      Promise.all(waits).then((results) => results.every((result) => result !== false), () => false).then((done) => {
+      // A promise that never settles (a request hanging under the reader) holds the area 30 s at
+      // most; its late answer reaches nothing (the race has settled).
+      let late = 0;
+      const given = new Promise((resolve) => { late = setTimer(() => resolve(false), READER_MS); });
+      const answered = Promise.all(waits).then((results) => results.every((result) => result !== false), () => false);
+      Promise.race([answered, given]).then((done) => {
+        clearTimer(late);
         if (mine !== epoch || retries[area] !== state) return; // signed out, or a newer revision meanwhile
         if (!done) {
           failed();
