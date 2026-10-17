@@ -1068,6 +1068,7 @@
     if (!center) return;
     const undo = payload.undo && typeof payload.undo === "object" ? payload.undo : null;
     const usable = undo && !undo.local_only && typeof undo.stamp === "string" && Number.isFinite(undo.until_ts);
+    const fresh = usable && undo.stamp !== undoStamp;
     if (undoStamp && (!usable || undo.stamp !== undoStamp)) window.towMessages?.remove?.(`undo-${undoStamp}`);
     if (!usable) {
       undoStamp = "";
@@ -1081,7 +1082,9 @@
         text: t("js.messages.undo_available", { what: String(undo.label || "") }),
       });
     }
-    window.towMessages?.refresh?.();
+    // A new Undo: its change's message is in the list (one request with the messages area's, if both
+    // came in this answer); its time running on changes nothing there.
+    if (fresh) window.towMessages?.refresh?.();
   });
 
   // ---- preferences: the theme (Auto follows each device), the language (another one reloads)

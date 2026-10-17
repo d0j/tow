@@ -417,6 +417,7 @@
     }
     requests = newController();
     next = null;
+    soon = null;
     saying.forEach((timer) => window.clearTimeout(timer));
     saying.clear();
     ["announce", "announce-alert"].forEach((name) => {
@@ -739,17 +740,30 @@
       .finally(() => { inFlight = null; });
     return inFlight;
   };
-  const refresh = () => {
-    if (typeof fetch !== "function") return Promise.resolve(false);
+  const start = () => {
     if (!inFlight) return ask();
     if (!next) {
       const mine = session;
       next = inFlight.then(() => {
         next = null;
-        return mine === session ? refresh() : false;
+        return mine === session ? start() : false;
       });
     }
     return next;
+  };
+  // Refreshes asked in the same moment (the Undo and the messages areas of one poll answer, the
+  // panel opening while the tab is shown) are one request.
+  let soon = null;
+  const refresh = () => {
+    if (typeof fetch !== "function") return Promise.resolve(false);
+    if (!soon) {
+      const mine = session;
+      soon = Promise.resolve().then(() => {
+        soon = null;
+        return mine === session ? start() : false; // signed out meanwhile
+      });
+    }
+    return soon;
   };
   const failed = (text) => center.show({ kind: "err", text: text || t("js.messages.not_saved") });
   // Read or clear up to the newest entry this page shows: an entry that arrived since stays.
@@ -832,7 +846,10 @@
       return;
     }
     center.release("hidden");
-    refresh(); // shown again: the list as it is now
+    // Shown again: the list as it is now - asked by sync.js's poll when it runs (it asks at once and
+    // names the messages area when the list changed), by this page otherwise.
+    const sync = window.towSync?.client;
+    if (!sync || sync.stopped?.()) refresh();
   });
   if (document.hidden) center.hold("hidden");
   // Signing out ends this tab's history with the session.

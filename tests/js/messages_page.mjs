@@ -60,7 +60,7 @@ const settle = async () => {
   for (let n = 0; n < 6; n += 1) await new Promise((resolve) => setImmediate(resolve));
 };
 
-const page = ({ storage, served = null, undo = null, address = "http://127.0.0.1/?flash=T1&s=name#row-a", server = fakeServer() }) => {
+const page = ({ storage, served = null, undo = null, address = "http://127.0.0.1/?flash=T1&s=name#row-a", server = fakeServer(), extra = {} }) => {
   const document = fakeDocument();
   const timers = fakeTimers();
   const strip = served && ["div", {
@@ -91,6 +91,7 @@ const page = ({ storage, served = null, undo = null, address = "http://127.0.0.1
     setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
     setInterval: timers.setInterval, clearInterval: timers.clearInterval,
     sessionStorage: storage,
+    ...extra,
   };
   const context = {
     window, document, URL, JSON, Math, Number, String, Array, Object, Map, Set, Boolean,
@@ -274,6 +275,7 @@ verdict.signedOutDropsTheList = true;
   server.offline = false;
   const count = server.requests.length;
   const first = refresh();
+  for (let i = 0; i < 5; i += 1) await Promise.resolve(); // on its way
   server.change((list) => list.unshift({ id: "e2", cursor: "c2", kind: "warn", subject: "Show B", text: "Check failed", at: 1800000200, read: false }));
   const second = refresh();
   assert.equal(await second, true);
@@ -286,6 +288,28 @@ verdict.signedOutDropsTheList = true;
   assert.equal(await late, false);
 }
 verdict.refreshSaysWhetherTheListIsCurrent = true;
+
+// One request for the list when the tab is shown or a poll names it: refreshes asked in the same
+// moment (the undo and the messages areas of one answer) are one request, and under sync.js (its
+// poll asks when shown, and names the messages area when the list changed) the tab's own showing
+// asks nothing more.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "ok", subject: "Show A", text: "New file", at: 1800000100 }]);
+  const live = page({ storage: memoryStorage(), server, extra: { towSync: { client: { stopped: () => false } } } });
+  await settle();
+  const count = () => server.requests.filter((request) => request.url === "/messages.json").length;
+  const before = count();
+  const both = [live.window.towMessages.refresh(), live.window.towMessages.refresh(), live.window.towMessages.refresh()];
+  assert.deepEqual(await Promise.all(both), [true, true, true]);
+  assert.equal(count(), before + 1);
+  live.document.hidden = true;
+  live.document.dispatch(live.document, "visibilitychange");
+  live.document.hidden = false;
+  live.document.dispatch(live.document, "visibilitychange");
+  await settle();
+  assert.equal(count(), before + 1);
+}
+verdict.oneRequestForTheListAtOnce = true;
 
 // The per-tab history of 1.32 and older: removed with one notice, never sent anywhere; a reload
 // says nothing again.
