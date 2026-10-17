@@ -463,8 +463,9 @@ gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` sa
   `%`, two `!`, or a `^` and a `!` before it writes anything; do not move an install into one.
 - `data/` belongs on a local file system. TOW's locks (`flock` on Linux and macOS, file locks on
   Windows) on NFS or SMB depend on the protocol version, the kernel and the mount options, and may
-  not keep a second TOW on another computer out. `tow doctor` warns when it recognises the file system
-  of `data/` as a network one (NFS, SMB, 9p, SSHFS and the like; FUSE in general is not recognised).
+  not keep a second TOW on another computer out. `tow doctor` and Diagnostics warn when they recognise the
+  file system of `data/` as a network one (NFS, SMB, 9p, SSHFS and the like; FUSE in general is not
+  recognised); a device on the network sees the warning without the folder.
   Night copies and restore points may go to a network folder: only the live `data/` must be local.
 - The folder needs a file system with links: uv links `runtime/python/cpython-X.Y-*` to the
   full version (a junction on Windows, a symlink elsewhere). FAT32 and exFAT (many USB sticks)
@@ -890,8 +891,8 @@ environment and Python 3.11 syntax.
 - **Volumes** (1.33.1, `volume_of`): the file system an existing path is on, read-only, `None` when it cannot be
   told: on Windows the volume GUID of its mount point (a folder a disk is mounted on counts; a share or a mapped
   drive by its path), on Linux `/proc/self/mountinfo` (type, mount point and source), on macOS `statfs`; with it
-  whether it is a network one (`tow doctor`'s note on `data/`). A check that confirms a topic's file on disk
-  records its folder's volume in the download history; a nightly backup or a restore point written and read back
+  whether it is a network one (the note of `tow doctor` and Diagnostics on `data/`). A check that confirms a
+  topic's file on disk records its folder's volume in the download history; a nightly backup or a restore point written and read back
   records its folder's volume in `state.json` (`backup_volumes`). From then on the folder, or while it is missing
   its nearest existing parent, must be on that volume: on another, a missing or an unreadable one the topic's files
   stay unconfirmed (never "missing"), no free space is measured there and no copy is written; Needs attention says
