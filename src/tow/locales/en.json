@@ -1574,6 +1574,35 @@
       "times": {
         "one": "{n} time",
         "other": "{n} times"
+      },
+      "kind": {
+        "topic_add": "Topic added",
+        "topic_delete": "Topic removed from TOW",
+        "topic_edit": "Topic changed",
+        "topic_pause": "Topic paused",
+        "topic_resume": "Topic resumed",
+        "client_updated": "Torrent updated in the client",
+        "qbit_move": "Move to another folder",
+        "browser_auth": "Browser sign-in confirmed",
+        "settings_interval": "Check interval changed",
+        "settings_language": "Language changed",
+        "settings_theme": "Theme changed",
+        "settings_password": "Password changed",
+        "settings_client": "Torrent client settings saved",
+        "settings_client_default": "Default torrent client changed",
+        "settings_access": "Network access changed",
+        "settings_service_autostart": "Autostart changed",
+        "settings_backup_location": "Nightly backups folder changed",
+        "undo": "Last change undone"
+      },
+      "undo": {
+        "topic": "Topic deletion undone",
+        "topic_put": "Topic change undone",
+        "topic_add": "Topic adding undone",
+        "site": "Site change undone",
+        "settings": "Settings change undone",
+        "settings_access": "Network access change undone",
+        "settings_clients": "Torrent client change undone"
       }
     },
     "update": {

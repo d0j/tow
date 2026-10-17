@@ -824,3 +824,47 @@ def test_message_endpoints_share_the_sync_rate_limit(monkeypatch, method, path):
     client.get("/sync.json")
     assert asked == ["local:tab-1", "local:tab-1"]  # the same bucket as /sync.json
     assert not ui_state_path().exists()
+
+
+# --------------------------------------------------------------------------- words a message says on its own
+
+# Fields that make each kind a message (a severity, not History only).
+_MESSAGE_FIELDS = {
+    "browser_auth": {"status": "verified"},
+    "undo_expired": {"how": "manual"},
+    "settings_update_result": {"status": "ok", "target_version": "1.33.0"},
+    "qbit_move": {"status": "succeeded"},
+}
+
+
+@pytest.mark.parametrize(
+    ("kind", "fields", "en", "ru"),
+    [
+        ("settings_interval", {"how": "manual"}, "Check interval changed", "Интервал проверки изменён"),
+        ("undo", {"how": "manual"}, "Last change undone", "Последнее изменение отменено"),
+        ("undo", {"undo": "topic_put", "how": "manual"}, "Topic change undone", "Изменение раздачи отменено"),
+        ("undo", {"undo": "settings", "how": "manual"}, "Settings change undone", "Изменение настроек отменено"),
+        ("topic_pause", {"topic": "t1", "paused": False}, "Topic resumed", "Раздача снята с паузы"),
+        ("topic_delete", {"topic": "t1"}, "Topic removed from TOW", "Раздача убрана из TOW"),
+    ],
+)
+def test_a_message_says_what_happened_as_a_sentence(kind, fields, en, ru):
+    _raw(kind, **fields)
+    snapshot = messages_feed.feed().refresh()
+    assert messages_feed.render(snapshot.projection, lang="en")["items"][0]["text"].startswith(en)
+    assert messages_feed.render(snapshot.projection, lang="ru")["items"][0]["text"].startswith(ru)
+
+
+@pytest.mark.parametrize("lang", ["en", "ru"])
+def test_no_message_is_a_bare_word(lang):
+    """Every kind of the matrix starts its message with more than one word (QA: "Interval",
+    "Undone" alone said nothing)."""
+    bare = []
+    for kind in sorted(messages_feed.RELEVANT - {"tracker_checked", "backup_created", "bot_delivery_succeeded"}):
+        _raw(kind, **_MESSAGE_FIELDS.get(kind, {}))
+        items = messages_feed.render(messages_feed.feed().refresh().projection, lang=lang)["items"]
+        assert items, kind
+        label = items[0]["text"].split(" · ")[0]
+        if len(label.split()) < 2:
+            bare.append((kind, label))
+    assert bare == []
