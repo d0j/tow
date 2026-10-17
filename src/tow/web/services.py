@@ -146,6 +146,7 @@ from tow.web_update import finished_job as finished_web_update
 from tow.web_update import log_tail as web_update_log
 from tow.web_update import start as start_web_update
 from tow.web_update import status as web_update_status
+from tow.web_update import update_logs as web_update_logs
 
 __all__ = [
     "ACCEPTED_VOLUME",
@@ -273,6 +274,7 @@ __all__ = [
     "validate_protection_settings",
     "watchdog_problem",
     "web_update_log",
+    "web_update_logs",
     "web_update_status",
     "without_paths",
     "write_generation",

@@ -347,10 +347,14 @@ Settings → **Version and updates**; the version in the corner of every page op
   its own process, and the window says so (“the update runs in its own process: closing this window no longer stops
   it”, with the path of its log) and then only shows its progress. Closing the window, Ctrl+C or a terminal that is
   killed no longer stops the update: it stops TOW, switches the code, starts TOW again or rolls back by itself, and
-  the log the window named says how it ended. When that process cannot be started, the window says the update runs
-  in it: keep the window open until it ends (Ctrl+C then still lets the switch finish or roll back first).
+  the log the window named says how it ended (Settings → **Update log** shows it too). When that process cannot be
+  started, the window says the update runs in it: keep the window open until it ends (Ctrl+C then still lets the
+  switch finish or roll back first).
 - **Update log:** **More: history, rollback and log** → **Update log** shows the log of the latest update, with the
-  install folder written as `<TOW>`. If an update did not finish, read it before trying again.
+  install folder written as `<TOW>`. When an update was also started from a terminal, it shows the latest of each,
+  newest first, each under a line that says where it was started and when; for a terminal one also how it ended
+  (done, failed or rolled back, refused, or no result yet: it still runs or was cut off). If an update did not
+  finish, read it before trying again.
 
 ## Password and network access
 

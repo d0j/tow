@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tow import update_worker, web_update
+from tow.clock import format_ui_timestamp
 from tow.i18n import t
 from tow.restore_points import RestorePointError
 from tow.store import save_secrets, save_state
@@ -541,6 +542,82 @@ def test_update_log_never_shows_the_install_folder(install):
     assert root.as_posix() not in text
     assert "backing up <TOW>\\data" in text
     assert "stopping <TOW>/app/scripts/tow" in text
+
+
+def _terminal_run(root: Path, name: str, log: str | None, result: dict | None) -> Path:
+    """A folder of an update started from a terminal (scripts/update.py start_owner)."""
+    folder = root / "runtime" / "update-run" / name
+    folder.mkdir(parents=True)
+    (folder / "update.py").write_text("# copied updater\n", encoding="utf-8")
+    if log is not None:
+        (folder / "update.log").write_text(log, encoding="utf-8")
+    if result is not None:
+        (folder / "result.json").write_text(json.dumps(result), encoding="utf-8")
+    return folder
+
+
+def _log_page() -> str:
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1", "Accept-Language": "ru"})
+    answer = client.get("/updates/log")
+    assert answer.status_code == 200
+    assert answer.headers["cache-control"] == "no-store"
+    return answer.json()["text"]
+
+
+def test_the_update_log_also_shows_the_latest_update_from_a_terminal(install, monkeypatch):
+    # Before: an update run from "Update TOW.cmd" (its own process since 1.33.1) never showed in
+    # Settings -> Update log, which read only the web update's job.
+    root = install[0]
+    _terminal_run(root, "20261001-080000-0a0a0a0a", "older run\n", {"code": 0})
+    lines = [f"backing up {root}\\data", "fetching https://example.invalid/a?token=synthetic-secret", "rolled back"]
+    _terminal_run(root, "20261017-101500-abcdef12", "x" * 20000 + "\n" + "\n".join(lines) + "\n", {"code": 1})
+    (root / "runtime" / "update-run" / "20991231-235959-ffffffff.txt").write_text("not a run")
+    text = _log_page()
+    started = format_ui_timestamp(datetime(2026, 10, 17, 10, 15, tzinfo=UTC), "ru")
+    result = t("releases.log_result_failed", "ru")
+    assert text.startswith(t("releases.log_terminal", "ru", time=started, result=result) + "\n")
+    assert "backing up <TOW>\\data" in text
+    assert str(root) not in text
+    assert "synthetic-secret" not in text
+    assert "older run" not in text  # the newest run only
+    assert len(text) <= 16000 + 200  # bounded as the web update's log
+
+
+@pytest.mark.parametrize(
+    ("result", "key"),
+    [
+        (None, "releases.log_result_none"),  # it still runs, or it was cut off
+        ({"code": 0}, "releases.log_result_ok"),
+        ({"code": 2}, "releases.log_result_refused"),
+        ({"code": 3, "in_job": True}, "releases.log_result_in_job"),
+        ({"code": 9}, "releases.log_result_code"),
+        ({"code": "0"}, "releases.log_result_none"),  # not as update.py writes it: no result
+    ],
+)
+def test_a_terminal_update_says_how_it_ended(install, monkeypatch, result, key):
+    _terminal_run(install[0], "20261017-101500-abcdef12", "step\n", result)
+    head = _log_page().splitlines()[0]
+    assert head.endswith(": " + t(key, "ru", code=9))
+
+
+def test_the_newer_of_the_two_updates_comes_first(install, monkeypatch):
+    root = install[0]
+    job = web_update.start("1.22.21")
+    (root / "runtime" / "web-update" / job["id"] / "update.log").write_text("web steps\n", encoding="utf-8")
+    _terminal_run(root, "20000101-000000-00000000", "terminal steps\n", {"code": 0})
+    text = _log_page()
+    assert text.index("web steps") < text.index("terminal steps")
+    assert text.startswith(t("releases.log_web", "ru", time="").split("{")[0].rstrip())
+    _terminal_run(root, "20991231-235959-11111111", "terminal steps 2\n", {"code": 0})
+    text = _log_page()
+    assert text.index("terminal steps 2") < text.index("web steps")
+
+
+def test_without_a_terminal_update_the_log_is_as_before(install, monkeypatch):
+    job = web_update.start("1.22.21")
+    (install[0] / "runtime" / "web-update" / job["id"] / "update.log").write_bytes(b"web steps\n")
+    (install[0] / "runtime" / "update-run").mkdir(parents=True)
+    assert _log_page() == "web steps\n"
 
 
 def test_reading_log_cannot_select_an_arbitrary_path(install):

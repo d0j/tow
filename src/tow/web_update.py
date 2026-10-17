@@ -10,7 +10,7 @@ import re
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -315,15 +315,81 @@ def log_tail() -> str:
     path = _job_file().parent / job["id"] / "update.log"
     if not path.exists():
         return ""
-    if not _safe_file(path) or not path.resolve().is_relative_to(_job_file().parent.resolve()):
+    return _tail(path, _job_file().parent)
+
+
+_LOG_TAIL_BYTES = 16000
+# An update started from a terminal ("Update TOW.cmd", update-tow, deploy.ps1) runs in its own
+# process: scripts/update.py RUNS, OWNER_LOG, OWNER_RESULT. Its folder is named by its start in UTC.
+_TERMINAL_RUNS = "update-run"
+_TERMINAL_RUN = re.compile(r"(\d{8}-\d{6})-[0-9a-f]{8}")
+_TERMINAL_RUNS_LOOKED_AT = 256  # update.py keeps 3 finished ones; never more names than this read
+
+
+def _tail(path: Path, folder: Path) -> str:
+    """The last bytes of the log ``path`` inside ``folder``, links cleaned and the install as <TOW>."""
+    if not _safe_file(path) or not path.resolve().is_relative_to(folder.resolve()):
         raise WebUpdateError("releases.job_unreadable")
     try:
         with path.open("rb") as handle:
-            handle.seek(max(0, path.stat().st_size - 16000))
-            content = handle.read(16000)
+            handle.seek(max(0, path.stat().st_size - _LOG_TAIL_BYTES))
+            content = handle.read(_LOG_TAIL_BYTES)
     except OSError as exc:
         raise WebUpdateError("releases.job_unreadable") from exc
     return _without_install_path(scrub_text(content.decode("utf-8", "replace")))
+
+
+def terminal_run() -> dict[str, Any] | None:
+    """The newest update started from a terminal: when it started (epoch seconds), its exit code
+    (``scripts/update.py``: 0 done, 1 failed or rolled back, 2 refused; None while it runs or when
+    it was cut off), whether it ran in its window instead (``in_job``) and the end of its log as the
+    web update's is shown. Read-only, no lock; None when there is none or it cannot be read."""
+    runs = runtime_dir() / _TERMINAL_RUNS
+    try:
+        if runs.is_symlink() or not runs.is_dir():
+            return None
+        names = []
+        for count, entry in enumerate(runs.iterdir()):
+            if count >= _TERMINAL_RUNS_LOOKED_AT:
+                break
+            if _TERMINAL_RUN.fullmatch(entry.name) and platform.is_plain_dir(entry.lstat()):
+                names.append(entry.name)
+    except OSError:
+        return None
+    if not names:
+        return None
+    folder = runs / max(names)
+    try:
+        started = datetime.strptime(folder.name[:15], "%Y%m%d-%H%M%S").replace(tzinfo=UTC).timestamp()
+        text = _tail(folder / "update.log", runs) if (folder / "update.log").exists() else ""
+    except ValueError, OverflowError, WebUpdateError:
+        return None
+    code, in_job = None, False
+    result = folder / "result.json"
+    with contextlib.suppress(OSError, ValueError, UnicodeError):
+        if _safe_file(result):
+            with result.open("rb") as handle:
+                value = json.loads(handle.read(4097)[:4096].decode("utf-8"))
+            if isinstance(value, dict) and type(value.get("code")) is int:
+                code, in_job = value["code"], value.get("in_job") is True
+    return {"started_at": started, "code": code, "in_job": in_job, "text": text}
+
+
+def update_logs() -> list[dict[str, Any]]:
+    """The latest update of this page (``kind`` "web") and the latest one from a terminal
+    ("terminal"), newest first, each with ``started_at`` and ``text`` (``log_tail``,
+    ``terminal_run``). Read-only: polling it takes no lock."""
+    job = _read(_job_file())
+    _active(job)  # validate the stored identifier and dates before using them
+    logs: list[dict[str, Any]] = []
+    if job:
+        started = job.get("started_at")
+        when = started if isinstance(started, (int, float)) and not isinstance(started, bool) else None
+        logs.append({"kind": "web", "started_at": when, "text": log_tail()})
+    terminal = terminal_run()
+    if terminal is not None:
+        logs.append({"kind": "terminal", **terminal})
+    return sorted(logs, key=lambda log: log.get("started_at") or 0.0, reverse=True)
 
 
 INSTALL_PLACEHOLDER = "<TOW>"

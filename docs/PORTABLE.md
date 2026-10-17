@@ -650,7 +650,10 @@ same steps, with the code from the release instead of git.
   outside every job; the copy changes nothing while it is still in a job). That process takes
   `.update.lock` and does the whole update - stop, snapshot, switch record, sync, health check,
   rollback, `update-state.json` - and writes its exit code to `result.json` there; the terminal
-  only shows its `update.log` and ends with that code. Closing the window, Ctrl+C (the window
+  only shows its `update.log` and ends with that code. Settings → Update log also shows the newest
+  such run (the folder name gives its start, `result.json` how it ended, no result: it runs or was
+  cut off), read-only and without a lock, as the web update's log is shown: its last 16000 bytes,
+  links reduced to their host, the install folder as `<TOW>`. Closing the window, Ctrl+C (the window
   stops following, the update goes on) or killing the terminal's process no longer stops the
   update; only an update that could not get such a process runs in the window as before
   (`TOW_UPDATE_HERE=1` asks for that) and is said so. A killed update process or a power cut
