@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from typing import Any
 
 from tow.cli import render
@@ -30,7 +29,7 @@ def _doctor(args: argparse.Namespace) -> int:
     if args.notify:
         notify_send(load_secrets(), "tow doctor: " + text.replace("\n", " | ")[:3500])
     if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
+        print(render.machine(report))
     else:
         print(text)
     # The diagnostics ran: a finding (no client set up, a client or site not answering) is
