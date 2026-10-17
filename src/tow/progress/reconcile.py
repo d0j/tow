@@ -159,6 +159,8 @@ class _ReconcilePass:
     rebind_volume: bool = False
     # A file was confirmed on disk in full by this pass (not reused): its folder's volume is proven.
     volume_confirmed: bool = False
+    # This pass recorded the volume the folder is on now (``_record_volume``).
+    volume_recorded: bool = False
     _evidence_base: tuple[Path | None] | None = field(default=None, init=False)
     _seen: bool | None = field(default=None, init=False)
     # The recorded volume the folder was compared with (None: none was, or not asked).
@@ -314,10 +316,12 @@ def _file_confirmed(
     work: _ReconcilePass, item: HistoryItem, rel: str, size: int | None, progress: float
 ) -> bool | None:
     """Is the file on disk in full? A file confirmed within the day, still complete in the
-    client, is not looked at again: every 30 minutes woke sleeping drives and a NAS for nothing."""
+    client, is not looked at again: every 30 minutes woke sleeping drives and a NAS for nothing.
+    The owner's rebind always looks: it binds the disk the file is found on now."""
     confirmed_ts = item.get("confirmed_ts")
     fresh = (
-        item.get("status") == "completed"
+        not work.rebind_volume
+        and item.get("status") == "completed"
         and progress >= 1.0
         and isinstance(confirmed_ts, (int, float))
         and 0 <= time.time() - float(confirmed_ts) < CONFIRMATION_REUSE_SEC
@@ -350,13 +354,16 @@ def _record_volume(work: _ReconcilePass) -> None:
     identity = folders.volume_at(work.evidence_save_path)
     if identity:
         work.record["volume"] = {"path": work.evidence_save_path, "id": identity}
+        work.volume_recorded = True
 
 
 def _note_volume(work: _ReconcilePass) -> None:
     """``volume_unseen`` on the topic while its folder is off the recorded volume (Needs attention
     says it, tow.issues): set when this pass compared and the folder was not on it, gone when it
-    was or the owner bound the folder anew. A pass that looked at no file changes nothing."""
-    if work.rebind_volume and work.volume_confirmed:
+    was or the owner bound the folder anew - only once the volume it is on was recorded (a volume
+    without an identity binds nothing, and the note stays). A pass that looked at no file changes
+    nothing."""
+    if work.rebind_volume and work.volume_recorded:
         work.topic.pop("volume_unseen", None)
         return
     if work._seen is None or work._expected is None:

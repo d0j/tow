@@ -104,7 +104,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   unconfirmed and measures no other disk's free space until it is back. The disk is known by its own ID (its UUID,
   the Windows volume and its serial number, the share a network drive stands for), so another disk of the same kind
   put at the same place or drive letter is another disk; one without an ID is not remembered. After replacing or
-  reformatting the disk, run `tow check --apply --rebind-volumes`.
+  reformatting the disk, run `tow check --apply --rebind-volumes` (or **Same disk — accept**): it looks at the files
+  on the disk now, also those already confirmed that day, and the note in Needs attention goes only once the disk
+  is recorded.
 - A nightly backup or a restore point is no longer written onto the system disk when the disk of its folder is not
   connected: TOW remembers the disk once a copy was written and checked there, refuses the copy with a clear message
   while it is missing or another one, and shows no free space for that folder then.

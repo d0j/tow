@@ -2326,3 +2326,31 @@ def test_a_moved_topic_records_its_new_folder(tmp_path: Path, monkeypatch):
     history["topics"]["vol"]["volume"] = {"path": str(tmp_path / "old"), "id": "uuid:old-disk"}
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
     assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "uuid:usb-disk"}
+
+
+def test_a_rebind_looks_at_the_files_again_even_when_confirmed_today(tmp_path: Path, monkeypatch):
+    # 1.33.1 review: a file confirmed within the day is not looked at again (the confirmation
+    # cache), so the owner's rebind after moving the files to a new disk confirmed nothing on it
+    # and bound nothing. An explicit rebind looks at the disk now.
+    client, topic, history, current = _volume_world(tmp_path, monkeypatch, "uuid:old-disk")
+    reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert history["topics"]["vol"]["volume"]["id"] == "uuid:old-disk"
+    looked: list[str] = []
+    real = platform.long_path
+    monkeypatch.setattr(platform, "long_path", lambda path: looked.append(str(path)) or real(path))
+    current["id"] = "uuid:new-disk"  # the files copied to a new disk mounted in its place
+    reconcile_topic(topic, client, history, "2026-09-12T21:10:00+03:00", rebind_volume=True)
+    assert looked  # the file was looked at on disk, not taken from the cache
+    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "uuid:new-disk"}
+    assert "volume_unseen" not in topic
+
+
+def test_a_rebind_keeps_the_note_when_the_volume_cannot_be_recorded(tmp_path: Path, monkeypatch):
+    # 1.33.1 review: a rebind that confirmed a file cleared "volume_unseen" even when the volume
+    # had no identity to record: the accept was refused, and its warning was gone with it.
+    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, None)
+    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "uuid:usb-disk"}
+    topic["volume_unseen"] = {"folder": str(tmp_path), "at": 1}
+    reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00", rebind_volume=True)
+    assert history["topics"]["vol"]["volume"]["id"] == "uuid:usb-disk"
+    assert topic["volume_unseen"] == {"folder": str(tmp_path), "at": 1}
