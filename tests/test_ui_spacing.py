@@ -326,6 +326,21 @@ def test_browser_pass_targets_clipping_and_empty_rows():
     assert ".restore-point-row { grid-template-columns: 1fr; row-gap: var(--sp-2); }" in CSS
 
 
+def test_the_conflict_box_is_on_the_scale_without_the_browsers_fieldset():
+    """1.33 QA: a refused save's choice (_conflict.html) was the browser's fieldset - a grooved frame,
+    the legend 2 px inset and 5.3 px above its first line, each radio 5 px off its words. Every group
+    of the box now has no frame of its own, its legend 3 px above what it says (as Settings' theme
+    legend), the radios at the check label's own 6 px."""
+    assert "margin: 0; padding: 0; border: 0;" in _rule(".edit-conflict fieldset")
+    assert "min-width: 0" in _rule(".edit-conflict fieldset")
+    legend = _rule(".theme-field > legend, .edit-conflict legend")
+    assert "margin: 0 0 var(--sp-1); padding: 0;" in legend
+    assert "margin: 0;" in _rule(".edit-conflict .check-label > input")
+    assert "gap: var(--sp-2)" in _rule(".check-label")
+    box = (TEMPLATES / "_conflict.html").read_text(encoding="utf-8")
+    assert '<fieldset class="stack-1">' in box
+
+
 def test_the_messages_panel_keeps_its_head_and_scrolls_its_list():
     """1.33 QA: the shared list (up to 50 entries) ran past the panel's 26 rem, the whole panel scrolled
     and its head - the title, Mark all read, Clear - scrolled away with the entries (30 clipping and
