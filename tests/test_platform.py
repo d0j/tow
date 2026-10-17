@@ -380,6 +380,100 @@ def test_a_recorded_shutdown_event_is_read_with_its_details():
     assert (event["reason"], event["action"]) == ("Other (Unplanned)", "restart")
 
 
+# Shaped as wevtutil printed them on a Windows 11 PC (names made up): User32 1074, then
+# Kernel-Power 109 version 0 a few seconds later.
+_KERNEL_POWER = "<Provider Name='Microsoft-Windows-Kernel-Power' Guid='{331c3b3a-2005-44c2-ac5e-77220c37d6b4}'/>"
+
+
+def _user32_1074(at: str, action: str, process: str = r"C:\WINDOWS\system32\shutdown.exe (PC)") -> str:
+    return (
+        f"<Event {_NS}><System><Provider Name='User32' EventSourceName='User32'/>"
+        f"<EventID Qualifiers='32768'>1074</EventID><Version>0</Version><TimeCreated SystemTime='{at}'/>"
+        f"</System><EventData><Data Name='param1'>{process}</Data><Data Name='param3'>Other (Unplanned)</Data>"
+        f"<Data Name='param5'>{action}</Data></EventData></Event>"
+    )
+
+
+def _kernel_power_109(at: str, action_type: str, *, provider: str = _KERNEL_POWER, version: str = "0") -> str:
+    return (
+        f"<Event {_NS}><System>{provider}<EventID>109</EventID><Version>{version}</Version>"
+        f"<TimeCreated SystemTime='{at}'/></System><EventData>"
+        f"<Data Name='ShutdownActionType'>{action_type}</Data><Data Name='ShutdownEventCode'>0</Data>"
+        "<Data Name='ShutdownReason'>5</Data></EventData></Event>"
+    )
+
+
+@pytest.mark.parametrize(("action_type", "expected"), [("5", "restart"), ("6", "power_off")])
+def test_the_kernel_power_kind_is_attached_to_its_shutdown(action_type, expected):
+    raw = _user32_1074("2026-09-12T11:14:09.0566260Z", "перезапуск") + _kernel_power_109(
+        "2026-09-12T11:14:12.2800835Z", action_type
+    )
+    (event,) = windows.with_power_actions(windows.parse_events(raw))
+    assert (event["id"], event["action"], event["power_action"]) == (1074, "перезапуск", expected)
+    assert event["process"].endswith("shutdown.exe (PC)")
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        _kernel_power_109("2026-09-12T11:14:12Z", "4"),  # a code never seen with a 1074: no reading
+        _kernel_power_109("2026-09-12T11:14:12Z", "5", version="1"),  # another schema version
+        _kernel_power_109("2026-09-12T11:14:12Z", "5", provider="<Provider Name='Other-Power'/>"),
+        _kernel_power_109("2026-09-12T11:14:12Z", "5", provider=_KERNEL_POWER.replace("331c", "0000")),
+        _kernel_power_109("2026-09-12T11:16:10Z", "5"),  # more than two minutes later: another sequence
+        _kernel_power_109("2026-09-12T11:14:08Z", "5"),  # before the shutdown it would describe
+    ],
+)
+def test_a_109_that_is_not_this_shutdowns_kind_adds_nothing(record):
+    raw = _user32_1074("2026-09-12T11:14:09Z", "перезапуск") + record
+    (event,) = windows.with_power_actions(windows.parse_events(raw))
+    assert event["id"] == 1074
+    assert "power_action" not in event
+
+
+def test_a_bare_109_never_replaces_the_shutdown_it_follows():
+    raw = (
+        _user32_1074("2026-09-12T11:14:09Z", "restart")
+        + f"<Event {_NS}><System><EventID>41</EventID><TimeCreated SystemTime='2026-09-12T11:14:10Z'/></System></Event>"
+        + _kernel_power_109("2026-09-12T11:14:12Z", "6")  # after a crash record: not the 1074's
+        + _kernel_power_109("2026-09-12T13:00:00Z", "5")  # alone, hours later
+    )
+    events = windows.with_power_actions(windows.parse_events(raw))
+    assert [e["id"] for e in events] == [1074, 41]
+    assert "power_action" not in events[0]
+
+
+def test_two_109_records_that_disagree_are_unclear():
+    raw = (
+        _user32_1074("2026-09-12T11:14:09Z", "перезапуск")
+        + _kernel_power_109("2026-09-12T11:14:12Z", "5")
+        + _kernel_power_109("2026-09-12T11:14:20Z", "6")
+    )
+    (event,) = windows.with_power_actions(windows.parse_events(raw))
+    assert event["power_action"] == "unclear"
+
+
+def test_the_last_of_several_1074_records_gets_the_kind():
+    raw = (
+        _user32_1074("2026-09-12T11:14:00Z", "перезапуск", r"C:\Tools\App.exe (PC)")
+        + _user32_1074("2026-09-12T11:14:09Z", "перезапуск")
+        + _kernel_power_109("2026-09-12T11:14:12Z", "5")
+    )
+    first, last = windows.with_power_actions(windows.parse_events(raw))
+    assert "power_action" not in first
+    assert last["power_action"] == "restart"
+
+
+def test_windows_shutdown_reasons_ask_for_kernel_power_109_by_its_provider(monkeypatch):
+    asked: list[list[str]] = []
+    raw = _user32_1074("2026-09-12T11:14:09Z", "перезапуск") + _kernel_power_109("2026-09-12T11:14:12Z", "6")
+    monkeypatch.setattr(windows, "_run", lambda args, timeout=20: asked.append(args) or raw)
+    (event,) = WindowsBackend().shutdown_reasons(T0, T0 + HOUR)
+    assert event["power_action"] == "power_off"
+    query = next(a for a in asked[0] if a.startswith("/q:"))
+    assert "EventID=109 and Provider[@Name='Microsoft-Windows-Kernel-Power']" in query
+
+
 @pytest.mark.parametrize(
     ("output", "expected"),
     [

@@ -43,6 +43,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - TOW's own uv no longer reads the account's or the computer's `uv.toml`: an index, a mirror, a cache or a
   Python preference set there for other projects could break TOW's setup and updates. An install now has its own
   `runtime/uv.toml`; settings of yours (`native-tls`, an index) go below its marked line and are kept.
+- On a Windows that is not in English, the watchdog's message after the computer was off says whether it was
+  restarted or powered off: TOW reads the kind Windows itself records for the shutdown, and stays neutral when that
+  record is missing or unclear.
 
 ## [1.33.0] — 2026-10-17
 
