@@ -270,6 +270,31 @@ def test_device_names_with_an_extension_key_only_the_kept_spelling(name, key):
     assert windows_path_key(name + "_") == key + "_"
 
 
+@pytest.mark.parametrize(
+    ("torrent", "listed"),
+    [
+        ("CON", "_CON"),
+        ("con", "_con"),
+        ("aux.txt", "_aux.txt"),
+        ("NUL.tar.gz", "_NUL.tar.gz"),
+        ("COM1", "_COM1"),
+        ("LPT9.log", "_LPT9.log"),
+        ("aux.", "_aux"),
+        ("AUX/inner.bin", "_AUX/inner.bin"),
+    ],
+)
+def test_transmissions_underscore_prefix_of_a_device_name_keys_as_the_name(torrent, listed):
+    # Recorded by real.yml (B36): Transmission lists and writes a name Windows reserves with "_"
+    # in front, on Linux too. Before, its "_CON" keyed "_con" and the torrent's "CON" "con_".
+    assert windows_path_key(listed) == windows_path_key(torrent)
+
+
+@pytest.mark.parametrize("name", ["_CLOCK$", "_COM0", "_console", "_", "__CON"])
+def test_an_underscore_prefix_folds_only_the_recorded_device_names(name):
+    # Transmission was seen keeping CLOCK$ and COM0 as they are: "_" before them stays a name.
+    assert windows_path_key(name) == name.casefold()
+
+
 @pytest.mark.parametrize("name", ["COM0", "LPT0", "COM¹", "lpt²", "CONIN$", "CONOUT$", "CON .txt", "console"])
 def test_names_without_client_evidence_keep_their_exact_spelling(name):
     # No client source or observation shows qBittorrent or Transmission renaming these (the folder
