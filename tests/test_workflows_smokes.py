@@ -244,8 +244,9 @@ def test_real_records_the_client_spellings_of_reserved_names_and_checks_tows_key
         upload = next(i for i, step in enumerate(steps) if step.get("with", {}).get("name") == artifact)
         assert record < keys < upload, job_id
         folder = "${{ runner.temp }}/client-names"
-        assert steps[record]["env"] == {"TOW_REAL_CLIENT_NAMES_OUT": folder}, job_id
-        assert steps[keys]["env"] == {"TOW_REAL_CLIENT_NAMES": "1", "TOW_REAL_CLIENT_NAMES_DIR": folder}, job_id
+        utf8 = {"PYTHONUTF8": "1"} if job_id == "clients-windows" else {}  # names in a Windows log
+        assert steps[record]["env"] == {"TOW_REAL_CLIENT_NAMES_OUT": folder, **utf8}, job_id
+        assert steps[keys]["env"] == {"TOW_REAL_CLIENT_NAMES": "1", "TOW_REAL_CLIENT_NAMES_DIR": folder, **utf8}, job_id
         assert steps[record]["if"] == steps[keys]["if"] == "${{ !cancelled() }}", job_id
         assert steps[upload]["if"] == "always()", job_id
         assert steps[upload]["with"]["path"] == folder, job_id

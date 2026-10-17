@@ -350,6 +350,7 @@ jobs:
         shell: pwsh
         env:
           TOW_REAL_CLIENT_NAMES_OUT: ${{ runner.temp }}/client-names
+          PYTHONUTF8: "1"  # the names in the log, whatever the console's code page
         run: |
           $base = Join-Path $env:RUNNER_TEMP ('pytest names ' + (-join [char[]](0x0422, 0x0435, 0x0441, 0x0442)))
           uv run --frozen pytest -q -ra -s -p no:cacheprovider tests/integration/test_real_client_names.py -k test_record_the_spellings --basetemp $base
@@ -361,6 +362,7 @@ jobs:
         env:
           TOW_REAL_CLIENT_NAMES: "1"
           TOW_REAL_CLIENT_NAMES_DIR: ${{ runner.temp }}/client-names
+          PYTHONUTF8: "1"
         run: |
           uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_client_names.py -k test_tow_keys_agree
           if ($LASTEXITCODE) { throw "pytest exited with $LASTEXITCODE" }
