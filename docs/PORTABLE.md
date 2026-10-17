@@ -208,6 +208,38 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   `-musleabihf`), `-apple-darwin` on macOS; `--desktop` (Linux) writes `$XDG_DATA_HOME/applications/tow.desktop` (the only write
   outside the folder besides autostart, both on request).
 
+## 1b. Supported systems: the dependency contract (1.33.1)
+
+What TOW supports is not what uv has a build for. A system is **supported** only when three things
+hold: the pinned uv's Python manifest has a build of `.python-version` for it, every runtime
+package of `uv.lock` has a wheel CPython 3.14 installs there (no compiler on the owner's machine),
+and a fresh install was started and stopped there (CI). `scripts/support-matrix.py` derives the
+first two offline (`--python <uv>`: the bundle's uv 0.12.23 lists the builds of the manifest that
+`python-downloads-json-url` pins); `tests/test_support_matrix.py` keeps the wheel column below and
+the installers' targets in step with `uv.lock`. The status of a row changes only with new evidence.
+
+| system (uv's name) | Python 3.14.8 build | runtime packages without a wheel | fresh install and start | status |
+|---|---|---|---|---|
+| windows-x86_64 | yes | none | `bundle-smoke.ps1`, `install-smoke.ps1` (CI windows-latest) | supported (bundle, `install.ps1`) |
+| linux-x86_64-gnu | yes | none | `install-smoke.sh` (CI ubuntu-24.04, ubuntu-26.04) | supported, glibc 2.17 or newer |
+| macos-aarch64 | yes | none | `install-smoke.sh` (CI macos-latest) | supported, macOS 11 or newer |
+| linux-aarch64-gnu | yes | none | never run | expected to work, not verified (64-bit Raspberry Pi OS) |
+| linux-x86_64-musl | yes | none | never run | expected to work, not verified (Alpine) |
+| linux-aarch64-musl | yes | none | never run | expected to work, not verified |
+| macos-x86_64 | yes | cryptography | never run | needs Rust and the Xcode tools (§1); not verified |
+| linux-armv7-gnueabihf | yes | cffi, httptools, markupsafe, pyyaml, regex, uvloop | never run | not supported: six source builds |
+| linux-armv7-musleabihf | **none** | cffi, cryptography, httptools, markupsafe, pyyaml, regex, uvloop, watchfiles | never run | cannot work: no Python build |
+| windows-aarch64 | yes | cryptography, httptools | never run | not supported: `install.ps1` refuses it |
+
+- 32-bit x86 (Windows or Linux), riscv64, ppc64le and s390x are refused by the installers before
+  anything is written (`install.ps1`: 64-bit only; `install.sh`: "this computer … is not
+  supported"), whatever uv offers there.
+- `install.sh` still accepts both ARMv7 rows: their `uv sync` (glibc: needs a C compiler and the
+  headers of libffi and libyaml) or `uv python install` (musl) fails there with uv's own error, and
+  the installer removes what it added.
+- The oldest system each row needs comes from the wheels (`manylinux_2_17`, `musllinux_1_2`,
+  `macosx_11_0`); a newer lock can raise it, and `support-matrix.py` says so.
+
 ## 2. One supervised service: `tow run`
 
 `tow run` (package `tow.supervisor`) manages TOW on every OS since 1.18: a web-server child,
