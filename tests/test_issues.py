@@ -51,6 +51,7 @@ def test_every_kind_is_found_once_in_its_order():
         "check_stale",
         "check_blocked",
         "client_down",
+        "volume_missing",
         "history_rebuilt",
         "history_trimmed",
         "site_needs_login",

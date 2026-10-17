@@ -1056,7 +1056,21 @@
     },
     "no_events": "No downloads, errors, changes or notifications yet. Routine events — site checks, starts — are in the Log."
   },
+  "volumes": {
+    "title": "Folders off their disk",
+    "intro": "TOW remembers which disk each folder is on. These folders are not on it now: TOW calls no file missing and writes no copy there until the disk is back. If it is the same disk (connected again under another name, or replaced with the files copied over), accept it.",
+    "accept": "Same disk — accept",
+    "accepted": "The folder's disk is accepted",
+    "refused": "Not accepted: neither files of this topic nor TOW's copies are found on this disk now",
+    "busy": "A check is running: try again in a moment",
+    "unknown": "There is nothing to accept for this folder now",
+    "local_only": "A disk can be accepted only on the computer TOW runs on.",
+    "none": "Every folder is on its disk."
+  },
   "issues": {
+    "volume_missing_topic": "The folder of {title} is on another disk, or its disk is not connected ({folder})",
+    "volume_missing_night": "The night copies folder is on another disk, or its disk is not connected ({folder}): no copy is written there",
+    "volume_missing_manual": "The folder of backups made by hand is on another disk, or its disk is not connected ({folder}): no copy is written there",
     "site_access": "{site}: site access is limited (topics: {count})",
     "site_connection": "{site}: no connection to the site (topics: {count})",
     "topic_error": "{title} — {error}",

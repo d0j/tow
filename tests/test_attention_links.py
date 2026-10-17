@@ -362,6 +362,17 @@ def test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore(cl
 
 
 # Kind -> the test above that follows its link: a new kind needs one.
+def test_a_folder_off_its_disk_lands_on_the_volumes_page_with_its_accept(client, tmp_path):
+    folder = tmp_path / "media"
+    _home_state(_topic("a", 1, volume_unseen={"folder": str(folder), "at": int(time.time())}))
+    entry = _entries(client)["volume_missing"]
+    assert entry["text"] == f"Папка раздачи «Show a» на другом диске или диск не подключён ({folder})"
+    page, _ = _land(
+        client, entry, anchor="volume-topic-a", fix="accept_volume:topic:a", label="Это тот же диск — принять"
+    )
+    assert str(folder) in page
+
+
 LANDINGS = {
     "site_needs_login": test_one_topic_asking_for_a_sign_in_opens_its_row_with_the_sign_in_focused,
     "client_down": test_the_client_down_opens_its_card_with_the_status_and_check,
@@ -371,6 +382,7 @@ LANDINGS = {
     "history_trimmed": test_a_trimmed_history_is_said_on_home_and_lands_on_its_note_in_the_history,
     "data_lost": test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore,
     "topic_error": test_a_topic_error_opens_its_row_with_the_current_problem,
+    "volume_missing": test_a_folder_off_its_disk_lands_on_the_volumes_page_with_its_accept,
 }
 
 

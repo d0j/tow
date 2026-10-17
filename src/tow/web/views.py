@@ -5,6 +5,7 @@ names stay importable from here)."""
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import time
 from collections.abc import Mapping
@@ -555,7 +556,17 @@ def issue_text(issue: Issue, *, local: bool) -> str:
 
 
 # The page a Target names -> its address.
-ISSUE_PAGES = {"home": "/", "settings": "/settings", "history": "/history", "sites": "/sites"}
+ISSUE_PAGES = {"home": "/", "settings": "/settings", "history": "/history", "sites": "/sites", "volumes": "/volumes"}
+# Fixes only this PC may make (a POST behind access.require_local): a network device gets the
+# entry without them, its link to the spot that says the problem.
+LOCAL_FIXES = frozenset({"accept_volume"})
+
+
+def for_viewer(issue: Issue, *, local: bool) -> Issue:
+    """``issue`` as a network device gets it: without a fix only this PC may make."""
+    if local or issue.fix is None or issue.fix.action not in LOCAL_FIXES:
+        return issue
+    return dataclasses.replace(issue, fix=None)
 
 
 def issue_note_id(issue: Issue) -> str:
@@ -590,7 +601,7 @@ def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any], *, local: b
     """Current header problems, worst first, with stable identities and links to their fixes;
     their words for this PC (``local``) or a network device (``issue_text``)."""
     # Past history loss remains a note on History, not an active failure counter (tow.issues).
-    found = needing_attention(issues_now(state, cfg))
+    found = [for_viewer(issue, local=local) for issue in needing_attention(issues_now(state, cfg))]
     return {
         "entries": [
             {

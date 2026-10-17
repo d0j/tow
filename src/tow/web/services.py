@@ -137,6 +137,10 @@ from tow.undo import cleanup_needed as undo_cleanup_needed
 from tow.undo import local_only as undo_local_only
 from tow.undo import stamped_here as undo_stamped_here
 from tow.undo import undo_label
+from tow.volumes import ACCEPTED as ACCEPTED_VOLUME
+from tow.volumes import BUSY as BUSY_VOLUME
+from tow.volumes import REFUSED as REFUSED_VOLUME
+from tow.volumes import accept as accept_volume
 from tow.watchdog import last_problem as watchdog_problem
 from tow.web_update import finished_job as finished_web_update
 from tow.web_update import log_tail as web_update_log
@@ -144,8 +148,12 @@ from tow.web_update import start as start_web_update
 from tow.web_update import status as web_update_status
 
 __all__ = [
+    "ACCEPTED_VOLUME",
+    "BUSY_VOLUME",
     "PATH_PARAMS",
+    "REFUSED_VOLUME",
     "MessageMarkerRefused",
+    "accept_volume",
     "adopt_topic",
     "apply_undo",
     "await_relocation",
