@@ -705,6 +705,33 @@
   // ``refresh()`` answers whether the page has the install's list now: true once a list was taken or
   // a 304 confirmed it, false for a failure, a refused or damaged list, or a request of an ended
   // session. sync.js names the messages area as applied only on true and asks again otherwise.
+  // Every request takes 10 s at most, its body included: a longer one is aborted and answers as
+  // failed (``read`` is not called again, and ``current()`` says false to a body still read).
+  const TIMEOUT_MS = 10000;
+  const within = (url, init, read) => {
+    const mine = session;
+    const ending = requests; // this session's: a sign-out aborts it
+    const controller = newController();
+    const stop = () => controller?.abort();
+    ending?.signal?.addEventListener?.("abort", stop);
+    let over = false;
+    const current = () => !over && mine === session;
+    let timer = 0;
+    const late = new Promise((resolve) => {
+      timer = window.setTimeout(() => {
+        over = true;
+        stop();
+        resolve({ timedOut: true });
+      }, TIMEOUT_MS);
+    });
+    const asked = fetch(url, { ...init, signal: controller?.signal || ending?.signal })
+      .then((response) => (current() ? read(response, current) : undefined));
+    return Promise.race([asked, late]).finally(() => {
+      over = true;
+      window.clearTimeout(timer);
+      ending?.signal?.removeEventListener?.("abort", stop);
+    });
+  };
   let inFlight = null;
   let next = null; // the one refresh asked for while a request is on its way: sent right after it
   const accept = (data, etag = "") => {
@@ -736,28 +763,26 @@
     }, wait);
   };
   const ask = () => {
-    const mine = session;
     const headers = { Accept: "application/json" };
     if (shared.etag) headers["If-None-Match"] = shared.etag;
-    inFlight = fetch("/messages.json", { credentials: "same-origin", cache: "no-store", headers, signal: requests?.signal })
-      .then(async (response) => {
-        if (mine !== session) return false;
-        if (response.status === 304) return shared.loaded;
-        if (response.status === 429) {
-          limited(response);
-          return false;
-        }
-        if (response.status === 401) {
-          shared = emptyFeed(); // signed out: nothing of the list stays on the page
-          render();
-          return false;
-        }
-        if (!response.ok) return false;
-        const data = await response.json();
-        if (mine !== session) return false; // signed out while the body was read
-        return accept(data, response.headers?.get?.("ETag") || "");
-      })
-      .catch(() => false)
+    const read = async (response, current) => {
+      if (response.status === 304) return shared.loaded;
+      if (response.status === 429) {
+        limited(response);
+        return false;
+      }
+      if (response.status === 401) {
+        shared = emptyFeed(); // signed out: nothing of the list stays on the page
+        render();
+        return false;
+      }
+      if (!response.ok) return false;
+      const data = await response.json();
+      if (!current()) return false; // signed out or given up while the body was read
+      return accept(data, response.headers?.get?.("ETag") || "");
+    };
+    inFlight = within("/messages.json", { credentials: "same-origin", cache: "no-store", headers }, read)
+      .then((taken) => taken === true, () => false)
       .finally(() => { inFlight = null; });
     return inFlight;
   };
