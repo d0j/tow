@@ -72,7 +72,8 @@ TOW itself on every start, not only by `tow-env.cmd`). `secret_store_status()["k
 `env`, `file`, `install`, `legacy` or `missing`; `master_key_file()` names the file in use;
 `tow keys adopt` without `--from` takes `TOW_MASTER_KEY_FILE`, else the legacy file.
 - `tow secrets generate-key [--key-file F]` writes `keys/master.key` by default (a new folder is
-  for this account only: 0700 on POSIX, no inherited permissions on Windows; the file is created 0600 in the same call, `O_CREAT|O_EXCL`, never with the umask's mode
+  for this account only: 0700 on POSIX, no inherited permissions on Windows; the file is created 0600 in the same call,
+  `O_CREAT|O_EXCL`, never with the umask's mode
   first); it refuses the default place while `secrets.enc` exists (that would create a
   second key that takes over once `TOW_MASTER_KEY_FILE` is removed) and never overwrites a file.
 - `tow keys adopt [--from F]` (default `TOW_MASTER_KEY_FILE`) copies the key into `keys/` only
@@ -216,8 +217,8 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   a file (under `irm | iex` an exit would close the owner's window); it is ASCII (irm decodes a release asset in
   any code page). `TOW_INSTALL_SOURCE` / `TOW_INSTALL_SUMS` install from local files (tests).
 - `install.sh` takes uv `-unknown-linux-gnu` on glibc, `-musl` elsewhere (ARMv7: `-gnueabihf`,
-  `-musleabihf`), `-apple-darwin` on macOS; `--desktop` (Linux) writes `$XDG_DATA_HOME/applications/tow.desktop` (the only write
-  outside the folder besides autostart, both on request).
+  `-musleabihf`), `-apple-darwin` on macOS; `--desktop` (Linux) writes `$XDG_DATA_HOME/applications/tow.desktop` (the
+  only write outside the folder besides autostart, both on request).
 
 ## 1b. Supported systems: the dependency contract (1.33.1)
 
@@ -345,16 +346,28 @@ blocks for long.
   operation on `data/service-restart.json`: stopping → starting → ready/failed; a new server that
   exits three times before it answers is "failed"); `tow stop` and the updater stop TOW. A stop
   lets a running job finish (up to 10 minutes, then it is stopped), then stops the web server and
-  exits 0. SIGTERM (systemd, launchd), SIGHUP (its terminal closed; a hangup that is already ignored, as under `nohup tow run &`,
+  exits 0. SIGTERM (systemd, launchd), SIGHUP (its terminal closed; a hangup that is already ignored, as under
+  `nohup tow run &`,
   stays ignored and TOW keeps running), Ctrl+C and, on Windows,
   Ctrl+Break (SIGBREAK) stop it the same
-  way with a 20-second job limit (all in all about 50 s: `SIGNAL_STOP_BUDGET_SEC`, which systemd's `TimeoutStopSec` and launchd's
+  way with a 20-second job limit (all in all about 50 s: `SIGNAL_STOP_BUDGET_SEC`, which systemd's `TimeoutStopSec` and
+  launchd's
   `ExitTimeOut` exceed).
 - **Status and logs.** `data/run/status.json` is rewritten only when something changes (server
   state and pid, restarts, the running job, the next due times, the last wake) — never on a
   timer, so the disk can sleep. A reader holding it (Windows refuses the replace then) is waited
-  for briefly; a write that still fails leaves no temporary file and is made at the next tick. `data/logs/run.log` is rotated at 5 MiB × 3; the terminal gets the
+  for briefly; a write that still fails leaves no temporary file and is made at the next tick. `data/logs/run.log` is
+  rotated at 5 MiB × 3; the terminal gets the
   same lines only when stderr is one (not the journal or `launchd.log`).
+- **Open pages** (1.33). Every signed-in page asks `GET /sync.json` every 5 s while it is visible (none while it is
+  hidden, one at once when it is shown again; a failure waits 5, 10, 20, 40, then 60 s); the web server answers from
+  one shared sample of the install's files, taken at most once a second and at once after its own write, so a change
+  by another process (a scheduled check, `tow run`, a command) shows within about 6 s. `/sync.json`, `/topics/rows`,
+  `/page/fragments` and `/messages*` share one token bucket per session of a device on the network and per tab of
+  this computer: `web.rate_burst` requests at once (default 40, 10 to 1000) refilled at `web.rate_per_sec` a second
+  (default 4, 0.5 to 50); past it they answer 429 with `Retry-After`. Another value takes effect with the next
+  sample, without a restart; a bucket keeps its tokens then (a larger burst is earned at the new rate, never
+  granted at once). A value out of range, or another key under `web`, is a `config.yaml` error like any other.
 
 Without autostart: `tow run` in a terminal (`<app>\scripts\tow.cmd run` / `<app>/scripts/tow run`).
 
@@ -480,7 +493,8 @@ the archive does not contain it. Download a portable backup for moving to anothe
 copy alone does not protect against disk loss. Media files are never included or changed.
 
 The updater and its base Python run outside `app/` and `.venv/`, so replacing the environment or closing the
-web page does not stop the update. Its durable record and bounded redacted log live in `runtime/web-update/`; the next update removes the
+web page does not stop the update. Its durable record and bounded redacted log live in `runtime/web-update/`; the next
+update removes the
 folders of all but the three newest earlier jobs (never the current one, never one whose worker still runs).
 Normal web mutations are refused while the job is active. The existing updater stops TOW, creates and verifies
 an additional exact snapshot of `config.yaml` and persistent data in `backup/`, then switches code, synchronizes
@@ -533,7 +547,8 @@ the configured origin trusted; installing from an arbitrary URL or branch is not
 Export without overwrite atomically publishes prepared bytes (Windows rename; POSIX hard link, or on a file system
 without hard links such as exFAT the system's rename that refuses an existing name: renameat2 on Linux, renamex_np on
 macOS) and refuses an occupied name even if another writer creates it during preparation. A POSIX destination that
-supports neither fails safely rather than using a replacing or copying fallback; choose a supported filesystem. Unreadable/foreign
+supports neither fails safely rather than using a replacing or copying fallback; choose a supported filesystem.
+Unreadable/foreign
 restore archives are preserved during rotation. Failure to delete an old copy retains the verified new copy
 and reports a cleanup warning.
 
@@ -544,14 +559,21 @@ on Windows. `tow update --ref <tag>` prints the exact command; on Windows
 `app\scripts\deploy.ps1 -Ref <tag>` (`-HealthTimeoutSec` 90, `-CheckWaitMinutes`, `-KeepSnapshots`;
 Windows PowerShell 5.1 or 7, ASCII, `-LiteralPath`; `powershell -ExecutionPolicy Bypass -File …`
 where the execution policy refuses scripts) finds that Python (or else the first Python 3.11+ the
-Python launcher lists, `py -0p`) and runs it. uv, Python and uv's cache come from one resolver, `launcher_env`, the same as the launchers give: `runtime/bin/uv` before uv on
+Python launcher lists, `py -0p`) and runs it. uv, Python and uv's cache come from one resolver, `launcher_env`, the same
+as the launchers give: `runtime/bin/uv` before uv on
 PATH, `UV_PYTHON_INSTALL_DIR`, `UV_PYTHON_BIN_DIR`, `UV_CACHE_DIR` under `<TOW>/runtime`,
 `UV_PROJECT_ENVIRONMENT=app/.venv`, `UV_MANAGED_PYTHON=1` (so an install whose Python is still
 outside `runtime/` gets it there on its first update, which needs the network; `tow setup`
 before the update does the same).
 
+Machine JSON is ASCII since 1.33.1: every `--json` of `tow` (`tow doctor --json` and the JSON refusals too)
+writes other characters as `\u` escapes. Windows PowerShell 5.1 decodes a native program's pipe in the console's
+OEM code page whatever the program writes, so `tow.cmd status --json | ConvertFrom-Json` (as `deploy.ps1` and
+`bundle-smoke.ps1` read it) garbled a Cyrillic install folder before. Text for people is unchanged.
+
 1. One update at a time (`<TOW>/.update.lock`); refuse a development checkout and local edits of
-   tracked files; `git fetch --tags --prune origin`; resolve the ref; refuse a target older than **v1.18.0** — the minimum rollback target
+   tracked files; `git fetch --tags --prune origin`; resolve the ref; refuse a target older than **v1.18.0** — the
+   minimum rollback target
    of the supervised-service layout (older versions have no `tow run`) — and a target that cannot
    read `data/state.json`: its `STATE_SCHEMA_VERSION` (none: v1.18, which reads format 1) is lower than
    the file's `schema_version` (v1.22 reads format 1, v1.23 writes 2), or the file cannot be
@@ -577,7 +599,8 @@ before the update does the same).
 6. Health: `/healthz` must report the **target version** and `/health.json` must answer (it reads
    the state), within `--health-timeout` (90 s); no proxies.
 7. On failure every rollback step runs in its own `try` and is recorded: stop the new one, check
-   out the previous code (forced, judged by the work tree, tried for half a minute), `uv sync`, put data and config back from the snapshot **if the new
+   out the previous code (forced, judged by the work tree, tried for half a minute), `uv sync`, put data and config back
+   from the snapshot **if the new
    version changed them** (what the snapshot leaves out is never touched — the failed version's
    logs stay, they say why it failed), start the previous version and check it reports the
    previous version. The outcome is `rolled_back` (previous version answers) or `failed` (it says
@@ -634,7 +657,8 @@ same steps, with the code from the release instead of git.
   (`TOW_UPDATE_HERE=1` asks for that) and is said so. A killed update process or a power cut
   ends it at once: the next run of the update reads the switch record and tries to put the
   previous code back first. That needs the record and the moved
-  code (`app.prev/`) to be readable; when they are not, it says so and changes nothing. The updater is copied to `<TOW>/runtime/update.py` before moving files so the
+  code (`app.prev/`) to be readable; when they are not, it says so and changes nothing. The updater is copied to
+  `<TOW>/runtime/update.py` before moving files so the
   launchers can run it even if `app/scripts` is temporarily absent. A rollback moves back the
   entries recorded on disk (the failed code goes to `app.failed/` and is removed), so the old
   `.venv` is in its place again and its absolute paths are right. One `app.prev` is kept after
@@ -654,7 +678,8 @@ same steps, with the code from the release instead of git.
   (exit code, pause, end). Where the new file is too long for that (the short 1.22 file), a line
   at that byte ends the old run the same way (`pause & exit /b`); a run of the new file passes
   over it, as its first lines set `TOW_FILE_RUN` to that line's offset, which no other file's run
-  has. A file that already has this version's form is not written again, and the size stays. An `Update TOW.cmd` without that line (`--ref "%TOW_REF%"`) is not one TOW
+  has. A file that already has this version's form is not written again, and the size stays. An `Update TOW.cmd` without
+  that line (`--ref "%TOW_REF%"`) is not one TOW
   wrote and is left as it is. A version without `scripts/root_files.py` (going back before it)
   leaves the files as they are; they still start it.
 - `--source FILE` (and `--sums FILE`) take a local archive instead of a download.
@@ -749,7 +774,8 @@ files. A new copy that does not read back or is hash-correct but unusable is rec
 removed (never listed or counted for retention) and cannot prune older copies. A new copy checks the live
 stores before it takes the data lock and keeps the hash of the bytes that passed; under the lock a store copied
 with that hash is proven, one that changed in between is checked from the copy, and the read-back compares
-hashes only, so saves wait for the copy itself, not for parsing. Missing optional stores and valid legacy containers remain supported. This follows
+hashes only, so saves wait for the copy itself, not for parsing. Missing optional stores and valid legacy containers
+remain supported. This follows
 the separation of cryptographic verification and archive consistency checks described in
 [Borg's check documentation](https://borgbackup.readthedocs.io/en/stable/usage/check.html),
 with application-format checks supplied by TOW's own readers.
@@ -796,14 +822,29 @@ environment and Python 3.11 syntax.
 [architecture.md](architecture.md#code-api-paths-and-platform)):
 - **windows.py** — boot time and time asleep (kernel32 `GetTickCount64` /
   `QueryUnbiasedInterruptTime`), sign-in time (wtsapi32), shutdown records (`wevtutil`, events
-  1074/41/6008), the port's owner (PowerShell `Get-NetTCPConnection` + `Win32_Process`), hidden
+  1074/41/6008, and since 1.33.1 event 109 of the provider `Microsoft-Windows-Kernel-Power`, version 0: its
+  `ShutdownActionType` 5 is a restart, 6 a power-off, attached to the 1074 just before it, at most two minutes
+  earlier with no crash record between; two that disagree are "unclear", any other code or version says nothing,
+  and a 109 never becomes a record of its own, so the 1074's process and Windows Update attribution stay; without
+  it only an English 1074 names the kind, otherwise the watchdog says "shut down or restarted"), the port's owner
+  (PowerShell `Get-NetTCPConnection` + `Win32_Process`), hidden
   detached starts (`CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP`, leaving the job with
   `CREATE_BREAKAWAY_FROM_JOB` when the job allows it), tree stop (`taskkill /T /F`, then waits),
-  `process_alive` through `OpenProcess`/`GetExitCodeProcess` (never `os.kill`, which terminates on
+  `process_alive` through `OpenProcess`/`WaitForSingleObject` (never `os.kill`, which terminates on
   Windows), Edge then Chrome (Program Files, LocalAppData, PATH), the browser window to the front,
   protected folders: Windows, Program Files, ProgramData, AppData (from the environment, plus
   `C:\Windows`, `C:\Program Files…`, `C:\ProgramData` defaults so a Windows client is protected
   also when TOW runs elsewhere).
+  - **PowerShell Constrained Language Mode** (an AppLocker or App Control for Business/WDAC policy): PowerShell
+    then refuses .NET calls outside its core types. Setting `[Console]::OutputEncoding` fails, so the port's
+    owner and a process's command line come back in the ANSI code page, where a folder with other letters
+    (Cyrillic on an English Windows) no longer matches; `[Convert]::ToBase64String` fails, so the autostart task
+    cannot be read back. TOW does not try to get around the restriction. Such a probe answers "unknown", and
+    unknown is never taken as yes: a TOW web server left on the port is not recognised as this install's and is
+    not stopped (`tow run` says the port is in use: stop it yourself), a process whose command line cannot be
+    read is never stopped as an update worker, and Settings → TOW service and Diagnostics say that the autostart
+    state could not be read (turning autostart on is not confirmed either). `tow-uv-config.cmd` is written to need
+    cmdlets only.
 - **posix.py** (`PosixBackend("linux" | "macos")`) — boot time from `/proc/uptime` or
   `sysctl -n kern.boottime`; time asleep from two clocks (`CLOCK_BOOTTIME − CLOCK_MONOTONIC` on
   Linux, `CLOCK_MONOTONIC − CLOCK_UPTIME_RAW` on macOS); sign-in time `None`; shutdown records =
@@ -848,6 +889,18 @@ environment and Python 3.11 syntax.
   alone needs (the child interpreter, spawning an owned child with `popen_options`, the port
   probe) and takes `process_alive`, `terminate`, `port_owner`, `bind_children` and
   `die_with_parent` from `tow.platform`.
+- **Volumes** (1.33.1, `volume_of`): the file system an existing path is on, read-only, `None` when it cannot be
+  told: on Windows the volume GUID of its mount point (a folder a disk is mounted on counts; a share or a mapped
+  drive by its path), on Linux `/proc/self/mountinfo` (type, mount point and source), on macOS `statfs`; with it
+  whether it is a network one (`tow doctor`'s note on `data/`). A check that confirms a topic's file on disk
+  records its folder's volume in the download history; a nightly backup or a restore point written and read back
+  records its folder's volume in `state.json` (`backup_volumes`). From then on the folder, or while it is missing
+  its nearest existing parent, must be on that volume: on another, a missing or an unreadable one the topic's files
+  stay unconfirmed (never "missing"), no free space is measured there and no copy is written; Needs attention says
+  so (`volume_missing`). A record is never replaced by itself: only `tow check --apply --rebind-volumes` or
+  **Same disk — accept** on `/volumes` (on this computer) binds the folder again, and only to a volume a file of
+  the topic (or a copy TOW opens) is found on now; a folder moved elsewhere records anew, and an import keeps no
+  records. Without a record everything is as before 1.33.1.
 - File locks are `tow.platform.locks` (`msvcrt` on Windows, `flock` elsewhere), used by
   `storage/locks.py`, `log.py`, `supervisor/layout.py` and `web_update.py`.
 
@@ -878,7 +931,8 @@ environment and Python 3.11 syntax.
   `bind`; anything else gets 403 "untrusted host". A write must state its size (a chunked body,
   or an upload without `Content-Length`: 411) and a form stays under 512 KiB (413); the `.towx`
   import and the `.torrent` preview are uploads with their own limits. The sign-in form takes only
-  `application/x-www-form-urlencoded` (415). Wrong passwords lock a device out after 5 in 10 minutes (30 s, doubling with each
+  `application/x-www-form-urlencoded` (415). Wrong passwords lock a device out after 5 in 10 minutes (30 s, doubling
+  with each
   further one up to an hour), and every device after 30 from all of them (up to 15 minutes).
 - `scripts/tow.cmd <command>`: the venv's `tow.exe`, else (not set up yet)
   `uv run --frozen --no-dev --project app tow`; the exit code is TOW's. An environment that is
