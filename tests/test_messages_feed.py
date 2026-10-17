@@ -8,7 +8,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import uuid
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -632,3 +632,59 @@ def test_a_log_that_keeps_rotating_while_read_keeps_the_last_good_snapshot(monke
     with pytest.raises(messages_feed.MarkerRefused):
         feed.mark(before.projection.entries[0]["pos"].cursor(), clear=True)
     assert not ui_state_path().exists()
+
+
+# --------------------------------------------------------------------------- markers across a concurrent rotation
+
+
+def test_a_marker_saved_meanwhile_in_a_rotated_in_file_never_moves_back(monkeypatch):
+    """Device A clears the list it shows; before A gets the markers' lock, the log rotates and
+    device B (another server process) clears up to an event in the new file. A never puts the
+    older marker back: the cleared message would come back."""
+    _raw("topic_add", topic="a")
+    shown = _feed()  # device A's list
+    other = messages_feed.Feed(log.log_path())  # device B's server process
+    real_lock = messages_feed.ui_state_lock
+    newer: list[str] = []
+
+    @contextmanager
+    def lock():
+        if not newer:
+            _rotate()
+            newer.append(_raw("topic_add", topic="b"))
+            on_b = messages_feed.render(other.refresh().projection, lang="en")
+            other.mark(on_b["cursor"], clear=True)
+        with real_lock():
+            yield
+
+    monkeypatch.setattr(messages_feed, "ui_state_lock", lock)
+    with suppress(messages_feed.MarkerRefused):  # refused: A's list changed meanwhile
+        messages_feed.feed().mark(shown["cursor"], clear=True)
+    stored = json.loads(ui_state_path().read_text(encoding="utf-8"))
+    assert stored["read_upto"]["event"] == newer[0]
+    assert stored["cleared_upto"]["event"] == newer[0]
+    assert _feed()["items"] == []  # nothing cleared comes back
+    assert messages_feed.render(other.refresh().projection, lang="en")["items"] == []
+
+
+def test_a_saved_marker_that_cannot_be_ranked_is_never_replaced_blindly(monkeypatch):
+    """A marker in a file this reader could not read now (held by another program) may be newer
+    than the cursor: the read is refused, the marker stays."""
+    _raw("topic_add", topic="a")
+    older = _feed()["cursor"]
+    _rotate()
+    _raw("topic_add", topic="b")
+    messages_feed.feed().mark(_feed()["cursor"], clear=False)  # read up to b, in the live file
+    marker = ui_state_path().read_bytes()
+    live = log.log_path()
+    opened = Path.open
+
+    def held(self, *args, **kwargs):
+        if self == live:
+            raise PermissionError("held by another program")
+        return opened(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", held)
+    with suppress(messages_feed.MarkerRefused):
+        messages_feed.feed().mark(older, clear=True)
+    assert ui_state_path().read_bytes() == marker
