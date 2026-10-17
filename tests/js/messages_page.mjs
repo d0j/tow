@@ -99,7 +99,7 @@ const page = ({ storage, served = null, undo = null, address = "http://127.0.0.1
     location: { href: address },
     history: { state: null, replaceState: (_state, _title, url) => replaced.push(url) },
     setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
-    fetch: server.fetch, URLSearchParams, Promise,
+    fetch: (...args) => server.fetch(...args), URLSearchParams, Promise, AbortController,
   };
   vm.runInNewContext(source, context);
   const $ = (selector) => document.root.querySelector(selector);
@@ -288,6 +288,51 @@ verdict.signedOutDropsTheList = true;
   assert.equal(await late, false);
 }
 verdict.refreshSaysWhetherTheListIsCurrent = true;
+
+// A request for the list that never answers, or whose body never ends: given up (aborted) after
+// 10 s, refresh() answers false (sync.js asks again later), and the next refresh is a request of
+// its own - nothing waits behind the lost one. A body that ends after that is not used.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "ok", subject: "Show A", text: "New file", at: 1800000100 }]);
+  const plain = server.fetch;
+  let hang = "";
+  let late = null;
+  const signals = [];
+  server.fetch = (url, options = {}) => {
+    if (url !== "/messages.json" || !hang) return plain(url, options);
+    signals.push(options.signal);
+    const asked = plain(url, options);
+    if (hang === "fetch") return new Promise(() => {});
+    return asked.then((answer) => ({
+      ...answer,
+      json: () => new Promise((resolve) => { late = () => resolve({ items: [{ id: "stale", kind: "err", text: "old" }], unread: 1, worst: "err", cursor: "x" }); }),
+    }));
+  };
+  const live = page({ storage: memoryStorage(), server });
+  await settle();
+  for (const kind of ["fetch", "body"]) {
+    hang = kind;
+    server.change(() => {}); // a new list: a 200 with a body
+    let answered = null;
+    live.window.towMessages.refresh().then((value) => { answered = value; });
+    await settle();
+    live.timers.advance(9900);
+    await settle();
+    assert.equal(answered, null, kind);
+    live.timers.advance(200);
+    await settle();
+    assert.equal(answered, false, kind);
+    assert.equal(signals.at(-1)?.aborted, true, kind);
+    hang = "";
+    const count = server.requests.length;
+    assert.equal(await live.window.towMessages.refresh(), true, kind);
+    assert.equal(server.requests.length, count + 1, kind);
+  }
+  late();
+  await settle();
+  assert.deepEqual(live.window.towMessages.shared().items.map((item) => item.id), ["e1"]);
+}
+verdict.hungListGivenUp = true;
 
 // One request for the list when the tab is shown or a poll names it: refreshes asked in the same
 // moment (the undo and the messages areas of one answer) are one request, and under sync.js (its
