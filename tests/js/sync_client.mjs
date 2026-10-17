@@ -22,9 +22,11 @@ const harness = ({ random = () => 0.5, answer = null } = {}) => {
   const sent = [];
   const queue = [];
   let hiddenNow = false;
+  let wallShift = 0; // the wall clock set back or forward; the steady one never moves back
   const ended = [];
   const client = createSyncClient({
-    now: clock.now,
+    now: () => clock.now() + wallShift,
+    monotonic: clock.now,
     setTimer: clock.setTimeout,
     clearTimer: clock.clearTimeout,
     random,
@@ -45,7 +47,11 @@ const harness = ({ random = () => 0.5, answer = null } = {}) => {
       if (clock.now() >= end && sent.length === before) break;
     }
   };
-  return { clock, sent, queue, client, run, ended, hide: (on) => { hiddenNow = on; } };
+  return {
+    clock, sent, queue, client, run, ended,
+    hide: (on) => { hiddenNow = on; },
+    setClock: (ms) => { wallShift += ms; },
+  };
 };
 const verdict = {};
 
@@ -250,6 +256,55 @@ verdict.jitterBounded = true;
   assert.ok(test.sent[1].at - failedAt >= 30000);
 }
 verdict.retryAfterHonoured = true;
+
+// 429 with Retry-After 12, then the tab hidden and shown again inside the window: the hide
+// cleared the timer, and the show used to return without planning anything - the page never
+// asked again (1.33.1 QA-02). It asks at the window's end, then every 5 s; also when the wall
+// clock was set back an hour meanwhile (the waits run on the steady clock).
+for (const shift of [0, -3600000, 3600000]) {
+  const test = harness();
+  test.queue.push(async () => ({ status: 429, retryAfter: 12 }));
+  test.client.start();
+  await test.run(2600);
+  const failedAt = test.sent[0].at;
+  test.setClock(shift);
+  test.hide(true);
+  test.client.hidden();
+  await test.run(2000);
+  test.hide(false);
+  test.client.nudge("show");
+  await test.run(9000);
+  assert.equal(test.sent.length, 1, `shift ${shift}: nothing inside the window`);
+  await test.run(1000);
+  assert.equal(test.sent.length, 2, `shift ${shift}: asked at the window's end`);
+  assert.ok(test.sent[1].at - failedAt >= 12000 && test.sent[1].at - failedAt <= 12100, String(test.sent[1].at - failedAt));
+  await test.run(10100);
+  assert.equal(test.sent.length, 4, `shift ${shift}: then every 5 s`);
+}
+// A hint inside the window, with no timer planned (cleared by a hide), plans the window's end.
+{
+  const test = harness();
+  test.queue.push(async () => ({ status: 429, retryAfter: 12 }));
+  test.client.start();
+  await test.run(2600);
+  const failedAt = test.sent[0].at;
+  test.client.hidden();
+  test.client.nudge("hint");
+  await test.run(12000);
+  assert.equal(test.sent.length, 2);
+  assert.ok(test.sent[1].at - failedAt >= 12000, String(test.sent[1].at - failedAt));
+}
+// A wall clock set back an hour during a failure's backoff does not stretch the wait.
+{
+  const test = harness();
+  test.queue.push(async () => ({ status: 500 }));
+  test.client.start();
+  await test.run(2600);
+  test.setClock(-3600000);
+  await test.run(6200);
+  assert.equal(test.sent.length, 2);
+}
+verdict.retryAfterSurvivesHideShowAndClockJumps = true;
 
 // A request that does not answer in 10 s is aborted and counts as a failure (5 s later again).
 {
