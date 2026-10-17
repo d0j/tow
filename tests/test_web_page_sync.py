@@ -305,6 +305,38 @@ def test_a_random_suggestion_and_the_free_space_are_no_change():
     assert 'data-q="open"' in page_sync.normalized(html)  # a word "open" in a value stays
 
 
+def test_each_render_suggests_its_own_connection_without_changing_the_digest(clock):
+    """1.33.1 A03: the blank new-connection card gets a random id per render (two tabs never share
+    one), and only that card's own references to it are left out of the digest."""
+    _seed()
+    cfg = load_config()
+    cfg["protection"] = {
+        "enabled": True,
+        "providers": [{"id": "first", "kind": "flaresolverr", "url": "http://127.0.0.1:8191", "enabled": True}],
+    }
+    save_config(cfg)
+    local = TestClient(app, headers=ORIGIN)
+    pages = [local.get("/settings").text for _ in range(2)]
+    ids = [re.findall(r'name="provider_id" value="(new-connection-[0-9a-f]{32})"', page) for page in pages]
+    assert len(ids[0]) == len(ids[1]) == 1
+    assert ids[0] != ids[1]
+    assert _marks(pages[0]) == _marks(pages[1]) == (_page_rev(local, "/settings"), _marks(pages[0])[1])
+
+
+def test_only_the_blank_suggestions_own_references_leave_the_digest():
+    """The same string elsewhere - a saved connection's id, a typed address - is kept: it may be a
+    real change."""
+    card = '<details class="c" data-sync-suggestion="{0}"><input name="provider_id" value="{0}"></details>'
+    one, two = "new-connection-" + "a" * 32, "new-connection-" + "b" * 32
+    assert page_sync.digest(card.format(one)) == page_sync.digest(card.format(two))
+    saved = '<input name="provider_url" value="http://x/{0}">'
+    assert page_sync.digest(card.format(one) + saved.format(one)) != page_sync.digest(
+        card.format(two) + saved.format(two)
+    )
+    nested = '<details data-sync-suggestion="{0}"><details><p>{0}</p></details><p>{0}</p></details><p>{0}</p>'
+    assert page_sync.normalized(nested.format(one)).count(one) == 1  # only the one after the card
+
+
 @pytest.mark.parametrize("path", ["/settings", "/", "/sites", "/topics/t1/edit"])
 def test_every_select_of_a_form_draws_one_option_chosen(path):
     """Final QA 1.33.0 F1: a select whose markup marks no option shows its first one, which a

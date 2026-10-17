@@ -8,7 +8,8 @@ as *fragments* - a Sites row, a Settings section, the empty list - between two c
 
 A fragment's digest is the SHA-256 of what it draws, without what only the address chose (a
 section opened by ``?open=``, a field focused by ``?fix=``, a refused field) and without what
-changes by itself (``data-sync-volatile``: the free disk space, a random topic name offered). The page area's
+changes by itself (``data-sync-volatile``: the free disk space, a random topic name offered; and
+``data-sync-suggestion``: the blank new connection's random id, only in that card). The page area's
 revision (``tow.web.sync``) is the digest of the fragments in their order: a routine check that
 changes nothing a page draws changes no revision, and a page opens knowing its own (``annotate``),
 so it asks for nothing until something it shows changes. ``GET /page/fragments`` then hands the
@@ -43,6 +44,10 @@ _ATTR = re.compile(r"\s+([^\s=>/]+)(?:\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+))?")
 _VOLATILE = re.compile(r"<span\b[^>]*\bdata-sync-volatile\b[^>]*>[^<]*</span>")
 # What only the address chose: a section or card opened for a link, a field focused or marked.
 _ADDRESS_ONLY = {"autofocus", "aria-invalid"}
+# The blank suggestion of a new card names its id, made up anew each render, here.
+_SUGGESTION = 'data-sync-suggestion="'
+_SUGGESTED = "new-connection"
+_SUGGESTION_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,47}")
 
 
 def _drop_attributes(tag: str, attrs: str, slash: bool, whole: str) -> str:
@@ -72,9 +77,51 @@ def _tag_end(html: str, at: int) -> int:
     return -1
 
 
+def _details_end(html: str, start: int) -> int:
+    """Where the ``<details>`` element opened at ``start`` ends (after its ``</details>``), nested
+    ones counted; -1 when it does not end."""
+    depth = 0
+    at = start
+    while True:
+        opening = html.find("<details", at)
+        closing = html.find("</details>", at)
+        if closing < 0:
+            return -1
+        if 0 <= opening < closing:
+            depth += 1
+            at = opening + len("<details")
+            continue
+        depth -= 1
+        at = closing + len("</details>")
+        if depth == 0:
+            return at
+
+
+def _suggestions_normalized(html: str) -> str:
+    """Each marked blank suggestion with its own id the same every render: replaced only inside
+    the ``<details>`` card that names it, never elsewhere (a saved id, an address or a draft that
+    happen to hold the same text are real values)."""
+    out: list[str] = []
+    done = 0
+    while (mark := html.find(_SUGGESTION, done)) >= 0:
+        start = html.rfind("<details", done, mark)
+        value_end = html.find('"', mark + len(_SUGGESTION))
+        ident = html[mark + len(_SUGGESTION) : value_end] if value_end >= 0 else ""
+        end = _details_end(html, start) if start >= 0 else -1
+        if end < 0 or not _SUGGESTION_ID.fullmatch(ident):
+            out.append(html[done : mark + len(_SUGGESTION)])
+            done = mark + len(_SUGGESTION)
+            continue
+        out.append(html[done:start])
+        out.append(html[start:end].replace(ident, _SUGGESTED))
+        done = end
+    out.append(html[done:])
+    return "".join(out)
+
+
 def normalized(html: str) -> str:
     """What a fragment draws, without what the address alone chose or what changes by itself."""
-    html = _VOLATILE.sub("", html)
+    html = _suggestions_normalized(_VOLATILE.sub("", html))
     out: list[str] = []
     done = 0
     for start in _TAG_START.finditer(html):

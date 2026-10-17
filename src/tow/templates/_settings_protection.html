@@ -38,7 +38,9 @@
               site is reachable (TOW checks the topic itself), so never green. -#}
           {% set off = not p.enabled or not protection.enabled %}
           {%- set key = 'providers:' ~ p.id ~ ':' %}
-          <details class="integration-card protection-card"{% if p.url %} open{% endif %}>
+          {#- The blank suggestion's id is new in every render: marked, so the digest leaves its
+              own references out (page_sync); a draft's card keeps its id as a real value. -#}
+          <details class="integration-card protection-card"{% if p.url %} open{% endif %}{% if p.new and not p.draft %} data-sync-suggestion="{{ p.id }}"{% endif %}>
             <summary class="integration-head">
               <h2>{% if p.new %}{{ t('protection_ui.add') }}{% else %}{{ p.title }}{% if p.on_demand %} <span class="card-meta" title="{{ t('protection_ui.on_demand_hint') }}">{{ t('protection_ui.on_demand') }}</span>{% endif %}{% endif %}</h2>
               {% if not p.new and p.available %}<span class="integration-pills"><span class="pill {{ 'mut' if off else {'unavailable': 'bad', 'protocol': 'bad', 'busy': 'warn'}.get(p.api_status, 'mut') }}">{{ t('protection_ui.off') if off else t(p.api_key) }}</span></span>{% endif %}

@@ -11,6 +11,7 @@ without scripts would post them.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlsplit
@@ -877,17 +878,71 @@ def _with_new_connection(form: dict, kind: str, url: str) -> dict:
     }
 
 
-def test_two_tabs_adding_different_services_never_save_a_hybrid_connection(protection_two):
-    """Re-check 1.33.0 #1: both tabs offered the same suggested id; after A saved, B's recovery
-    form drew that id as A's saved card - A's service with B's address - and "mine" saved a
-    connection neither tab configured. The recovery form brings back B's whole collection."""
+def test_two_tabs_adding_different_services_both_keep_their_connection(protection_two):
+    """1.33.1 A03: every render suggests its own new connection (128 random bits), and two tabs
+    that only add one each are both saved, in the order they were saved, without a conflict: each
+    list is provably the base followed by additions (a prefix of each has the base's digest)."""
     a, b = protection_two
     a_form, b_form = protection_form(a), protection_form(b)
-    assert a_form["provider_id"][-1] == b_form["provider_id"][-1]  # the same suggestion
+    a_id, b_id = a_form["provider_id"][-1], b_form["provider_id"][-1]
+    assert a_id != b_id  # each render its own suggestion
+    assert re.fullmatch(r"new-connection-[0-9a-f]{32}", a_id)
+    post(a, "/settings/protection", _with_new_connection(a_form, "flaresolverr", "http://127.0.0.1:8201"))
+    response = post(b, "/settings/protection", _with_new_connection(b_form, "byparr", "http://127.0.0.1:8202"))
+    assert "conflict=" not in response.headers["location"]
+    saved = [(item["id"], item["kind"], item["url"]) for item in load_config()["protection"]["providers"]]
+    assert saved == [
+        ("first", "flaresolverr", "http://127.0.0.1:8191/v1"),
+        ("second", "byparr", "http://127.0.0.1:8192/v1"),
+        (a_id, "flaresolverr", "http://127.0.0.1:8201/v1"),
+        (b_id, "byparr", "http://127.0.0.1:8202/v1"),
+    ]
+
+
+def test_an_added_connection_with_an_id_saved_meanwhile_is_a_conflict(protection_two):
+    """A suffix whose id is already saved (a forged or replayed form) is no addition: the union is
+    refused and the conflict stays."""
+    a, b = protection_two
+    a_form, b_form = protection_form(a), protection_form(b)
+    post(a, "/settings/protection", _with_new_connection(a_form, "flaresolverr", "http://127.0.0.1:8201"))
+    forged = _with_new_connection(b_form, "byparr", "http://127.0.0.1:8202")
+    forged["provider_id"] = [*forged["provider_id"][:-1], a_form["provider_id"][-1]]
+    forged["provider_enabled"] = [*forged["provider_enabled"][:-1], a_form["provider_id"][-1]]
+    response = post(b, "/settings/protection", forged)
+    assert "conflict=" in response.headers["location"]
+    assert len(providers()) == 3
+
+
+def test_a_union_past_the_connection_limit_is_a_conflict(protection_two):
+    """At 15 saved connections two tabs adding one each would make 17: the second is refused as
+    a conflict, the first stays."""
+    a, b = protection_two
+    form = protection_form(a)
+    for number in range(13):
+        form = _with_new_connection(form, "byparr", f"http://127.0.0.1:{8300 + number}")
+        assert "conflict=" not in post(a, "/settings/protection", form).headers["location"]
+        form = protection_form(a)
+    assert len(providers()) == 15
+    a_form, b_form = protection_form(a), protection_form(b)
+    post(a, "/settings/protection", _with_new_connection(a_form, "flaresolverr", "http://127.0.0.1:8201"))
+    assert len(providers()) == 16
+    response = post(b, "/settings/protection", _with_new_connection(b_form, "byparr", "http://127.0.0.1:8202"))
+    assert "conflict=" in response.headers["location"]
+    assert len(providers()) == 16
+
+
+def test_two_tabs_adding_different_services_never_save_a_hybrid_connection(protection_two):
+    """Re-check 1.33.0 #1: after A saved, B's recovery form drew A's saved card with B's address,
+    and "mine" saved a connection neither tab configured. B also edited a saved connection here,
+    so its list is no mere addition and the save is a conflict: the recovery form brings back B's
+    whole collection."""
+    a, b = protection_two
+    a_form, b_form = protection_form(a), protection_form(b)
     post(a, "/settings/protection", _with_new_connection(a_form, "flaresolverr", "http://127.0.0.1:8201"))
     assert len(providers()) == 3
-    location = post(b, "/settings/protection", _with_new_connection(b_form, "byparr", "http://127.0.0.1:8202"))
-    location = location.headers["location"]
+    b_sent = _with_new_connection(b_form, "byparr", "http://127.0.0.1:8202")
+    b_sent["provider_url"] = [b_sent["provider_url"][0], "http://127.0.0.1:8193", *b_sent["provider_url"][2:]]
+    location = post(b, "/settings/protection", b_sent).headers["location"]
     assert "conflict=" in location
     again = protection_form(b, location)
     shown = list(zip(again["provider_kind"], again["provider_url"], strict=True))
@@ -898,7 +953,7 @@ def test_two_tabs_adding_different_services_never_save_a_hybrid_connection(prote
     saved = [(item["kind"], item["url"]) for item in load_config()["protection"]["providers"]]
     assert saved == [
         ("flaresolverr", "http://127.0.0.1:8191/v1"),
-        ("byparr", "http://127.0.0.1:8192/v1"),
+        ("byparr", "http://127.0.0.1:8193/v1"),
         ("byparr", "http://127.0.0.1:8202/v1"),
     ]
 
@@ -930,7 +985,10 @@ def test_a_protection_conflict_resolved_as_saved_keeps_the_connections_saved_now
     a_form, b_form = protection_form(a), protection_form(b)
     post(a, "/settings/protection", _with_new_connection(a_form, "flaresolverr", "http://127.0.0.1:8201"))
     before = load_config()["protection"]["providers"]
-    response = post(b, "/settings/protection", _with_new_connection(b_form, "byparr", "http://127.0.0.1:8202"))
+    b_sent = _with_new_connection(b_form, "byparr", "http://127.0.0.1:8202")
+    b_sent["provider_url"] = [b_sent["provider_url"][0], "http://127.0.0.1:8193", *b_sent["provider_url"][2:]]
+    response = post(b, "/settings/protection", b_sent)  # an edit of a saved one too: no mere addition
+    assert "conflict=" in response.headers["location"]
     again = protection_form(b, response.headers["location"])
     post(b, "/settings/protection", {**again, "resolve_providers": "current"})
     assert load_config()["protection"]["providers"] == before

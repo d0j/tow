@@ -10,7 +10,8 @@ form showed and what its save asks for.
   card. Passwords and tokens are opaque comparison tokens, never in the page.
 - Site access (protection): its switch and each limit on their own; its connections one group
   (their order ties them together), compared as a digest - a stale form never brings back a
-  connection removed elsewhere.
+  connection removed elsewhere. Two forms that each only added connections are both kept
+  (``appended_connections``); anything else changed on both sides is a conflict.
 - Nightly backups: the automatic switch, the retention and each folder, one value each.
 - Autostart: the switch and "without signing in", each on its own (read from the OS).
 - Network access and its password: one indivisible card, guarded by its revision (an opaque
@@ -248,6 +249,37 @@ def protection_now(settings: Mapping[str, Any]) -> dict[str, Any]:
         "max_attempts": settings.get("max_attempts"),
         "providers": digest(list(settings.get("providers") or [])),
     }
+
+
+MAX_CONNECTIONS = 16
+
+
+def _prefix_of(items: list[Any], base: str) -> int | None:
+    """The length of the prefix of ``items`` whose digest is ``base`` (None: none is)."""
+    for length in range(min(len(items), MAX_CONNECTIONS) + 1):
+        if digest(items[:length]) == base:
+            return length
+    return None
+
+
+def appended_connections(base: str, saved: list[Any], sent: list[Any]) -> list[Any] | None:
+    """The connections to save when the form only added some while another save also only added
+    some: what is saved now, then the form's additions in its order. Proven, not assumed: a prefix
+    of each list has the digest of the connections the form showed (``base``), the same prefix,
+    and each list goes on from there with additions only. None (keep the conflict) for anything
+    else: an edit, a removal or a new order on either side, an added id saved already or added
+    twice, or more than ``MAX_CONNECTIONS`` together. The caller validates the result."""
+    kept, shown = _prefix_of(saved, base), _prefix_of(sent, base)
+    if kept is None or shown is None or kept != shown or saved[:kept] != sent[:shown]:
+        return None
+    added = sent[shown:]
+    if not added or kept == len(saved):
+        return None  # nothing added here, or nothing saved meanwhile: the ordinary merge decides
+    ids = [str(item.get("id")) for item in [*saved, *added] if isinstance(item, Mapping)]
+    if len(ids) != len(saved) + len(added) or len(set(ids)) != len(ids):
+        return None
+    union = [*saved, *added]
+    return union if len(union) <= MAX_CONNECTIONS else None
 
 
 def protection_draft(fields: Mapping[str, Any]) -> dict[str, str]:
