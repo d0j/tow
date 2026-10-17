@@ -3,7 +3,8 @@
 Skipped unless TOW_REAL_FILESYSTEMS=1, which only .github/workflows/real.yml sets: on Ubuntu a
 tmpfs, a loop-mounted vfat and exFAT image (the kernel's drivers) and the same exFAT through FUSE
 (exfat-fuse); on macOS exFAT and FAT disk images (hdiutil). Each leg (``filesystems.leg``) is
-mounted, unmounted and mounted again by the test itself, in a folder of the test's own:
+mounted, unmounted and mounted again by the test itself, in a folder of the test's own and from
+its own copies of the images (``filesystems.own_images``):
 
 - C03: the volume TOW records for a folder there (``tow.folders.volume_at``) is the file
   system's own UUID (udev's /dev/disk/by-uuid on Linux, the volume UUID on macOS); the folder is
@@ -34,7 +35,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from filesystems import LINUX_LEGS, MACOS_LEGS, Leg, leg, other, twin
+from filesystems import LINUX_LEGS, MACOS_LEGS, Leg, leg, other, own_images, twin
 
 pytestmark = [pytest.mark.real_system("TOW_REAL_FILESYSTEMS"), pytest.mark.timeout(300)]
 
@@ -51,7 +52,8 @@ class Mounted:
     """A leg at its mount point, mounted and unmounted on request; always unmounted at the end."""
 
     def __init__(self, name: str, base: Path) -> None:
-        images = Path(os.environ.get("TOW_REAL_FS_IMAGES", ""))
+        # Copies of the images of this test alone: a leg starts from its image as real.yml made it.
+        images = own_images(name, SYSTEM, Path(os.environ.get("TOW_REAL_FS_IMAGES", "")), base / "images")
         self.point = base / f"{name}-mount"
         self.point.mkdir(parents=True, exist_ok=True)
         ids = (os.getuid(), os.getgid())  # type: ignore[attr-defined,unused-ignore]

@@ -2,15 +2,16 @@
 
 real.yml makes the images (mkfs.vfat, mkfs.exfat on Linux; hdiutil on macOS) in
 TOW_REAL_FS_IMAGES, each with a twin of the same type and another UUID (``<leg>-twin``), and names
-the legs in TOW_REAL_FS (space-separated); the test mounts, unmounts and mounts them again itself
-with these commands. tests/test_real_filesystem_legs.py checks them
-without a runner.
+the legs in TOW_REAL_FS (space-separated); each test copies the images it mounts into a folder of
+its own (``own_images``) and mounts, unmounts and mounts them again itself with these commands.
+tests/test_real_filesystem_legs.py checks them without a runner.
 """
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
-from pathlib import PurePath
+from pathlib import Path, PurePath
 
 
 @dataclass(frozen=True)
@@ -79,3 +80,17 @@ def twin(system: str, images: PurePath, mount_point: PurePath, uid: int, gid: in
     if name == "tmpfs":
         return None
     return leg(name, system, images, mount_point, uid, gid, image=name + TWIN)
+
+
+def own_images(name: str, system: str, source: Path, target: Path) -> Path:
+    """Copies the images a test of leg ``name`` mounts (its own, the other file system's, its
+    twin's) from ``source`` into ``target`` and returns ``target``: what one test writes there
+    never reaches another's. The other file system of one leg is another leg's own image (on
+    macOS exFAT's is the FAT one), so a folder made on it would be in that leg's image already."""
+    target.mkdir(parents=True, exist_ok=True)
+    mounted = (leg(name, system, source, target, 0, 0), other(system, source, target, 0, 0, name))
+    for one in (*mounted, twin(system, source, target, 0, 0, name)):
+        for image in one.mount if one else ():
+            if Path(image).parent == source:
+                shutil.copyfile(image, target / Path(image).name)
+    return target
