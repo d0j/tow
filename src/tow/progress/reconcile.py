@@ -161,6 +161,8 @@ class _ReconcilePass:
     volume_confirmed: bool = False
     _evidence_base: tuple[Path | None] | None = field(default=None, init=False)
     _seen: bool | None = field(default=None, init=False)
+    # The recorded volume the folder was compared with (None: none was, or not asked).
+    _expected: str | None = field(default=None, init=False)
 
     def seen_from_here(self) -> bool:
         """Whether this PC sees the save folder, asked once per pass and only when a file is
@@ -171,6 +173,7 @@ class _ReconcilePass:
 
             recorded = folders.recorded_volume(self.record.get("volume"), self.evidence_save_path)
             expected = None if self.rebind_volume else recorded
+            self._expected = expected
             self._seen = folders.seen_from_here(self.evidence_save_path, volume=expected)
         return self._seen
 
@@ -349,6 +352,23 @@ def _record_volume(work: _ReconcilePass) -> None:
         work.record["volume"] = {"path": work.evidence_save_path, "id": identity}
 
 
+def _note_volume(work: _ReconcilePass) -> None:
+    """``volume_unseen`` on the topic while its folder is off the recorded volume (Needs attention
+    says it, tow.issues): set when this pass compared and the folder was not on it, gone when it
+    was or the owner bound the folder anew. A pass that looked at no file changes nothing."""
+    if work.rebind_volume and work.volume_confirmed:
+        work.topic.pop("volume_unseen", None)
+        return
+    if work._seen is None or work._expected is None:
+        return
+    if work._seen:
+        work.topic.pop("volume_unseen", None)
+        return
+    earlier = work.topic.get("volume_unseen")
+    if not (isinstance(earlier, dict) and earlier.get("folder") == work.evidence_save_path):
+        work.topic["volume_unseen"] = {"folder": work.evidence_save_path, "at": int(time.time())}
+
+
 def _update_item_status(
     work: _ReconcilePass,
     item: HistoryItem,
@@ -502,6 +522,7 @@ def reconcile_topic(
                 historical_item["superseded"] = True
 
     _record_volume(work)
+    _note_volume(work)
     completed_episode_label = _note_completed_episodes(work)
     if client_event:
         set_label(client_event, latest_item_label(record, prefer_completed=client_event.get("kind") != "client_added"))

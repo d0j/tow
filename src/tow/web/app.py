@@ -49,6 +49,7 @@ from tow.web import (
     routes_topic_login,
     routes_topics,
     routes_undo,
+    routes_volumes,
     templating,
 )
 from tow.web.messages import flash_redirect, resolve_subject
@@ -77,6 +78,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     routes_backup.router,
     routes_service.router,
     routes_password.router,
+    routes_volumes.router,
 )
 
 

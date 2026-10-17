@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_note.html" import note %}
+{% block body %}
+<h1 id="page-title">{{ t('volumes.title') }}</h1>
+<div class="stack-3">
+<p class="sub">{{ t('volumes.intro') }}</p>
+{#- One entry per folder off its recorded disk (tow.issues volume_missing): what is wrong, then -
+    on this computer only - the one action that says it is the same disk. -#}
+{% for item in entries %}
+<section class="card stack-2" id="{{ item.id }}" tabindex="-1" aria-label="{{ item.text }}">
+  {{ note(item.text, 'warn', issue=item.issue) }}
+  {% if can_accept and item.subject %}
+  <form method="post" action="/volumes/accept" class="settings-actions">
+    <input type="hidden" name="subject" value="{{ item.subject }}">
+    <button type="submit" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('accept_volume', item.subject) }}>{{ t('volumes.accept') }}</button>
+  </form>
+  {% elif not can_accept %}
+  <p class="sub">{{ t('volumes.local_only') }}</p>
+  {% endif %}
+</section>
+{% else %}
+<p>{{ t('volumes.none') }}</p>
+{% endfor %}
+</div>
+{% endblock %}

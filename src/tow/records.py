@@ -69,6 +69,8 @@ class Topic(TypedDict, total=False):
     # the revision added stopped because its files do not fit yet (tow.check.space): hash,
     # client, needed, free, path, since, selection, kind
     waiting_space: dict[str, Any]
+    # the save folder is off the volume recorded for it: {"folder", "at"} (tow.progress.reconcile)
+    volume_unseen: dict[str, Any]
     # A selected revision whose client is still verifying existing files, not a failed add.
     verification_pending: dict[str, Any]
     # when a check first saw its torrent gone from the client (kept while it stays gone)

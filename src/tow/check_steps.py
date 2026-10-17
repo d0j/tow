@@ -130,6 +130,7 @@ _CHECK_OWNED_FIELDS = (
 # error without a code - a foreign exception - drops the previous error's code).
 _CHECK_CLEARABLE_FIELDS = (
     "file_aliases",
+    "volume_unseen",  # the save folder is off its recorded volume (tow.progress.reconcile)
     "move_pending",
     "error_notified",
     "error_streak",

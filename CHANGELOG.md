@@ -58,6 +58,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A nightly backup or a restore point is no longer written onto the system disk when the disk of its folder is not
   connected: TOW remembers the disk once a copy was written and checked there, refuses the copy with a clear message
   while it is missing or another one, and shows no free space for that folder then.
+- **Needs attention** says when a topic's folder or a backup folder is not on its disk, and on the computer running
+  TOW its **Same disk — accept** binds the folder to the disk it is on now, only when a file of the topic (or a copy of
+  TOW's) is found there.
 - On Linux and macOS, `tow export` to a drive without hard links (an exFAT or FAT USB stick, some network shares)
   works: the finished file is put in place by the system's own rename that never replaces an existing file, instead of
   failing. A drive that offers neither still refuses, as before.

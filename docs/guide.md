@@ -123,7 +123,9 @@ torrent back, and the forms then show no free space.
 Once TOW has seen a file of a topic in its folder, it also remembers which disk that folder is on. When that disk
 is later not mounted (its folder is empty or lies on another disk), TOW does not call the files missing and does not
 measure the other disk's free space: they stay unconfirmed until the disk is back. After you replace or reformat the
-disk, run `tow check --apply --rebind-volumes` once the files are on the new one.
+disk, accept it in Needs attention (**Same disk — accept**, on the computer running TOW) or run
+`tow check --apply --rebind-volumes` once the files are on the new one: only a disk a file of the topic is found on now
+is accepted.
 
 When a new version arrives while the previous one is still seeding the same file, TOW does not touch the old
 torrent. It asks you: **Stop the previous one and add** stops the old torrent (its files stay) and adds the new one.
@@ -300,7 +302,8 @@ once it is connected, **Send a test** sends a test message and **Disconnect** re
   the computer running TOW, not from another device.
 - TOW remembers the disk a backup folder is on once a copy was written and checked there. When that disk is not
   connected later (or the folder is on another disk), the copy is not written to the disk below and the folder's free
-  space is not shown until the disk is back.
+  space is not shown; Needs attention says so until the disk is back, or until you accept a new disk that holds TOW's
+  copies (**Same disk — accept**).
 
 **Keep a copy of `keys/master.key` away from the computer.** TOW creates it on the first start (`tow keys ensure`
 does it on its own) and says once to back it up. Without it, saved passwords and tokens cannot be read and copies
