@@ -344,12 +344,12 @@ def test_the_conflict_box_is_on_the_scale_without_the_browsers_fieldset():
 def test_the_messages_panel_keeps_its_head_and_scrolls_its_list():
     """1.33 QA: the shared list (up to 50 entries) ran past the panel's 26 rem, the whole panel scrolled
     and its head - the title, Mark all read, Clear - scrolled away with the entries (30 clipping and
-    inset findings). The panel is a column that clips; its head stays, the list alone scrolls."""
+    inset findings). The panel is a column; its head stays, the list alone shrinks and scrolls. The panel
+    clips nothing: its overflow: hidden cut the focus rings of entries in the list (QA rerun)."""
     messages = (STATIC / "messages.css").read_text(encoding="utf-8")
     panel = _rule(".msg-panel", messages)
     assert "display: flex; flex-direction: column" in panel
-    assert "overflow: hidden" in panel
-    assert "overflow: auto" not in panel
+    assert "overflow" not in panel  # the list is the one scroller
     assert "max-height: min(26rem, 60dvh)" in panel
     assert "flex: none" in _rule(".msg-panel-head", messages)
     listed = _rule(".msg-list", messages)
