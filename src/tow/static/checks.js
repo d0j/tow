@@ -254,91 +254,6 @@
     };
   };
   window.TowCheckScheduler = createScheduler;
-
-  // A Home row drawn again when its check has ended (/topics/<id>/row), one at a time - but never
-  // under the owner's hands: while its edit panel is open, a field in it has the focus or unsaved
-  // words, or the pointer is on its buttons. Such a row is marked stale and drawn again when that
-  // ends (``settle``) or at the next try.
-  const RETRY_MS = 3000;
-  const rowBusy = (row, active) => Boolean(
-    row.querySelector("details.row-edit[open]")
-    || row.querySelector('form[data-dirty="1"], form[data-submitting="1"]')
-    || row.querySelector(".row-ops:hover")
-    || (active && row.contains(active) && active.matches?.("input, select, textarea, [contenteditable]")),
-  );
-  const createRowRefresher = ({
-    fetchRow, // topic -> Promise<html | null>
-    findRow, // topic -> its row element, or null
-    busy, // row -> true while the owner works in it
-    place, // (row, html): the new row in its place
-    setTimer = (fn, ms) => setTimeout(fn, ms),
-    clearTimer = (id) => clearTimeout(id),
-  }) => {
-    const queue = [];
-    const stale = new Set();
-    let running = false;
-    let retry = 0;
-    const mark = (topic, row) => {
-      stale.add(topic);
-      if (row?.dataset) row.dataset.stale = "1";
-    };
-    const schedule = () => {
-      clearTimer(retry);
-      retry = 0;
-      if (stale.size) {
-        retry = setTimer(() => {
-          retry = 0;
-          [...stale].forEach((topic) => refresh(topic));
-        }, RETRY_MS);
-      }
-    };
-    const pump = async () => {
-      if (running) return;
-      running = true;
-      while (queue.length) {
-        const topic = queue.shift();
-        const row = findRow(topic);
-        if (!row) {
-          stale.delete(topic);
-          continue;
-        }
-        if (busy(row)) {
-          mark(topic, row);
-          continue;
-        }
-        let html = null;
-        try {
-          html = await fetchRow(topic);
-        } catch {
-          html = null;
-        }
-        const current = findRow(topic);
-        if (html === null || !current) {
-          stale.delete(topic); // gone, or TOW did not answer: the row stays as it is
-          continue;
-        }
-        if (busy(current)) {
-          mark(topic, current); // the owner started working in it meanwhile
-          continue;
-        }
-        place(current, html);
-        stale.delete(topic);
-      }
-      running = false;
-      schedule();
-    };
-    const refresh = (topic) => {
-      if (!topic) return;
-      if (!queue.includes(topic)) queue.push(topic);
-      pump();
-    };
-    return {
-      refresh,
-      settle: (topic) => { if (stale.has(topic)) refresh(topic); },
-      stale: () => [...stale],
-    };
-  };
-  window.TowRowRefresher = { createRowRefresher, rowBusy };
   if (typeof document === "undefined" || !document.getElementById?.("msg-host")) return;
 
   const I18N = (() => {
@@ -364,49 +279,16 @@
     }
   })();
   const show = (record, options) => window.towMessages?.showMessage(record, options);
-  // Home's rows, drawn again when their check has ended (only on Home: elsewhere there are none).
+  // Home's rows, drawn again when their check has ended (only on Home: elsewhere there are none) by
+  // sync.js's row sync, the one writer of Home's rows: for the topics revision the page has (an
+  // answer of another one is never used), never over a row the owner works in (it waits, with a
+  // note, and follows once free); the list's tools follow.
   const rowOf = (topic) => (topic ? document.getElementById(`row-${topic}`) : null);
-  const placeRow = (row, html) => {
-    const template = document.createElement("template");
-    template.innerHTML = html.trim();
-    const fresh = template.content.querySelector(".row-wrap");
-    if (!fresh || fresh.id !== row.id) return;
-    // The running personal timer goes on in its own element; the focus and the place on the
-    // page stay where they were.
-    const timer = row.querySelector("[data-topic-timer]");
-    const timerSlot = fresh.querySelector("[data-topic-timer]");
-    if (timer && timerSlot) timerSlot.replaceWith(timer);
-    const active = row.contains(document.activeElement) ? document.activeElement : null;
-    const action = active?.closest("form[action]")?.getAttribute("action");
-    const inSummary = Boolean(active?.closest("summary"));
-    const top = row.getBoundingClientRect().top;
-    if (row.hidden) fresh.hidden = true;
-    row.replaceWith(fresh);
-    window.towTime?.prepare?.(fresh);
-    const shift = fresh.getBoundingClientRect().top - top;
-    if (shift) window.scrollBy(0, shift);
-    const again = action
-      ? [...fresh.querySelectorAll("form[action]")].find((form) => form.getAttribute("action") === action)?.querySelector("button")
-      : inSummary ? fresh.querySelector(":scope > details > summary") : null;
-    again?.focus({ preventScroll: true });
-    window.towRows?.replaced(row, fresh);
+  const redraw = (topics) => {
+    const rows = window.towSync?.rows;
+    if (!rows || !topics.length) return;
+    rows.redraw(topics).then(() => window.towList?.refresh?.({ keep: true }), () => {});
   };
-  const rows = window.TowRowRefresher.createRowRefresher({
-    fetchRow: async (topic) => {
-      const response = await fetch(`/topics/${encodeURIComponent(topic)}/row`, { cache: "no-store", credentials: "same-origin", headers: { Accept: "text/html" } });
-      return response.ok ? response.text() : null;
-    },
-    findRow: rowOf,
-    busy: (row) => window.TowRowRefresher.rowBusy(row, document.activeElement),
-    place: placeRow,
-  });
-  // A row the owner was working in is drawn again once the work ends.
-  const settleFrom = (event) => {
-    const row = event.target?.closest?.(".row-wrap[id^='row-']");
-    if (row) window.setTimeout(() => rows.settle(row.id.slice(4)), 0);
-  };
-  ["focusout", "pointerout", "reset"].forEach((name) => document.addEventListener(name, settleFrom));
-  document.addEventListener("toggle", settleFrom, true);
   // After Check all: the rows in sight now, the others as they come into sight.
   const later = new Set();
   let looking = 0;
@@ -416,14 +298,16 @@
     return box.bottom > 0 && box.top < window.innerHeight;
   };
   const refreshInSight = () => {
+    const now = [];
     [...later].forEach((topic) => {
       const row = rowOf(topic);
       if (!row) later.delete(topic);
       else if (inSight(row)) {
         later.delete(topic);
-        rows.refresh(topic);
+        now.push(topic);
       }
     });
+    redraw(now);
   };
   const lookSoon = () => {
     if (!later.size) return;
@@ -433,7 +317,7 @@
   ["scroll", "resize"].forEach((name) => window.addEventListener(name, lookSoon, { passive: true }));
   ["input", "click", "change"].forEach((name) => document.addEventListener(name, lookSoon));
   const refreshRows = (topic) => {
-    if (topic) rows.refresh(topic);
+    if (topic) redraw([String(topic)]);
     else {
       document.querySelectorAll(".row-wrap[id^='row-']").forEach((row) => later.add(row.id.slice(4)));
       refreshInSight();

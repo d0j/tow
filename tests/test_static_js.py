@@ -220,10 +220,13 @@ def test_a_row_drawn_again_behaves_like_a_row_the_page_opened_with():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_a_row_whose_check_ended_is_drawn_again_but_never_under_the_owners_hands():
+def test_a_row_whose_check_ended_is_drawn_again_by_the_one_revision_aware_row_writer():
+    # The old /topics/<id>/row refresher replaced a row with a late answer, unchecked against the
+    # revision another device's change had brought meanwhile (its busy rules moved to sync.js).
     verdict = _verdict("row_refresh.mjs")
-    assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 5
+    assert verdict == dict.fromkeys(
+        ("oneWriterForTheEndedCheck", "checkAllRowsInSightThenLater", "noRowSyncNoRowRequest"), True
+    ), verdict
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
