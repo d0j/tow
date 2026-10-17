@@ -76,7 +76,13 @@ const harness = (keys, hashes = {}) => {
     note: (item, kind) => { item.note = kind; },
     adopt: (item, fragment) => { ops.push(`adopt ${fragment.id}`); item.hash = fragment.hash; },
   };
-  return { items, ops, adapter, keys: () => items.map((item) => item.key) };
+  // Sites and Settings move a fragment out of place (the server's order); History does not.
+  const move = (item, previous) => {
+    ops.push(`move ${item.key} after ${previous}`);
+    const [moved] = items.splice(items.findIndex((each) => each.key === item.key), 1);
+    items.splice(previous === null ? 0 : items.findIndex((each) => each.key === previous) + 1, 0, moved);
+  };
+  return { items, ops, adapter, move, keys: () => items.map((item) => item.key) };
 };
 const frag = (id, hash = `h-${id}`) => ({ id, hash, html: `<div id="${id}"></div>` });
 {
@@ -120,6 +126,51 @@ const frag = (id, hash = `h-${id}`) => ({ id, hash, html: `<div id="${id}"></div
   assert.deepEqual(plain(list.keys()), ["acc-clients", "acc-bots"]);
   assert.equal(list.items.find((item) => item.key === "acc-bots").hash, "h3");
   verdict.protectedSectionsWaitWithNote = true;
+}
+
+// The server's order (a site renamed or reordered elsewhere): a fragment out of place moves right
+// after the one before it - unchanged digests too - and counts as placed. One the owner is in never
+// moves, nor does another one across it: that move waits (``deferred``) and the page area tries it
+// again (``settle``) until it is done, although nothing else changed.
+{
+  const sites = ["sites-head", "site-row-a", "site-row-b", "site-row-c", "sites-empty"];
+  const wanted = () => ["sites-head", "site-row-c", "site-row-a", "site-row-b", "sites-empty"].map((id) => frag(id));
+  const list = harness(sites);
+  const result = reconcile({ current: [...list.items], wanted: wanted(), ...list.adapter, move: list.move });
+  assert.deepEqual(plain(list.keys()), ["sites-head", "site-row-c", "site-row-a", "site-row-b", "sites-empty"]);
+  assert.deepEqual(plain(list.ops), ["move site-row-c after sites-head"]);
+  assert.deepEqual(plain(result.placed), ["site-row-c"]);
+  assert.deepEqual(plain(result.deferred), []);
+  // Settled: nothing moves again.
+  const again = reconcile({ current: [...list.items], wanted: wanted(), ...list.adapter, move: list.move });
+  assert.deepEqual(plain(list.ops), ["move site-row-c after sites-head"]);
+  assert.deepEqual(plain(again.placed), []);
+  // A swap of two neighbours, the first one in a new place.
+  const pair = harness(["x", "y"]);
+  reconcile({ current: [...pair.items], wanted: [frag("y"), frag("x")], ...pair.adapter, move: pair.move });
+  assert.deepEqual(plain(pair.keys()), ["y", "x"]);
+  verdict.serverOrderMovesFragments = true;
+
+  for (const held of ["site-row-a", "site-row-c"]) {
+    const page = harness(sites);
+    let busy = new Set([held]);
+    const apply = () => reconcile({
+      current: [...page.items], wanted: wanted(), isProtected: (item) => busy.has(item.key), ...page.adapter, move: page.move,
+    });
+    const sync = createPageSync({ fetchFragments: async () => ({ status: 200, body: { ok: true, rev: REV(7), fragments: [] } }), apply });
+    assert.equal(await sync.page({ rev: REV(7) }), true);
+    assert.deepEqual(plain(page.keys()), sites, held); // nothing moved under the owner's hands
+    assert.deepEqual(plain(page.ops), [], held);
+    assert.deepEqual(plain(sync.waiting()), ["site-row-c"], held);
+    assert.equal(sync.settle(), true, held); // still in use: tried again, still waits
+    assert.deepEqual(plain(page.ops), [], held);
+    busy = new Set();
+    assert.equal(sync.settle(), true, held); // free: the same fragments, now in the server's order
+    assert.deepEqual(plain(page.keys()), ["sites-head", "site-row-c", "site-row-a", "site-row-b", "sites-empty"], held);
+    assert.deepEqual(plain(sync.waiting()), [], held);
+    assert.equal(sync.settle(), false, held);
+  }
+  verdict.protectedOrderWaitsAndIsRetried = true;
 }
 
 // A line the page drew before its digest was known takes the server's digest without being drawn

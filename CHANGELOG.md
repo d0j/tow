@@ -18,6 +18,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An open **History** page no longer asks TOW for its lines again after each routine log line it does not show
   (a site checked, or a line its filter leaves out); all open History tabs with the same filter share one reading
   of the log.
+- Open **Sites** and **Settings** pages follow a change of order made elsewhere (a site renamed, added in another
+  place or reordered) without a reload; a site or section you are working in keeps its place until you leave it.
 
 ### Security
 
