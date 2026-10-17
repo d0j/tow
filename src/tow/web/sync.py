@@ -85,6 +85,12 @@ RETRY_AFTER_SEC = 2
 RATE_BURST = 40.0
 RATE_PER_SEC = 4.0
 MAX_BUCKETS = 1024
+# A page counts as open when it asked within PAGE_SEEN_SEC (a hidden tab does not ask). An update
+# started from Settings then keeps TOW running UPDATE_GRACE_SEC after its job is published (at
+# most tow.web_update.GRACE_MAX_SEC): one poll of every open page (sync.js, every 5 s) on a sample
+# at most SAMPLE_SEC old brings the job, and the page follows its steps every 2 s (updates.js).
+PAGE_SEEN_SEC = 30.0
+UPDATE_GRACE_SEC = 5.0 + SAMPLE_SEC
 # What one server process is: an ETag of an earlier process never matches.
 SERVER_EPOCH = random_tokens.token_hex(8)
 
@@ -504,10 +510,34 @@ AREAS_MEMO = Areas()
 
 def reset() -> None:
     """Forget every sample and projection (a test, a restore)."""
+    global _page_polled
     SAMPLER.forget()
     AREAS_MEMO.forget()
     with _BUCKETS_LOCK:
         _BUCKETS.clear()
+    _page_polled = None
+
+
+# The monotonic moment a page last asked GET /sync.json (one float, set and read without a lock).
+_page_polled: float | None = None
+
+
+def note_page_poll(*, now: float | None = None) -> None:
+    """A page asked: it is open and visible (``routes_sync``)."""
+    global _page_polled
+    _page_polled = time.monotonic() if now is None else now
+
+
+def page_polled_within(seconds: float, *, now: float | None = None) -> bool:
+    """Some page asked within the last ``seconds`` (monotonic clock)."""
+    polled = _page_polled
+    moment = time.monotonic() if now is None else now
+    return polled is not None and 0 <= moment - polled <= seconds
+
+
+def update_grace() -> float:
+    """How long an update started now keeps TOW running for the open pages to see it (0: none)."""
+    return UPDATE_GRACE_SEC if page_polled_within(PAGE_SEEN_SEC) else 0.0
 
 
 @dataclass(frozen=True)

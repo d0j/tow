@@ -289,6 +289,11 @@ The trusted producer resolves the install path; the worker's supplied-name check
 and does not inspect a foreign path. Install-root aliases therefore remain supported.
 The app validates displayable job timestamps for every phase before status, log or launch
 decisions; unreadable dates fail closed without modifying the journal.
+When a page polled `/sync.json` within the last 30 s, the job carries a `grace` (6 s at most, one
+page poll plus one sample): once `update.py` reports the release `prepared` (TOW still runs, nothing
+recorded or stopped), the worker waits on a monotonic clock until that long after it published
+`preparing`, the download included, so every open page sees the job before TOW stops. The wait takes
+no lock a poll needs; an interruption there discards the prepared release and changes nothing.
 
 ## Recovery
 

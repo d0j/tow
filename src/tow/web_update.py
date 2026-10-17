@@ -35,6 +35,9 @@ CONTENT_REF_SINCE = (1, 32, 0)
 # Folders of earlier web updates (their copied updater and update.log) kept besides the current
 # job's; older ones are removed when the next update starts.
 JOB_FOLDERS_KEPT = 3
+# The longest an update keeps TOW running once its release is prepared, for the open pages to see
+# the job (``start``'s ``grace``; update_worker.GRACE_MAX_SEC, which this module cannot import).
+GRACE_MAX_SEC = 6.0
 _JOB_ID = re.compile(r"[a-f0-9]{32}")
 _ACTIVE = frozenset({"queued", "preparing", "stopping", "backup", "installing", "checking", "rolling_back"})
 _TERMINAL = frozenset({"ok", "refused", "failed", "rolled_back", "recovered"})
@@ -442,7 +445,10 @@ def _content_ref_pending() -> bool:
     return any(isinstance(topic.get("content_ref"), str) and topic["content_ref"] for topic in waiting)
 
 
-def start(version: str) -> dict[str, Any]:
+def start(version: str, *, grace: float = 0.0) -> dict[str, Any]:
+    """Reserve the job and hand it to a detached worker. ``grace``: seconds, at most
+    ``GRACE_MAX_SEC``, that the worker keeps TOW running after it publishes "preparing" (the
+    release's download and checks count), so pages open now see the job before TOW stops."""
     app = _runtime_app()
     parsed = releases.version_parts(version)
     if parsed is None or parsed < MINIMUM_WEB_VERSION:
@@ -499,6 +505,8 @@ def start(version: str) -> dict[str, Any]:
                 "backup_cleanup_pending": bool(safety.get("cleanup_warning")),
                 "lease_version": 1,
             }
+            if math.isfinite(grace) and grace > 0:
+                job["grace"] = min(float(grace), GRACE_MAX_SEC)
             atomic_write_bytes(path, json.dumps(job).encode())
             platform.current().spawn_detached(
                 [

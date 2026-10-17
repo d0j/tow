@@ -176,6 +176,57 @@ def test_the_latest_release_is_downloaded_checked_and_switched_to(install, githu
         assert os.access(install["app"] / "scripts" / "tow", os.X_OK)  # the launcher stays executable
 
 
+def test_the_prepared_release_is_told_before_tow_stops_or_anything_is_recorded(install, github):
+    # The web update's worker lets open pages see the job here (update_worker._run): TOW still
+    # runs, the release is unpacked and checked, update-state.json is not written yet.
+    archive = tarball("1.23.0")
+    github.release("v1.23.0", archive, listed=sums(**{"tow-source.tar.gz": archive}))
+    machine = Machine(install["app"], github)
+    told = []
+
+    def progress(name: str) -> None:
+        if name == "prepared":
+            record = (install["root"] / "update-state.json").exists()
+            told.append((list(machine.calls), record, leftovers(install), names(install["app"])))
+        else:
+            told.append(name)
+
+    code, lines = run(machine, "v1.23.0", progress=progress)
+
+    assert code == 0, lines
+    assert told[0] == ([], False, ["app.new"], [".venv", "marker-1.22.0", "pyproject.toml"])
+    assert told[1:] == ["stopping", "backup", "installing", "checking", "ok"]
+
+
+@pytest.mark.parametrize("cut", [KeyboardInterrupt, RuntimeError])
+def test_an_update_cut_off_while_prepared_changes_nothing(install, github, cut):
+    archive = tarball("1.23.0")
+    github.release("v1.23.0", archive, listed=sums(**{"tow-source.tar.gz": archive}))
+    machine = Machine(install["app"], github)
+
+    def progress(name: str) -> None:
+        if name == "prepared":
+            raise cut("synthetic interruption")
+
+    with pytest.raises(cut, match="synthetic interruption"):
+        run(machine, "v1.23.0", progress=progress)
+
+    assert machine.calls == []  # TOW was never stopped
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert leftovers(install) == []  # the unpacked release went
+    assert not (install["root"] / "update-state.json").exists()
+    # .update.lock was let go: the next update runs.
+    assert run(Machine(install["app"], github), "v1.23.0")[0] == 0
+
+
+def test_a_release_that_is_installed_already_is_never_told_prepared(install, github):
+    github.latest("v1.22.0")
+    github.release("v1.22.0", tarball("1.22.0"))
+    told: list[str] = []
+    assert run(Machine(install["app"], github), progress=told.append)[0] == 0
+    assert told == []
+
+
 def test_latest_when_it_is_installed_changes_nothing(install, github):
     # Before: a full stop, snapshot, download, uv sync and restart to the same version.
     github.latest("v1.22.0")

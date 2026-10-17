@@ -59,6 +59,7 @@ def sync_json(request: Request, have: str = "", page: str = "", group: str = "",
     """The revision of every area this page shows and, for those that differ from ``have``, what
     they are now. The ETag names this exact request (its ``have``, page, History's filters
     ``group`` and ``q``, language, access and session); ``If-None-Match`` with it answers 304."""
+    sync.note_page_poll()  # an open page, also one asking too often: an update gives it time
     if (limited := _limited(request)) is not None:
         return limited
     try:
