@@ -69,10 +69,10 @@ import time
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from tow import i18n, paths, status, store
 from tow import log as eventlog
@@ -479,6 +479,10 @@ class Window:
     records: tuple[dict[str, Any], ...] = ()
     full: bool = False
     stamp: tuple[Any, ...] = ()
+    # ``stable``: no rotation moved the files while they were read (``LogReader.scan``);
+    # ``readable``: every log file there was could be read.
+    stable: bool = True
+    readable: bool = True
 
     def rank(self, pos: Pos | None) -> tuple[int, int] | None:
         """The place of ``pos`` in append order; (-1, 0) when its file rotated away; None when
@@ -491,19 +495,29 @@ class Window:
             return (-1, 0) if self.full else None
 
 
-def _first_line(path: Path) -> bytes | None:
-    """The file's first complete line (None while there is none), read in small blocks."""
+def _first_line(handle: BinaryIO) -> bytes | None:
+    """The open file's first complete line (None while there is none), read in small blocks."""
     head = b""
-    with path.open("rb") as handle:
-        while len(head) < _FIRST_LINE_MAX:
-            block = handle.read(4096)
-            if not block:
-                return None
-            head += block
-            end = head.find(b"\n")
-            if end >= 0:
-                return head[: end + 1]
+    handle.seek(0)
+    while len(head) < _FIRST_LINE_MAX:
+        block = handle.read(4096)
+        if not block:
+            return None
+        head += block
+        end = head.find(b"\n")
+        if end >= 0:
+            return head[: end + 1]
     return None
+
+
+def _fingerprint(first: bytes | None) -> str | None:
+    """A file's identity: the hash of its first line (file ids can be reused or missing, a first
+    line with its event id is not)."""
+    return None if first is None else hashlib.sha256(first).hexdigest()[:32]
+
+
+_MISSING, _UNREADABLE = "missing", "unreadable"
+_SCAN_ATTEMPTS = 3
 
 
 def _light(rec: Mapping[str, Any]) -> dict[str, Any]:
@@ -536,7 +550,13 @@ def _timestamp(rec: Mapping[str, Any]) -> float | None:
 
 class LogReader:
     """Reads the retained log incrementally: rotated files once (their hash names them), the live
-    file from where it stopped. A file that shrank or changed its first line is read anew."""
+    file from where it stopped. A file that shrank or changed its first line is read anew.
+
+    A file's size, first line and records come from one open file: a rotation meanwhile (which
+    renames files, on Windows only those nobody holds open) never puts one file's records under
+    another's identity. Which file is where is looked at again after the pass; a pass during
+    which a rotation moved the files is read again (``_SCAN_ATTEMPTS``), and one that never held
+    still says so (``Window.stable``)."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -546,75 +566,117 @@ class LogReader:
         rotated = [self.path.with_name(f"{self.path.name}.{index}") for index in range(eventlog.BACKUPS, 0, -1)]
         return [*rotated, self.path]
 
+    def _inventory(self) -> tuple[str | None, ...]:
+        """Which file is at each place now: its identity (None: no complete line yet), or
+        missing or unreadable."""
+        found: list[str | None] = []
+        for path in self._files():
+            try:
+                with path.open("rb") as handle:
+                    found.append(_fingerprint(_first_line(handle)))
+            except FileNotFoundError:
+                found.append(_MISSING)
+            except OSError:
+                found.append(_UNREADABLE)
+        return tuple(found)
+
     @staticmethod
-    def _fingerprint(path: Path) -> str | None:
-        """The file's identity: the hash of its first line (one small read; file ids can be
-        reused or missing, a first line with its event id is not)."""
-        first = _first_line(path)
-        return None if first is None else hashlib.sha256(first).hexdigest()[:32]
+    def _held_still(seen: tuple[str | None, ...], now: tuple[str | None, ...]) -> bool:
+        """No rotation between the pass (``seen``) and ``now``: every rotated file is the same
+        one, and so is the live file - or it had no line yet (an append is no rotation)."""
+        if len(seen) != len(now) or seen[:-1] != now[:-1]:
+            return False
+        return seen[-1] == now[-1] or seen[-1] in (None, _MISSING)
 
     def scan(self, now: float) -> Window:
+        window = Window()
+        for _attempt in range(_SCAN_ATTEMPTS):
+            window, seen = self._pass(now)
+            if self._held_still(seen, self._inventory()):
+                return window
+            # The files moved while they were read: what was read follows that pass's order
+            # (a failure's recovery among them), so it is all read again.
+            self._segments.clear()
+        return replace(window, stable=False)
+
+    def _pass(self, now: float) -> tuple[Window, tuple[str | None, ...]]:
         chain: list[str] = []
         stamp: list[Any] = []
+        seen: list[str | None] = []
         state: frozenset[tuple[int, str]] = frozenset()
         present = 0
+        readable = True
         files = self._files()
         for index, path in enumerate(files):
             live = index == len(files) - 1
             try:
-                info = path.stat()
+                handle = path.open("rb")
             except FileNotFoundError:
+                seen.append(_MISSING)
                 continue
             except OSError:
-                stamp.append((path.name, "unreadable"))
+                stamp.append((path.name, _UNREADABLE))
+                seen.append(_UNREADABLE)
+                readable = False
                 continue
-            present += 1
-            stamp.append((path.name, info.st_size, info.st_mtime_ns, info.st_ino))
-            try:
-                fp = self._fingerprint(path)
-            except OSError:
-                continue
-            if fp is None or fp in chain:
-                continue
-            segment = self._segments.get(fp)
-            if segment is None or segment.consumed > info.st_size:
-                segment = _Segment(fp)
-                self._segments[fp] = segment
-                old = not live and info.st_mtime < now - RETENTION_SEC - 86400
-                if old:  # nothing in it is recent enough: its identity alone counts
-                    segment.consumed = info.st_size
-                    segment.failing_after = state
-            if segment.consumed < info.st_size:
-                with suppress(OSError):
-                    self._parse(path, segment, info.st_size, state if segment.consumed == 0 else segment.failing_after)
-            state = segment.failing_after
-            chain.append(fp)
+            with handle:
+                try:
+                    info = os.fstat(handle.fileno())
+                    fp = _fingerprint(_first_line(handle))
+                except OSError:
+                    stamp.append((path.name, _UNREADABLE))
+                    seen.append(_UNREADABLE)
+                    readable = False
+                    continue
+                present += 1
+                stamp.append((path.name, info.st_size, info.st_mtime_ns, info.st_ino))
+                seen.append(fp)
+                if fp is None or fp in chain:
+                    continue
+                segment = self._segments.get(fp)
+                if segment is None or segment.consumed > info.st_size:
+                    segment = _Segment(fp)
+                    self._segments[fp] = segment
+                    old = not live and info.st_mtime < now - RETENTION_SEC - 86400
+                    if old:  # nothing in it is recent enough: its identity alone counts
+                        segment.consumed = info.st_size
+                        segment.failing_after = state
+                if segment.consumed < info.st_size:
+                    try:
+                        self._parse(
+                            handle, segment, info.st_size, state if segment.consumed == 0 else segment.failing_after
+                        )
+                    except OSError:
+                        readable = False
+                state = segment.failing_after
+                chain.append(fp)
         for fp in [fp for fp in self._segments if fp not in chain]:
             del self._segments[fp]
         records = tuple(rec for fp in chain for rec in self._segments[fp].records)
-        return Window(tuple(chain), records, present == len(files), tuple(stamp))
+        window = Window(tuple(chain), records, present == len(files), tuple(stamp), readable=readable)
+        return window, tuple(seen)
 
-    def _parse(self, path: Path, segment: _Segment, size: int, failing: frozenset[tuple[int, str]]) -> None:
+    def _parse(self, handle: BinaryIO, segment: _Segment, size: int, failing: frozenset[tuple[int, str]]) -> None:
+        """The records of the open file ``handle`` from where ``segment`` stopped up to ``size``."""
         state = set(failing)
-        with path.open("rb") as handle:
-            handle.seek(segment.consumed)
-            position = segment.consumed
-            rest = b""
-            while position < size:
-                block = handle.read(min(_PARSE_BLOCK, size - position))
-                if not block:
-                    break
-                position += len(block)
-                data = rest + block
-                end = data.rfind(b"\n")
-                if end < 0:
-                    rest = data
-                    continue
-                complete, rest = data[: end + 1], data[end + 1 :]
-                start = position - len(rest) - len(complete)
-                for line_end, line in _lines(complete, start):
-                    self._take(segment, line, line_end, state)
-                segment.consumed = position - len(rest)
+        handle.seek(segment.consumed)
+        position = segment.consumed
+        rest = b""
+        while position < size:
+            block = handle.read(min(_PARSE_BLOCK, size - position))
+            if not block:
+                break
+            position += len(block)
+            data = rest + block
+            end = data.rfind(b"\n")
+            if end < 0:
+                rest = data
+                continue
+            complete, rest = data[: end + 1], data[end + 1 :]
+            start = position - len(rest) - len(complete)
+            for line_end, line in _lines(complete, start):
+                self._take(segment, line, line_end, state)
+            segment.consumed = position - len(rest)
         segment.failing_after = frozenset(state)
 
     def _take(self, segment: _Segment, line: bytes, line_end: int, failing: set[tuple[int, str]]) -> None:
@@ -952,7 +1014,9 @@ class Feed:
         """Two stats - the live log and data/ui.json - that say whether the snapshot may be old."""
         return (_file_stamp(self.reader.path), _ui_stamp())
 
-    def _build(self) -> None:
+    def _build(self) -> bool:
+        """Read the log and the markers into a new snapshot; False when the log's files kept
+        moving while they were read (the last good snapshot stays, the next call reads again)."""
         with self._scan_lock:
             quick = self._quick()
             now = time.time()
@@ -960,6 +1024,8 @@ class Feed:
             stamp = _ui_stamp()
             markers = load_markers()
             previous = self._snapshot
+            if not window.stable and previous is not None:
+                return False
             if (
                 previous is not None
                 and previous.window.stamp == window.stamp
@@ -969,10 +1035,11 @@ class Feed:
             ):
                 previous.built = time.monotonic()
                 previous.quick = quick
-                return
+                return True
             projection = project(window, markers, now)
             self._snapshot = _Snapshot(window, markers, projection, time.monotonic(), stamp, quick)
             self._generation += 1
+            return window.stable
 
     def _run(self) -> None:
         try:
@@ -1006,10 +1073,13 @@ class Feed:
         """Read (or clear) everything up to the displayed entry ``cursor`` names, for every device:
         an atomic read-modify-write of data/ui.json under its own lock. Markers only move
         forward in append order; an event appended after the displayed one stays unread and
-        uncleared. MarkerRefused for a cursor that is not displayed; OSError when the markers
-        cannot be saved."""
+        uncleared. MarkerRefused for a cursor that is not displayed (or while the log's files
+        keep moving); OSError when the markers cannot be saved."""
         pos = decode_cursor(cursor)
-        snapshot = self.refresh()
+        if not self._build():
+            raise MarkerRefused(cursor)
+        snapshot = self._snapshot
+        assert snapshot is not None
         displayed = {entry["pos"] for entry in snapshot.projection.entries}
         if pos is None or pos not in displayed:
             raise MarkerRefused(cursor)

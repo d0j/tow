@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -535,3 +536,99 @@ def test_scrubbing_after_formatting_keeps_the_words_and_drops_paths_and_links():
     shown = messages_feed.scrub_display(text)
     assert shown == "cannot write … or … via host.example and … · rutor: all hosts failed (HTTP 404)"
     assert messages_feed.scrub_display("and/or 1/2 episodes") == "and/or 1/2 episodes"
+
+
+# --------------------------------------------------------------------------- rotation while the log is read
+
+
+def _live(source: object) -> bool:
+    """The reader is at the live log file (given as a path or an open file)."""
+    return str(getattr(source, "name", source)).endswith(log.log_path().name)
+
+
+def _rotation_at(monkeypatch, moment: str) -> list[str]:
+    """Another process rotates the log once and appends to the new file, at ``moment`` of the
+    reader's pass: between two files, or before or after the live file's first line, or before its
+    records. A file the reader holds open may refuse the rotation (Windows): the appender then
+    appends to the live file, as ``log.append_event`` does. The new event's id lands in the list."""
+    fired: list[str] = []
+
+    def fire() -> None:
+        if fired:
+            return
+        with suppress(OSError):  # held open by the reader: not rotated now
+            _rotate()
+        fired.append(_raw("topic_pause", topic="late"))
+
+    if moment == "between_files":
+        files = messages_feed.LogReader._files
+
+        class Files(list):
+            def __iter__(self):
+                for path in list.__iter__(self):
+                    if _live(path):
+                        fire()
+                    yield path
+
+        monkeypatch.setattr(messages_feed.LogReader, "_files", lambda self: Files(files(self)))
+    elif moment in ("before_first_line", "after_first_line"):
+        first_line = messages_feed._first_line
+
+        def wrapped(source, *args, **kwargs):
+            if moment == "before_first_line" and _live(source):
+                fire()
+            found = first_line(source, *args, **kwargs)
+            if moment == "after_first_line" and _live(source):
+                fire()
+            return found
+
+        monkeypatch.setattr(messages_feed, "_first_line", wrapped)
+    else:
+        parse = messages_feed.LogReader._parse
+
+        def parsing(self, source, *args, **kwargs):
+            if _live(source):
+                fire()
+            return parse(self, source, *args, **kwargs)
+
+        monkeypatch.setattr(messages_feed.LogReader, "_parse", parsing)
+    return fired
+
+
+def _seen(snapshot) -> list[tuple[str, object]]:
+    return [(rec["event_id"], rec["_pos"]) for rec in snapshot.window.records]
+
+
+@pytest.mark.parametrize("moment", ["between_files", "before_first_line", "after_first_line", "before_parse"])
+def test_a_rotation_while_the_log_is_read_never_binds_records_to_another_file(monkeypatch, moment):
+    a = _raw("topic_add", topic="a")
+    b = _raw("topic_add", topic="b")
+    _rotate()
+    c = _raw("topic_add", topic="c")
+    messages_feed.feed().mark(_feed()["items"][0]["cursor"], clear=False)  # read up to c, in the live file
+    reader = messages_feed.Feed(log.log_path())  # another process's reader, started now
+    late = _rotation_at(monkeypatch, moment)
+    first = reader.refresh()
+    assert late
+    assert first.projection.reset is False  # the marker's file is never missed
+    ids = [event for event, _pos in _seen(first)]
+    assert ids in ([a, b, c], [a, b, c, late[0]])
+    final = reader.refresh()
+    fresh = messages_feed.Feed(log.log_path()).refresh()  # a reader started after it all
+    assert _seen(final) == _seen(fresh)
+    assert [event for event, _pos in _seen(final)] == [a, b, c, late[0]]
+    assert _ids(messages_feed.render(final.projection, lang="en")) == [late[0], c, b, a]
+
+
+def test_a_log_that_keeps_rotating_while_read_keeps_the_last_good_snapshot(monkeypatch):
+    _raw("topic_add", topic="a")
+    feed = messages_feed.feed()
+    before = feed.refresh()
+    _raw("topic_add", topic="b")
+    turns = iter(range(10**6))
+    # Every look at the files finds them moved on: the inventory never holds still.
+    monkeypatch.setattr(messages_feed.LogReader, "_inventory", lambda self: (next(turns),), raising=False)
+    assert feed.refresh() is before  # never a window of files that moved while they were read
+    with pytest.raises(messages_feed.MarkerRefused):
+        feed.mark(before.projection.entries[0]["pos"].cursor(), clear=True)
+    assert not ui_state_path().exists()
