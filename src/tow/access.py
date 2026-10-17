@@ -87,6 +87,25 @@ def credential(secrets: dict[str, Any] | None) -> Credential:
     return Credential("token", token, token)
 
 
+def is_sign_in_secret(secrets: dict[str, Any] | None, *candidates: str) -> bool:
+    """One of ``candidates`` is what devices on the network sign in with: the password (compared
+    through its stored hash, in constant time) or the external access key. A browser that saved
+    TOW's sign-in can fill it into another secret field (a client's password, a messenger's
+    token), and a Save would then store it there; the forms refuse that. Nothing of a candidate is
+    ever logged. False when TOW has no sign-in or it cannot be read."""
+    try:
+        sign_in = credential(secrets)
+    except AuthConfigurationError, OSError:
+        return False
+    for candidate in candidates:
+        if not isinstance(candidate, str) or not candidate.strip():
+            continue
+        variants = {candidate, candidate.strip()}  # a site's password is stored stripped
+        if any(sign_in.matches(variant) for variant in variants):
+            return True
+    return False
+
+
 def new_record(password: str, repeat: str, hint: str = "") -> dict[str, Any]:
     """A checked password record with its reminder (both typed fields must agree): ``tow
     password`` asks twice, the terminal shows nothing of what was typed."""

@@ -2788,7 +2788,8 @@
       "hide": "Hide “{field}”",
       "saved_tag": "saved",
       "keep_placeholder": "Leave empty to keep",
-      "keep_note": "Leave passwords and keys empty to keep them."
+      "keep_note": "Leave passwords and keys empty to keep them.",
+      "sign_in_password": "Not saved: this is the password for signing in to TOW, not the one this field asks for. Your browser may have filled it in — type the right password or key."
     },
     "network_closed": "TOW is open only on the computer it runs on: access from other devices is turned off.",
     "refused": {
