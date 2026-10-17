@@ -314,7 +314,9 @@ def sites_prefer(name: str, host: str = Form()) -> Response:
     return flash_redirect("/sites", "web.sites.preferred" if ok else "web.sites.no_mirror", "ok" if ok else "err")
 
 
-def _doctor_view(report: dict[str, Any] | None) -> dict[str, Any] | None:
+def _doctor_view(report: dict[str, Any] | None, *, local: bool) -> dict[str, Any] | None:
+    """Diagnostics' report in words; for a network device every error and the autostart's file
+    scrubbed as Recent messages are (a link keeps its host, a folder or file path goes)."""
     if not report:
         return report
     view = dict(report)
@@ -338,7 +340,22 @@ def _doctor_view(report: dict[str, Any] | None) -> dict[str, Any] | None:
         for probe in report.get("probes") or []
         if isinstance(probe, dict)
     ]
+    if not local:
+        _scrub_doctor(view)
     return view
+
+
+def _scrub_doctor(view: dict[str, Any]) -> None:
+    for name in ("qbit", "qbit_text"):
+        if view.get(name):
+            view[name] = services.scrub_display(str(view[name]), limit=8192)
+    for probe in view["probes"]:
+        for name in ("error", "text"):
+            if probe.get(name):
+                probe[name] = services.scrub_display(str(probe[name]), limit=8192)
+    autostart = view.get("autostart")
+    if isinstance(autostart, dict) and autostart.get("where"):
+        view["autostart"] = {**autostart, "where": services.scrub_display(str(autostart["where"]), limit=8192)}
 
 
 @router.get("/doctor", response_class=HTMLResponse)
@@ -348,7 +365,7 @@ def doctor_page(request: Request) -> Response:
         "doctor.html",
         {
             "title": t("web.title.doctor"),
-            "report": _doctor_view(services.doctor_report(probe=False)),
+            "report": _doctor_view(services.doctor_report(probe=False), local=access.is_local(request)),
             "flash": request_flash(request),
         },
     )

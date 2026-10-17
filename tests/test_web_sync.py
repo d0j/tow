@@ -906,6 +906,30 @@ def test_a_network_device_never_sees_a_folder_in_an_issues_words():
     assert "(…)" in remote
 
 
+def test_a_network_device_never_sees_a_raw_error_in_history_or_diagnostics(monkeypatch, clock):
+    """Q5, the rest of what a network device reads: History's lines (the page, its live lines,
+    /log.json and Settings' log) and Diagnostics said raw errors, folders and the autostart's
+    file. A network device gets them scrubbed as Recent messages are; this PC gets every word."""
+    _seed()
+    services.log_event("check_fail", topic="t1", error=RAW_ERROR, path=r"D:\TV\Show A")
+    report = {
+        "qbit": r"FAIL cannot read D:\TV\client.cfg via http://tracker.example/x?uk=SECRET1",
+        "probes": [{"tracker": "rutor", "host": "http://rutor.info", "ok": False, "error": r"open /home/owner/c.txt"}],
+        "autostart": {"on": True, "where": r"D:\Apps\TOW\autostart.cmd"},
+    }
+    monkeypatch.setattr(services, "doctor_report", lambda probe=False: report)
+    lan = _lan(monkeypatch)
+    local = TestClient(app, headers=ORIGIN)
+    secrets = ("SECRET1", "SECRET2", r"D:\TV", "/home/owner", "e01.mkv", r"D:\Apps")
+    addresses = ("/history", "/page/fragments?page=/history", "/log.json", "/settings", "/doctor")
+    for address in addresses:
+        shown = lan.get(address).text
+        assert not [secret for secret in secrets if secret in shown.replace("\\\\", "\\")], address
+    for address in ("/history", "/log.json"):
+        assert "D:" in local.get(address).text, address
+    assert r"D:\Apps\TOW\autostart.cmd" in local.get("/doctor").text
+
+
 def test_settings_and_history_polls_never_wait_for_the_data_or_the_logs_lock(clock):
     """Final review 1.33.0 #8: the Settings inventory read the night copies' cleanup under the
     data lock (whose taking runs the recovery steps), and History's lines took the log's lock -

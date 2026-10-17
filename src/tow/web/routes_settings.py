@@ -35,7 +35,15 @@ from tow.web.messages import flash_redirect, request_flash
 from tow.web.site_store import save_together, settings_undo
 from tow.web.templating import TEMPLATES
 from tow.web.text import format_bytes, t
-from tow.web.views import backup_view, client_notes, flash_ttl_sec, issue_notes, repeated_password, service_view
+from tow.web.views import (
+    backup_view,
+    client_notes,
+    flash_ttl_sec,
+    issue_notes,
+    log_line,
+    repeated_password,
+    service_view,
+)
 
 router = APIRouter()
 
@@ -112,7 +120,9 @@ def settings_view(request: Request, *, live: bool) -> Response:
             "log_rows": []
             if live
             else [
-                format_event(e, title_index=title_index, site_titles=site_titles)
+                log_line(
+                    format_event(e, title_index=title_index, site_titles=site_titles), local=access.is_local(request)
+                )
                 for e in services.read_events(limit=200)
             ],
             # What needs the owner and is said in its card ("Needs attention" lands there).

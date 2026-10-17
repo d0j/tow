@@ -39,9 +39,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   network access and its password are saved only from a page that shows them as they are now. Undo pressed while a
   save moves the topic's folder in the torrent client no longer moves the torrent back at the same time: it says so
   and works once the move has ended.
-- A topic's error opened from another device no longer shows folder and file paths or the private part of a link:
-  on Home (its row, its tooltip and its edit panel), in the header's Needs attention and in the notes on Settings,
-  Sites and History, as Recent messages already did; this computer still shows the full text.
+- Errors read from another device no longer show folder and file paths or the private part of a link: a topic's
+  error on Home (its row, its tooltip and its edit panel), the header's Needs attention, the notes on Settings, Sites
+  and History, the lines of History and of the log in Settings, and Diagnostics, as Recent messages already did;
+  this computer still shows the full text.
 - History and Recent messages no longer say a topic was edited or removed, or a change undone, when saving it
   failed or was refused.
 

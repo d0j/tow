@@ -146,18 +146,20 @@ def event_key(event: Mapping[str, Any]) -> str:
 
 
 def history_rows(
-    events: list[dict[str, Any]], state: Mapping[str, Any], cfg: Mapping[str, Any]
+    events: list[dict[str, Any]], state: Mapping[str, Any], cfg: Mapping[str, Any], *, local: bool
 ) -> list[dict[str, Any]]:
-    """History's lines for ``events`` (newest first): their words, the newest line of each kind's
-    address (``latest-<kind>``: "Needs attention" links there) and their key."""
+    """History's lines for ``events`` (newest first): their words (for this PC, ``local``, or a
+    network device: ``views.log_line``), the newest line of each kind's address
+    (``latest-<kind>``: "Needs attention" links there) and their key."""
     from tow.log import format_event, index_event_titles, index_site_titles
+    from tow.web.views import log_line
 
     title_index = index_event_titles(state.get("topics") or [])
     site_titles = index_site_titles(cfg)
     rows = []
     seen: set[str] = set()
     for event in events:
-        row: dict[str, Any] = format_event(event, title_index=title_index, site_titles=site_titles)
+        row = log_line(format_event(event, title_index=title_index, site_titles=site_titles), local=local)
         kind = str(event.get("kind") or "")
         if kind and kind not in seen:
             seen.add(kind)

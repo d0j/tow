@@ -776,7 +776,8 @@ def history_fragments(request: Request, filters: Mapping[str, str]) -> dict[str,
     from tow.log import index_event_titles
 
     sample = SAMPLER.current()
-    computed = _page(sample, viewer(request), "/history", time.time(), request, filters)
+    who = viewer(request)
+    computed = _page(sample, who, "/history", time.time(), request, filters)
     with sample.seeded():
         events = services.history_events(
             group=filters["group"],
@@ -785,7 +786,7 @@ def history_fragments(request: Request, filters: Mapping[str, str]) -> dict[str,
             title_index=index_event_titles(sample.state.get("topics") or []),
             lock_live=False,  # a snapshot: the checker appending meanwhile is never waited for
         )
-        rows = page_sync.history_rows(events, sample.state, sample.config)
+        rows = page_sync.history_rows(events, sample.state, sample.config, local=who.local)
         entries = page_sync.history_entries(page_sync.page_request(request, "/history"), rows)
     return {"ok": True, "page": "/history", "rev": computed.rev, "entries": entries, "limit": page_sync.HISTORY_LIMIT}
 
