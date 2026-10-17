@@ -591,3 +591,31 @@ def test_stopping_the_module_runs_the_systems_own_taskkill(installed, monkeypatc
         monkeypatch.setenv("SYSTEMROOT", root)
     assert service.stop() is True
     assert calls == [[expected, "/PID", "4321", "/T", "/F"]]
+
+
+def test_the_broker_handles_its_service_as_windows_whatever_the_host_says(installed, monkeypatch):
+    # The broker runs only on Windows (main refuses elsewhere, TOW starts it only there): no
+    # second process model is kept for a system it never runs on.
+    folder, manifest = installed
+    service = worker.NativeService(folder, manifest)
+    monkeypatch.setattr(worker, "sys", SimpleNamespace(platform="linux"))
+    started = []
+    monkeypatch.setattr(worker.subprocess, "Popen", lambda argv, **kwargs: started.append(kwargs) or Mock())
+    service.launch(worker.time.monotonic() + 10)
+    assert started[0]["creationflags"] == 0x08000000 | 0x00000200
+    assert "start_new_session" not in started[0]
+    service.child = Mock(pid=4321, poll=Mock(return_value=None), wait=Mock(return_value=0))
+    calls = []
+    monkeypatch.setattr(worker.subprocess, "run", lambda argv, **kwargs: calls.append(argv))
+    monkeypatch.setattr(worker.os, "killpg", lambda *a: pytest.fail("a process group signal"), raising=False)
+    assert service.stop() is True
+    assert calls[0][1:] == ["/PID", "4321", "/T", "/F"]
+
+
+def test_the_broker_never_serves_where_tow_does_not_start_it(installed, monkeypatch):
+    monkeypatch.setattr(worker, "sys", SimpleNamespace(platform="darwin"))
+    monkeypatch.setattr(worker, "Broker", lambda *a: pytest.fail("served on another system"))
+    with pytest.raises(OSError, match="not installed"):
+        worker.main()
+    monkeypatch.setattr(local_service, "current", lambda: SimpleNamespace(name="linux"))
+    assert local_service.managed(PROVIDER) is False
