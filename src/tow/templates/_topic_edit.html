@@ -52,7 +52,9 @@
       <p class="field-hint" data-move-note hidden>{{ t('home.topic.path_note') }}</p><noscript><p class="field-hint">{{ t('home.topic.path_note') }}</p></noscript></div>
     <div class="field-row">
       {% if client_options|length > 1 %}
-      <div class="field"><label for="edit-client-{{ topic.id }}">{{ t('home.add.client') }}</label><select id="edit-client-{{ topic.id }}" class="w-m" name="client_id">{% for client in client_options %}<option value="{{ client.id }}"{% if client.id == d.get('client_id', topic.client_id or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>{% endfor %}</select></div>
+      {% set wanted_client = d.get('client_id', topic.client_id or default_client_id) %}
+      {% set chosen_client = wanted_client if wanted_client in client_options|map(attribute='id')|list else client_options[0].id %}
+      <div class="field"><label for="edit-client-{{ topic.id }}">{{ t('home.add.client') }}</label><select id="edit-client-{{ topic.id }}" class="w-m" name="client_id">{% for client in client_options %}<option value="{{ client.id }}"{% if client.id == chosen_client %} selected{% endif %}>{{ client_name(client) }}</option>{% endfor %}</select></div>
       {% else %}
       {#- One client: the one the select offered, sent as it was. -#}
       <input type="hidden" id="edit-client-{{ topic.id }}" name="client_id" value="{{ client_options[0].id if client_options else (topic.client_id or default_client_id) }}">

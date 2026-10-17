@@ -59,10 +59,13 @@
     {% set mode = draft.get('selection_mode', 'all') %}
     <div class="field-row">
       {% if client_options|length > 1 %}
+      {#- The client the form draws chosen is one of the options: a select drawn without one counts as changed. -#}
+      {% set wanted_client = draft.get('client_id') or default_client_id %}
+      {% set chosen_client = wanted_client if wanted_client in client_options|map(attribute='id')|list else client_options[0].id %}
       <div class="field"><label for="topic-client">{{ t('home.add.client') }}</label>
         <select id="topic-client" class="w-m" name="client_id" required{{ invalid('topic-client', bad_field) }}>
           {% for client in client_options %}
-          <option value="{{ client.id }}"{% if client.id == (draft.get('client_id') or default_client_id) %} selected{% endif %}>{{ client_name(client) }}</option>
+          <option value="{{ client.id }}"{% if client.id == chosen_client %} selected{% endif %}>{{ client_name(client) }}</option>
           {% endfor %}
         </select></div>
       {% else %}

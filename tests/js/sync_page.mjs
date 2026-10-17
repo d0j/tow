@@ -408,6 +408,58 @@ sync.onSignOut?.(() => ended.push("told"));
 }
 verdict.restoredFocusDoesNotHoldAFragment = true;
 
+// ---- a select whose markup marks no option shows its first one, as drawn: no draft. Final QA
+// 1.33.0 F1: Settings' "Torrent clients" (the kind to add) and "Site access" (a new connection's
+// service) counted as edited on a fresh page, so they never followed another device, and an idle
+// Settings page never took a new version (sync.js's idle()). One rule for both files.
+{
+  const select = (marks, { multiple = false } = {}) => {
+    const node = build(document, ["select", { name: "kind" }]);
+    const options = marks.map(([selected, defaultSelected]) => ({ selected, defaultSelected }));
+    Object.defineProperty(node, "options", { value: options });
+    Object.defineProperty(node, "multiple", { value: multiple });
+    Object.defineProperty(node, "type", { value: multiple ? "select-multiple" : "select-one" });
+    return node;
+  };
+  const kind = select([[true, false], [false, false]]);
+  const form = build(document, ["form", { method: "post", action: "/settings/client/add" }]);
+  form.append(kind);
+  const section = build(document, ["details", { class: "settings-section", id: "acc-clients" }]);
+  section.append(form);
+  document.getElementById("main").append(section);
+  assert.equal(window.towPages.protectedElement(section), false); // pages.js: the section follows
+  const before = reloads;
+  answer({ version: { rev: REV(1).replace("1", "c"), app: "1.33.1", static: "s3" } });
+  while (syncAnswers.length) await run(50);
+  await run(6000);
+  const reloaded = reloads; // (the fake reload leaves the earlier wishes of this page wanted)
+  assert.ok(reloaded > before); // sync.js: the page is idle, the new version reloads it
+  // The owner's choice is a draft in both.
+  kind.options[0].selected = false;
+  kind.options[1].selected = true;
+  assert.equal(window.towPages.protectedElement(section), true);
+  answer({ version: { rev: REV(1).replace("1", "d"), app: "1.33.2", static: "s4" } });
+  while (syncAnswers.length) await run(50);
+  await run(6000);
+  assert.equal(reloads, reloaded);
+  section.remove();
+  const { changedField } = window.TowSync;
+  assert.equal(changedField(select([[false, false], [true, true]])), false); // the one marked
+  assert.equal(changedField(select([[true, false], [false, true]])), true);
+  assert.equal(changedField(select([[false, true], [true, true]])), false); // two marked: the last, as a browser
+  assert.equal(changedField(select([[false, false], [false, false]], { multiple: true })), false);
+  assert.equal(changedField(select([[true, false], [false, false]], { multiple: true })), true); // many: none is the default
+  assert.equal(changedField(select([[true, true], [true, false]], { multiple: true })), true);
+  assert.equal(changedField(select([])), false);
+  assert.equal(changedField({ type: "checkbox", checked: true, defaultChecked: true }), false);
+  assert.equal(changedField({ type: "checkbox", checked: false, defaultChecked: true }), true);
+  assert.equal(changedField({ type: "text", value: "a", defaultValue: "a" }), false);
+  assert.equal(changedField({ type: "text", value: "b", defaultValue: "a" }), true);
+  assert.equal(changedField({ type: "text", value: "b", defaultValue: "a", disabled: true }), false);
+  assert.equal(changedField({ type: "reset", value: "b", defaultValue: "a" }), false);
+}
+verdict.selectWithoutMarkedOptionIsNoDraft = true;
+
 // ---- signing out by the form: nothing asked any more, nothing applied
 const polls = sent.filter((r) => r.url.startsWith("/sync.json")).length;
 const logout = build(document, ["form", { method: "post", action: "/logout" }]);
