@@ -38,27 +38,60 @@ FRAG = re.compile(r"<!--frag:([A-Za-z0-9_-]{1,160})-->(.*?)<!--/frag:\1-->", re.
 LIST = re.compile(r"<!--frags:(/[a-z]+)-->")
 HASH_HEX = 32
 MAX_QUERY_CHARS = 200
-_TAG = re.compile(r"<([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+))?)*)\s*(/?)>")
+_TAG_START = re.compile(r"<([a-zA-Z][a-zA-Z0-9-]*)")
 _ATTR = re.compile(r"\s+([^\s=>/]+)(?:\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+))?")
 _VOLATILE = re.compile(r"<span\b[^>]*\bdata-sync-volatile\b[^>]*>[^<]*</span>")
 # What only the address chose: a section or card opened for a link, a field focused or marked.
 _ADDRESS_ONLY = {"autofocus", "aria-invalid"}
 
 
-def _drop_attributes(match: re.Match[str]) -> str:
-    tag, attrs, slash = match.group(1), match.group(2), match.group(3)
+def _drop_attributes(tag: str, attrs: str, slash: bool, whole: str) -> str:
     names = _ADDRESS_ONLY | ({"open"} if tag.lower() == "details" else set())
     if "data-sync-volatile" in attrs:
         names = names | {"value"}  # a ready value made up anew each time (a random topic name)
     if not any(name in attrs for name in names):
-        return match.group(0)
+        return whole
     kept = "".join(part.group(0) for part in _ATTR.finditer(attrs) if part.group(1).lower() not in names)
     return f"<{tag}{kept}{' /' if slash else ''}>"
 
 
+def _tag_end(html: str, at: int) -> int:
+    """Where the tag whose name ends at ``at`` closes (the index of its ">"), or -1: read once
+    from left to right, a quoted value skipped to its own quote. No regular expression over a
+    tag's attributes: CodeQL found ones that backtrack."""
+    quote = ""
+    for index in range(at, len(html)):
+        char = html[index]
+        if quote:
+            if char == quote:
+                quote = ""
+        elif char in "\"'":
+            quote = char
+        elif char == ">":
+            return index
+    return -1
+
+
 def normalized(html: str) -> str:
     """What a fragment draws, without what the address alone chose or what changes by itself."""
-    return _TAG.sub(_drop_attributes, _VOLATILE.sub("", html))
+    html = _VOLATILE.sub("", html)
+    out: list[str] = []
+    done = 0
+    for start in _TAG_START.finditer(html):
+        if start.start() < done:
+            continue
+        end = _tag_end(html, start.end())
+        if end < 0:
+            break
+        attrs = html[start.end() : end].rstrip()
+        slash = attrs.endswith("/")
+        if slash:
+            attrs = attrs[:-1].rstrip()
+        out.append(html[done : start.start()])
+        out.append(_drop_attributes(start.group(1), attrs, slash, html[start.start() : end + 1]))
+        done = end + 1
+    out.append(html[done:])
+    return "".join(out)
 
 
 def digest(html: str) -> str:
