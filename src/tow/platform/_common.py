@@ -12,13 +12,27 @@ from typing import IO, NamedTuple
 
 
 class Volume(NamedTuple):
-    """The file system holding a path. ``identity`` names it the same way after a reboot or a
-    remount: a Windows volume GUID (a share's path), on Linux and macOS its type and mount point
-    (and the source of a network one). ``kind`` is "local", "network" or "unknown" (a type not
-    known to be either: FUSE in general, for one, also carries local file systems)."""
+    """The file system holding a path.
 
-    identity: str
+    ``identity`` names that very file system the same way after a reboot or a remount, and never
+    another one put in its place (the same type at the same mount point or drive letter): one of
+    ``VOLUME_IDENTITY_PREFIXES`` - Linux "uuid:"/"partuuid:" (the block device's file system or
+    partition UUID), macOS "uuid:" (the volume UUID), Windows "win-volume:" (the volume GUID and
+    serial number), and "net:"/"win-share:" for the share a network one shows. None when the
+    system cannot name it so (a tmpfs, an overlay, a device without a UUID, a failed lookup):
+    unknown, never a guess from a type, mount point or drive letter.
+
+    ``kind`` is "local", "network" or "unknown" (a type not known to be either: FUSE in general,
+    for one, also carries local file systems)."""
+
+    identity: str | None
     kind: str
+
+
+# What a positive identity starts with. A recorded identity of any other shape (1.33.1's
+# development builds wrote a type and mount point, or a bare GUID) matches no volume: the owner
+# accepts the folder's disk again.
+VOLUME_IDENTITY_PREFIXES = ("uuid:", "partuuid:", "net:", "win-volume:", "win-share:")
 
 
 def run_quiet(args: list[str], *, timeout: float = 20, creationflags: int = 0) -> str:

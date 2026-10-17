@@ -489,29 +489,29 @@ def _volumes():
 def test_a_verified_night_copy_records_its_folders_volume(night, monkeypatch):
     from tow.snapshots import create_snapshot
 
-    _disk(monkeypatch, "usb-disk")
+    _disk(monkeypatch, "uuid:usb-disk")
     create_snapshot()
-    assert _volumes()["night"] == {"path": str(resolve(str(night), NIGHT)), "id": "usb-disk"}
+    assert _volumes()["night"] == {"path": str(resolve(str(night), NIGHT)), "id": "uuid:usb-disk"}
 
 
 def test_a_night_copy_is_never_written_to_another_volume(night, monkeypatch):
     from tow.snapshots import SnapshotError, create_snapshot, list_snapshots, status
 
-    disk = _disk(monkeypatch, "usb-disk")
+    disk = _disk(monkeypatch, "uuid:usb-disk")
     create_snapshot()
     before = sorted(path.name for path in night.iterdir())
-    disk["id"] = "system-disk"  # unmounted: the folder is on the disk below now
+    disk["id"] = "uuid:system-disk"  # unmounted: the folder is on the disk below now
     with pytest.raises(SnapshotError) as refused:
         create_snapshot()
     assert str(refused.value) == t("locations.volume_missing", "ru", title=NIGHT.title)
     assert sorted(path.name for path in night.iterdir()) == before  # nothing written, nothing created
     assert status()["last_error"] == str(refused.value)
     assert isinstance(_volumes()["night"]["unseen_at"], int)
-    assert _volumes()["night"]["id"] == "usb-disk"  # never rebound by itself
+    assert _volumes()["night"]["id"] == "uuid:usb-disk"  # never rebound by itself
     disk["id"] = None  # the volume cannot be told: refused as well
     with pytest.raises(SnapshotError):
         create_snapshot()
-    disk["id"] = "usb-disk"  # back: copies go on, the note goes
+    disk["id"] = "uuid:usb-disk"  # back: copies go on, the note goes
     create_snapshot()
     assert "unseen_at" not in _volumes()["night"]
     assert len(list_snapshots()) == 2
@@ -524,10 +524,10 @@ def test_a_restore_point_is_never_written_to_another_volume(tmp_path, monkeypatc
     cfg = load_config()
     cfg["restore_points_dir"] = str(folder)
     save_config(cfg)
-    disk = _disk(monkeypatch, "usb-disk")
+    disk = _disk(monkeypatch, "uuid:usb-disk")
     create_restore_point()
-    assert _volumes()["manual"]["id"] == "usb-disk"
-    disk["id"] = "system-disk"
+    assert _volumes()["manual"]["id"] == "uuid:usb-disk"
+    disk["id"] = "uuid:system-disk"
     for path in folder.iterdir():
         path.unlink()
     folder.rmdir()  # the unmounted disk took its folder along
@@ -541,12 +541,12 @@ def test_free_space_of_a_backup_folder_off_its_volume_is_unknown(night, monkeypa
     from tow.locations import free_bytes
     from tow.snapshots import create_snapshot
 
-    disk = _disk(monkeypatch, "usb-disk")
+    disk = _disk(monkeypatch, "uuid:usb-disk")
     path = resolve(str(night), NIGHT)
     assert isinstance(free_bytes(path), int)  # no record yet: as before
     create_snapshot()
     assert isinstance(free_bytes(path), int)
-    disk["id"] = "system-disk"
+    disk["id"] = "uuid:system-disk"
     assert free_bytes(path) is None  # never the disk below's space
     disk["id"] = None
     assert free_bytes(path) is None
@@ -556,7 +556,7 @@ def test_a_moved_backup_folder_records_anew_and_a_damaged_record_matches_nothing
     from tow.locations import recorded_volume, volume_unseen
     from tow.store import load_state, save_state
 
-    _disk(monkeypatch, "usb-disk")
+    _disk(monkeypatch, "uuid:usb-disk")
     state = load_state()
     state["backup_volumes"] = {"night": {"path": str(tmp_path / "elsewhere"), "id": "old"}}
     path = resolve(str(night), NIGHT)

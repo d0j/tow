@@ -330,6 +330,75 @@ def _volume_guid(mount_point: str) -> str | None:
     return _volume_call("GetVolumeNameForVolumeMountPointW", mount_point, 50)
 
 
+def _volume_serial(root: str) -> int | None:
+    """The serial number GetVolumeInformationW reports for ``root`` (a mount point, a drive or a
+    share, ending in a backslash): a new one with every format; for a share what its server says.
+    None when it fails."""
+    from ctypes import wintypes
+
+    kernel32, _last_error = _kernel32_with_last_error()
+    call = kernel32.GetVolumeInformationW
+    call.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        ctypes.POINTER(wintypes.DWORD),
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+    )
+    call.restype = wintypes.BOOL
+    serial = wintypes.DWORD(0)
+    if not call(root, None, 0, ctypes.byref(serial), None, None, None, 0):
+        return None
+    return int(serial.value)
+
+
+def _remote_name(drive: str) -> str | None:
+    """The share a mapped network drive (``Z:``) stands for (WNetGetConnectionW), None when it
+    is no mapped drive or Windows cannot tell."""
+    from ctypes import wintypes
+
+    library = getattr(ctypes, "WinDLL", None)
+    if library is None or getattr(ctypes, "windll", None) is None:
+        raise AttributeError("ctypes.windll")
+    call = library("mpr").WNetGetConnectionW
+    call.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD))
+    call.restype = wintypes.DWORD
+    size = wintypes.DWORD(1024)
+    buffer = ctypes.create_unicode_buffer(size.value)
+    if call(drive, buffer, ctypes.byref(size)) != 0 or not buffer.value:
+        return None
+    return buffer.value
+
+
+def _dos_device(drive: str) -> str | None:
+    """What the drive letter ``X:`` stands for (QueryDosDeviceW): ``\\??\\C:\\folder`` for a
+    substituted drive, a device name otherwise; None when it fails."""
+    from ctypes import wintypes
+
+    kernel32, _last_error = _kernel32_with_last_error()
+    call = kernel32.QueryDosDeviceW
+    call.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+    call.restype = wintypes.DWORD
+    buffer = ctypes.create_unicode_buffer(32768)
+    if not call(drive, buffer, len(buffer)):
+        return None
+    return buffer.value or None
+
+
+def _subst_target(drive: str) -> str | None:
+    """The folder a substituted drive (``subst S: C:\\folder``) stands for, None for any other."""
+    device = _dos_device(drive)
+    if not device or not device.startswith("\\??\\"):
+        return None
+    target = device[4:]
+    if target[:4].upper() == "UNC\\":
+        return "\\\\" + target[4:]
+    return target
+
+
 def _drive_type(mount_point: str) -> int:
     from ctypes import wintypes
 
@@ -339,20 +408,51 @@ def _drive_type(mount_point: str) -> int:
     return int(kernel32.GetDriveTypeW(mount_point))
 
 
-def volume(path: Path) -> Volume | None:
-    """The volume holding the existing ``path`` (tow.platform.volume_of)."""
+def _local_identity(guid: str, root: str) -> str | None:
+    """A local volume: its GUID and its serial number (a reformat keeps the GUID), both or none."""
+    serial = _volume_serial(root)
+    return f"win-volume:{guid.casefold()}:{serial:08x}" if serial is not None else None
+
+
+def _share_identity(share: str, root: str) -> str:
+    """A share by its path, and the serial its server reports where it reports one."""
+    serial = _volume_serial(root)
+    name = "win-share:" + ntpath.normcase(share.rstrip("\\"))
+    return name if serial is None else f"{name}:{serial:08x}"
+
+
+def volume(path: Path, *, _depth: int = 0) -> Volume | None:
+    """The volume holding the existing ``path`` (tow.platform.volume_of).
+
+    Its identity names that very file system: a local volume by its GUID and serial number (a
+    reformatted or another disk under the same letter or folder differs); a share, or a mapped
+    network drive by the share it stands for, by its path and the serial its server reports
+    (where it reports one); a substituted drive by the volume of its folder and that folder.
+    None when Windows cannot tell (no GUID, no serial, no share name): never the drive letter."""
+    text = os.fspath(path)
     try:
-        mount_point = _volume_path(os.fspath(path))
+        drive = ntpath.splitdrive(text)[0]
+        if len(drive) == 2 and drive[1] == ":" and _depth < 4:
+            target = _subst_target(drive)
+            if target is not None:
+                folder = target.rstrip("\\")
+                inner = volume(Path(folder + text[2:]), _depth=_depth + 1)
+                if inner is None or inner.identity is None:
+                    return Volume(None, inner.kind if inner is not None else "unknown")
+                return Volume(inner.identity + "|subst:" + ntpath.normcase(folder), inner.kind)
+        mount_point = _volume_path(text)
         if not mount_point:
             return None
         if mount_point.startswith("\\\\"):
-            return Volume("share " + ntpath.normcase(mount_point), "network")
+            return Volume(_share_identity(mount_point, mount_point), "network")
         kind = _DRIVE_KINDS.get(_drive_type(mount_point), "unknown")
+        if kind == "network":
+            remote = _remote_name(mount_point[:2]) if len(mount_point) == 3 and mount_point[1] == ":" else None
+            return Volume(_share_identity(remote, mount_point) if remote else None, kind)
         guid = _volume_guid(mount_point)
+        return Volume(_local_identity(guid, mount_point) if guid else None, kind)
     except AttributeError, OSError, ValueError:
         return None
-    # A mapped network drive or a substituted one has no volume GUID: its mount point names it.
-    return Volume(guid.casefold() if guid else "path " + ntpath.normcase(mount_point), kind)
 
 
 def process_alive(pid: int) -> bool:

@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from tow.platform._common import Volume
+from tow.platform._common import VOLUME_IDENTITY_PREFIXES, Volume
 
 NAMES = ("windows", "linux", "macos")
 
@@ -285,7 +285,8 @@ def ordinary_path(path: Path | str) -> Path:
 
 def volume_of(path: Path | str) -> Volume | None:
     """The file system the existing ``path`` is on (its identity, and whether it is a local or a
-    network one), or None when it cannot be told. Read-only: nothing is written or mounted."""
+    network one), or None when it cannot be told. Its identity is None when the system cannot
+    name that file system positively (``Volume``). Read-only: nothing is written or mounted."""
     try:
         return current().volume(Path(path))
     except AttributeError, OSError, ValueError:  # a backend without the probe knows nothing
@@ -434,6 +435,7 @@ def private_root(folder: Path, *, repair: bool = True) -> bool:
 __all__ = [
     "NAMES",
     "PRIVATE_UMASK",
+    "VOLUME_IDENTITY_PREFIXES",
     "Backend",
     "Volume",
     "backend_for",

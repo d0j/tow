@@ -842,18 +842,18 @@ def test_the_waiting_message_is_not_sent_again_after_a_client_outage(world, pass
 def test_a_folder_off_its_recorded_volume_has_no_free_space_here(tmp_path, monkeypatch):
     from tow import platform
 
-    monkeypatch.setattr(platform, "volume_of", lambda path: platform.Volume("system-disk", "local"))
+    monkeypatch.setattr(platform, "volume_of", lambda path: platform.Volume("uuid:system-disk", "local"))
     monkeypatch.setattr(shutil, "disk_usage", lambda _p: pytest.fail("the system disk's space credited"))
     wanted = [((), 10 * GIB, 0)]
-    assert space._measured(str(tmp_path / "mnt" / "disk"), wanted, volume="usb-disk") == (False, None)
-    assert space.measure(str(tmp_path / "mnt" / "disk"), wanted, volume="usb-disk") is None
+    assert space._measured(str(tmp_path / "mnt" / "disk"), wanted, volume="uuid:usb-disk") == (False, None)
+    assert space.measure(str(tmp_path / "mnt" / "disk"), wanted, volume="uuid:usb-disk") is None
 
 
 def test_the_recorded_volume_comes_from_the_topics_history(tmp_path):
     save_download_history(
-        {"schema_version": 1, "topics": {"t1": {"items": {}, "volume": {"path": str(tmp_path), "id": "usb-disk"}}}}
+        {"schema_version": 1, "topics": {"t1": {"items": {}, "volume": {"path": str(tmp_path), "id": "uuid:usb-disk"}}}}
     )
-    assert space.recorded_volume_of({"id": "t1"}, str(tmp_path)) == "usb-disk"
+    assert space.recorded_volume_of({"id": "t1"}, str(tmp_path)) == "uuid:usb-disk"
     assert space.recorded_volume_of({"id": "t1"}, str(tmp_path / "other")) is None
     assert space.recorded_volume_of({"id": "t2"}, str(tmp_path)) is None
 
@@ -861,10 +861,10 @@ def test_the_recorded_volume_comes_from_the_topics_history(tmp_path):
 def test_a_waiting_torrent_on_an_unmounted_disk_keeps_waiting(world, monkeypatch):
     # The space pass measures with the folder's recorded volume: another one is "not known now".
     seen = []
-    monkeypatch.setattr(space, "recorded_volume_of", lambda topic, dest: "usb-disk")
+    monkeypatch.setattr(space, "recorded_volume_of", lambda topic, dest: "uuid:usb-disk")
     monkeypatch.setattr("tow.folders.seen_from_here", lambda path, volume=None: seen.append(volume) or False)
     assert space._measured("/mnt/disk", [((), GIB, 0)], volume=space.recorded_volume_of({}, "/mnt/disk")) == (
         False,
         None,
     )
-    assert seen == ["usb-disk"]
+    assert seen == ["uuid:usb-disk"]

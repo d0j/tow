@@ -180,11 +180,19 @@ _LOCAL_FILESYSTEMS = frozenset(
 )
 
 
-def _volume(fstype: str, mount_point: str, source: str) -> Volume:
-    """A mount as a Volume: a network one is named by its source too (the share it shows)."""
+def _kind(fstype: str) -> str:
     name = fstype.casefold()
-    kind = "network" if name in _NETWORK_FILESYSTEMS else "local" if name in _LOCAL_FILESYSTEMS else "unknown"
-    return Volume(f"{fstype} {mount_point}" + (f" {source}" if kind == "network" else ""), kind)
+    return "network" if name in _NETWORK_FILESYSTEMS else "local" if name in _LOCAL_FILESYSTEMS else "unknown"
+
+
+def _network_identity(source: str, root: str = "/") -> str | None:
+    """A network mount by the share it shows: ``server:/export``, ``//server/share`` (an SMB
+    URL's account name left out: the same share), and the folder of it mounted when not its top."""
+    text = source.strip()
+    if not text or text.casefold() in {"none", "-"}:
+        return None
+    text = re.sub(r"^//[^/@]*@", "//", text)
+    return "net:" + text + ("" if root in ("", "/") else root)
 
 
 def _unescape_mount(text: str) -> str:
@@ -192,11 +200,50 @@ def _unescape_mount(text: str) -> str:
     return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), text)
 
 
+# udev's names for block devices by what their file system says (first) and by their partition:
+# links to the device, whose "major:minor" /sys/class/block/<device>/dev gives.
+_DISK_LINKS = (("/dev/disk/by-uuid", "uuid:"), ("/dev/disk/by-partuuid", "partuuid:"))
+_DEVICE_NUMBER = re.compile(r"\d+:\d+")
+
+
+def _device_number(device: str) -> str | None:
+    """``major:minor`` of the block device ``device`` (a /dev path or a link to one), read-only."""
+    try:
+        name = os.path.basename(os.path.realpath(device))
+    except OSError, ValueError:
+        return None
+    if not name or name in {".", ".."}:
+        return None
+    number = _read(f"/sys/class/block/{name}/dev").strip()
+    return number if _DEVICE_NUMBER.fullmatch(number) else None
+
+
+def _block_identities() -> dict[str, str]:
+    """{"major:minor": identity} of every block device udev names by a file system UUID or, for
+    one without, a partition UUID. Read-only: links listed and resolved, nothing opened."""
+    found: dict[str, str] = {}
+    for folder, prefix in _DISK_LINKS:
+        try:
+            names = sorted(os.listdir(folder))
+        except OSError:
+            continue
+        for name in names:
+            number = _device_number(os.path.join(folder, name))
+            if number is not None and number not in found:
+                found[number] = prefix + name
+    return found
+
+
 def linux_volume(path: str, mountinfo: str) -> Volume | None:
     """The mount holding the resolved ``path``, from /proc/self/mountinfo: the longest mount
     point above it, the last listed of equal ones (mounts stack). A volume that is not mounted is
-    not listed, so its empty mount point folder is on the mount above it."""
-    best: tuple[str, str, str] | None = None
+    not listed, so its empty mount point folder is on the mount above it.
+
+    Its identity is the file system's own: the UUID of its block device (by the mount's device
+    number, else its source device: btrfs shows an anonymous number), or the share of a network
+    one; a mount of a folder inside it (a bind mount, a btrfs subvolume) adds that folder. A
+    tmpfs, an overlay or a device without a UUID has none (None), whatever its type and place."""
+    best: tuple[str, str, str, str, str] | None = None
     for line in mountinfo.splitlines():
         before, separator, after = line.partition(" - ")
         fields, tail = before.split(), after.split()
@@ -206,8 +253,21 @@ def linux_volume(path: str, mountinfo: str) -> Volume | None:
         if path != point and not path.startswith(point.rstrip("/") + "/"):
             continue
         if best is None or len(point) >= len(best[1]):
-            best = (tail[0], point, _unescape_mount(tail[1]))
-    return _volume(*best) if best is not None else None
+            best = (tail[0], point, _unescape_mount(tail[1]), fields[2], _unescape_mount(fields[3]))
+    if best is None:
+        return None
+    fstype, _point, source, number, root = best
+    kind = _kind(fstype)
+    if kind == "network":
+        return Volume(_network_identity(source, root), kind)
+    devices = _block_identities()
+    identity = devices.get(number)
+    if identity is None and source.startswith("/dev/"):
+        source_number = _device_number(source)
+        identity = devices.get(source_number) if source_number is not None else None
+    if identity is not None and root not in ("", "/"):
+        identity += "|" + root
+    return Volume(identity, kind)
 
 
 def _statfs(path: str) -> tuple[str, str, str] | None:
@@ -252,6 +312,56 @@ def _statfs(path: str) -> tuple[str, str, str] | None:
         )
     except AttributeError, OSError, TypeError, ValueError:
         return None
+
+
+_ATTR_BIT_MAP_COUNT = 5  # sys/attr.h
+_ATTR_VOL_INFO = 0x80000000
+_ATTR_VOL_UUID = 0x00040000
+
+
+def _volume_uuid(mount_point: str) -> str | None:
+    """The UUID of the macOS volume mounted at ``mount_point``: getattrlist ATTR_VOL_UUID, else
+    what ``diskutil info`` says (read-only); None when neither tells."""
+    import ctypes
+    import uuid
+
+    class AttrList(ctypes.Structure):
+        _fields_ = (
+            ("bitmapcount", ctypes.c_ushort),
+            ("reserved", ctypes.c_uint16),
+            ("commonattr", ctypes.c_uint32),
+            ("volattr", ctypes.c_uint32),
+            ("dirattr", ctypes.c_uint32),
+            ("fileattr", ctypes.c_uint32),
+            ("forkattr", ctypes.c_uint32),
+        )
+
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        call = libc.getattrlist
+        call.argtypes = (ctypes.c_char_p, ctypes.POINTER(AttrList), ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint)
+        call.restype = ctypes.c_int
+        wanted = AttrList(_ATTR_BIT_MAP_COUNT, 0, 0, _ATTR_VOL_INFO | _ATTR_VOL_UUID, 0, 0, 0)
+        buffer = ctypes.create_string_buffer(64)
+        if call(os.fsencode(mount_point), ctypes.byref(wanted), buffer, len(buffer), 0) == 0:
+            raw = buffer.raw[4:20]  # u_int32_t length, then the uuid_t
+            if any(raw):
+                return str(uuid.UUID(bytes=raw)).upper()
+    except AttributeError, OSError, TypeError, ValueError:
+        pass
+    return _diskutil_uuid(mount_point)
+
+
+def _diskutil_uuid(mount_point: str) -> str | None:
+    """``diskutil info -plist``'s VolumeUUID of the volume at ``mount_point`` (it only reads)."""
+    import plistlib
+
+    output = _run(["/usr/sbin/diskutil", "info", "-plist", mount_point], timeout=10)
+    try:
+        found = plistlib.loads(output.encode("utf-8")).get("VolumeUUID") if output else None
+    except AttributeError, ValueError, plistlib.InvalidFileException:
+        return None
+    return found.upper() if isinstance(found, str) and re.fullmatch(r"[0-9A-Fa-f-]{36}", found) else None
 
 
 def _parent_pid() -> int:
@@ -739,12 +849,20 @@ class PosixBackend:
         return blocks * 512 if type(blocks) is int and blocks >= 0 else None
 
     def volume(self, path: Path) -> Volume | None:
-        """The mount holding the existing ``path``: /proc/self/mountinfo on Linux, statfs on macOS."""
+        """The mount holding the existing ``path``: /proc/self/mountinfo on Linux; statfs and the
+        volume's UUID on macOS (the URL it is mounted from for a network one)."""
         real = _resolve(path)
         if self.name == "linux":
             return linux_volume(real, _read("/proc/self/mountinfo"))
         found = _statfs(real)
-        return _volume(*found) if found is not None else None
+        if found is None:
+            return None
+        fstype, mount_point, source = found
+        kind = _kind(fstype)
+        if kind == "network":
+            return Volume(_network_identity(source), kind)
+        uuid = _volume_uuid(mount_point)
+        return Volume("uuid:" + uuid if uuid else None, kind)
 
     # --- handing a folder back to its owner (tow permissions fix) ---------------------------------
 
