@@ -877,11 +877,33 @@ if (clock) {
 // once, and the search below takes the new row in place of the old one.
 // What a row needs beyond the page's delegated listeners (its icons keep their clicks), for
 // the rows the page opened with and for a row drawn again.
-const initRow = (row) => {
-  row.querySelectorAll(".row-ops, .mirror-pick").forEach((el) => {
-    el.addEventListener("click", (e) => e.stopPropagation());
+// Elements a script attaches to or keeps (pages.js: a fragment another device's change brings is
+// mounted, the one it replaces unmounted). Without pages.js: the page's own elements, once.
+const components = window.towLifecycle || (() => {
+  const specs = [];
+  const done = new WeakMap();
+  const mount = (root) => specs.forEach(({ name, selector, attach }) => {
+    const found = [...(root?.matches?.(selector) ? [root] : []), ...(root?.querySelectorAll?.(selector) || [])];
+    found.forEach((element) => {
+      const names = done.get(element) || new Set();
+      if (names.has(name)) return;
+      names.add(name);
+      done.set(element, names);
+      attach(element);
+    });
   });
-};
+  return {
+    register: (name, selector, attach) => { specs.push({ name, selector, attach }); mount(document); },
+    mount,
+    unmount: () => 0,
+  };
+})();
+components.register("row-ops", ".row-ops, .mirror-pick", (element) => {
+  const keep = (event) => event.stopPropagation();
+  element.addEventListener("click", keep);
+  return () => element.removeEventListener?.("click", keep);
+});
+const initRow = (row) => components.mount(row);
 // ``prepare``: a row sync.js has put in (another device's change); ``timers``: the rows changed,
 // the personal timers are looked for again.
 window.towRows = {
@@ -1042,14 +1064,17 @@ document.addEventListener("keydown", (event) => {
   row.querySelector(":scope > summary")?.focus();
 });
 
-document.querySelectorAll("a.plus, a[data-open-new]").forEach((a) => {
-  a.addEventListener("click", (e) => {
+// The header's "+" and an empty list's "Add" (a Sites fragment another device's change may bring).
+components.register("open-new", "a.plus, a[data-open-new]", (a) => {
+  const open = (e) => {
     e.preventDefault();
     const n = document.getElementById("new");
     if (!n) return;
     n.open = true;
     n.querySelector("input, textarea")?.focus();
-  });
+  };
+  a.addEventListener("click", open);
+  return () => a.removeEventListener?.("click", open);
 });
 const browserAuthStatus = document.querySelector("[data-browser-auth-status]");
 if (browserAuthStatus) {
@@ -1182,15 +1207,20 @@ if (fromUrl) {
 
 const settingsPage = document.querySelector(".settings-page");
 if (settingsPage) {
-  const settingsForms = [...settingsPage.querySelectorAll("form.settings-form")];
-  const accordions = [...settingsPage.querySelectorAll("details.settings-accordion")];
-  accordions.forEach((accordion) => {
-    accordion.addEventListener("toggle", () => {
+  // Settings' sections and forms are components (pages.js draws a section again when another
+  // device changes it): each listener is attached to an element when it comes and removed when it
+  // goes, and what spans the page is read when it is needed.
+  const settingsForms = () => [...document.querySelectorAll(".settings-page form.settings-form")];
+  const accordions = () => [...document.querySelectorAll(".settings-page details.settings-accordion")];
+  components.register("settings-accordion", ".settings-page details.settings-accordion", (accordion) => {
+    const one = () => {
       if (!accordion.open) return;
-      accordions.forEach((other) => {
+      accordions().forEach((other) => {
         if (other !== accordion) other.open = false;
       });
-    });
+    };
+    accordion.addEventListener("toggle", one);
+    return () => accordion.removeEventListener?.("toggle", one);
   });
   const signature = (form) => JSON.stringify(
     [...form.querySelectorAll("input, select, textarea")].map((field) => [
@@ -1200,7 +1230,7 @@ if (settingsPage) {
     ]),
   );
 
-  settingsForms.forEach((form) => {
+  components.register("settings-form", ".settings-page form.settings-form", (form) => {
     const initial = signature(form);
     const status = form.querySelector(".unsaved-state");
     const checkButton = form.querySelector("[data-check-saved]");
@@ -1218,16 +1248,20 @@ if (settingsPage) {
     form.addEventListener("input", updateDirtyState);
     form.addEventListener("change", updateDirtyState);
     updateDirtyState();
+    return () => {
+      form.removeEventListener?.("input", updateDirtyState);
+      form.removeEventListener?.("change", updateDirtyState);
+    };
   });
 
   // §2 (QA Q6): on this computer a new reminder needs a new password with it. The server refuses
   // one without, and the page came back with the saved reminder: what was typed was lost. Said
   // under the reminder before anything is sent; keeping or clearing it needs no password.
-  const hintError = settingsPage.querySelector("#lan-hint-error");
-  const hintForm = hintError?.closest("form");
-  const hintField = hintForm?.querySelector("#lan-hint");
-  const newPassword = hintForm?.querySelector("#lan-password");
-  if (hintField && newPassword) {
+  components.register("password-reminder", ".settings-page #lan-hint-error", (hintError) => {
+    const hintForm = hintError.closest("form");
+    const hintField = hintForm?.querySelector("#lan-hint");
+    const newPassword = hintForm?.querySelector("#lan-password");
+    if (!hintField || !newPassword) return null;
     const words = (value) => String(value || "").split(/\s+/).filter(Boolean).join(" ");
     const described = hintField.getAttribute("aria-describedby") || "";
     const settle = () => {
@@ -1235,7 +1269,7 @@ if (settingsPage) {
       hintField.removeAttribute("aria-invalid");
       hintField.setAttribute("aria-describedby", described);
     };
-    hintForm.addEventListener("submit", (event) => {
+    const refuse = (event) => {
       const typed = words(hintField.value);
       if (newPassword.value || !typed || typed === words(hintField.defaultValue)) {
         settle();
@@ -1247,21 +1281,28 @@ if (settingsPage) {
       hintField.setAttribute("aria-invalid", "true");
       hintField.setAttribute("aria-describedby", `${described} ${hintError.id}`.trim());
       newPassword.focus();
-    });
+    };
+    hintForm.addEventListener("submit", refuse);
     newPassword.addEventListener("input", settle);
-  }
+    return () => {
+      hintForm.removeEventListener?.("submit", refuse);
+      newPassword.removeEventListener?.("input", settle);
+    };
+  });
 
-  settingsPage.querySelectorAll("[data-auto-submit]").forEach((form) => {
+  components.register("auto-submit", ".settings-page [data-auto-submit]", (form) => {
     const control = form.querySelector("[data-auto-submit-control]");
     const status = form.querySelector("[data-auto-submit-status]");
-    if (!control) return;
+    if (!control) return null;
     control.dataset.initialChecked = control.checked ? "1" : "0";
-    control.addEventListener("change", () => {
+    const apply = () => {
       if (form.dataset.submitting === "1") return;
       if (status) status.textContent = t("js.settings.applying");
       form.requestSubmit();
       control.disabled = true;
-    });
+    };
+    control.addEventListener("change", apply);
+    return () => control.removeEventListener?.("change", apply);
   });
 
   // Settings → Theme: the page takes the chosen colours at once, then the choice is saved in the
@@ -1269,7 +1310,7 @@ if (settingsPage) {
   // reloaded the page took the focus away at each step (WCAG 3.2.2). The focus stays on the
   // option, the section's pill names the choice, and the hidden status says it was saved; the
   // last of quick moves is the one saved.
-  settingsPage.querySelectorAll("[data-theme-form]").forEach((form) => {
+  components.register("theme-form", ".settings-page [data-theme-form]", (form) => {
     // Its own pill: the section is Language and theme, and the first pill is the language's.
     const pill = form.closest("details")?.querySelector(":scope > summary [data-theme-pill]");
     let sequence = 0;
@@ -1299,7 +1340,7 @@ if (settingsPage) {
         unconfirmed(form);
       }
     };
-    form.addEventListener("change", (event) => {
+    const choose = (event) => {
       // While the choice is on its way, the poll does not put the saved theme back (sync.js).
       form.dataset.saving = "1";
       const value = event.target.value;
@@ -1311,15 +1352,23 @@ if (settingsPage) {
       window.clearTimeout(timer);
       pending = () => save(mine, label);
       timer = window.setTimeout(pending, 250);
-    });
-    window.addEventListener("pagehide", () => {
+    };
+    const leave = () => {
       window.clearTimeout(timer);
       pending?.();
-    });
+    };
+    form.addEventListener("change", choose);
+    window.addEventListener("pagehide", leave);
+    // Taken out (drawn again): a choice still waiting is saved now.
+    return () => {
+      form.removeEventListener?.("change", choose);
+      window.removeEventListener?.("pagehide", leave);
+      leave();
+    };
   });
 
   window.addEventListener("beforeunload", (event) => {
-    const hasUnsaved = settingsForms.some((form) => form.dataset.dirty === "1" && form.dataset.submitting !== "1");
+    const hasUnsaved = settingsForms().some((form) => form.dataset.dirty === "1" && form.dataset.submitting !== "1");
     if (!hasUnsaved) return;
     event.preventDefault();
     event.returnValue = "";
@@ -1330,7 +1379,7 @@ if (settingsPage) {
   // The address names a section, or a card inside one (#client-<id>): that section is the open one.
   const target = (targetId ? document.getElementById(targetId) : null)?.closest("details.settings-accordion") || null;
   if (target) {
-    accordions.forEach((accordion) => {
+    accordions().forEach((accordion) => {
       accordion.open = accordion === target;
     });
   }
@@ -1360,13 +1409,15 @@ if (settingsPage) {
     return copied;
   };
   // Copied, or not: a message as any other (the command stays on the page to copy by hand).
-  settingsPage.querySelectorAll("[data-copy-text]").forEach((button) => {
-    button.addEventListener("click", async () => {
+  components.register("copy-text", ".settings-page [data-copy-text]", (button) => {
+    const copy = async () => {
       const copied = await copyText(button.dataset.copyText || "");
       showMessage(copied
         ? { id: "copy-command", kind: "ok", text: t("js.settings.copied") }
         : { id: "copy-command", kind: "err", text: t("js.settings.copy_failed") }, { replace: true });
-    });
+    };
+    button.addEventListener("click", copy);
+    return () => button.removeEventListener?.("click", copy);
   });
 }
 
@@ -1769,17 +1820,17 @@ if (q) {
   // Rows another device added, removed, changed or moved (sync.js): the list's order (``order``,
   // the server's ids; the owner's own sort on top), the search's words, the status filter's tones,
   // the site choices and "nothing matches" are the page's rows again, all at once.
+  // Sites and Settings (pages.js) have no Home list: their rows and sections are the search's again.
   const refreshList = ({ order = null, keep = true } = {}) => {
-    if (!list) return;
     deferred = false;
-    const rows = [...list.querySelectorAll(":scope > .row-wrap")];
+    const rows = list ? [...list.querySelectorAll(":scope > .row-wrap")] : [];
     if (order) {
       const position = new Map(order.map((id, index) => [`row-${id}`, index]));
       const placed = rows.filter((row) => position.has(row.id)).sort((a, b) => position.get(a.id) - position.get(b.id));
       // A row the server no longer has, kept under the owner's hands, stays where it was.
       rows.forEach((row, index) => { if (!position.has(row.id)) placed.splice(Math.min(index, placed.length), 0, row); });
       originalOrder.splice(0, originalOrder.length, ...placed);
-    } else {
+    } else if (list) {
       const known = new Set(originalOrder);
       originalOrder.splice(0, originalOrder.length, ...originalOrder.filter((row) => row.isConnected && row.parentNode === list), ...rows.filter((row) => !known.has(row)));
     }
@@ -1968,18 +2019,21 @@ document.addEventListener("reset", (event) => hideRevealed(event.target), true);
 // data-enabled-when="unchecked" for a box that turns them off): disabled otherwise, so the browser
 // neither sends nor validates what the page hides - a password typed before browser sign-in was
 // chosen, a too short network password once the box is clear. The server ignores them the same way.
-const syncEnabledGroups = () => document.querySelectorAll("[data-enabled-by]").forEach((group) => {
+const syncEnabledGroup = (group) => {
   const box = document.getElementById(group.dataset.enabledBy);
   if (!box) return;
   const on = group.dataset.enabledWhen === "unchecked" ? !box.checked : Boolean(box.checked);
   group.querySelectorAll("input, select, textarea, button").forEach((control) => { control.disabled = !on; });
-});
+};
+const syncEnabledGroups = () => document.querySelectorAll("[data-enabled-by]").forEach(syncEnabledGroup);
 document.addEventListener("change", (event) => {
   if (event.target?.type === "checkbox") syncEnabledGroups();
 });
 // A reset (Cancel) puts the boxes back after its event: the groups follow once it has.
 document.addEventListener("reset", () => setTimeout(syncEnabledGroups, 0));
 syncEnabledGroups();
+// A group drawn again (pages.js) is enabled as its box says.
+components.register("enabled-group", "[data-enabled-by]", (group) => { syncEnabledGroup(group); });
 
 // B2: a file field in the page's language (_file.html, data-file-pick). Once this runs, the
 // browser's own field is hidden but keeps the focus (its button-like label shows it), the chosen
@@ -2024,6 +2078,8 @@ const towFiles = (() => {
   return { sync, prepare };
 })();
 window.towFiles = towFiles;
+// A file field drawn again (pages.js: Settings' transfer card) is ready as the page's own.
+components.register("file-pick", "[data-file-pick]", (pick) => { towFiles.prepare(pick); });
 
 // Editable recent folders: the arrow shows every recent path, even when the input is filled.
 // Keep native text editing; a highlighted suggestion changes the value only when accepted.

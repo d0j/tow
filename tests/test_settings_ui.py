@@ -149,7 +149,8 @@ def test_settings_ui_is_sectioned_and_explains_actions():
     assert 'form.dataset.submitting !== "1"' in app_js
     assert "form.dataset.returnTarget" in app_js
     assert "navigator.clipboard?.writeText" in app_js
-    assert 'querySelectorAll("[data-auto-submit]")' in app_js
+    # A component of every section drawn (1.33: pages.js draws a section again in place).
+    assert 'components.register("auto-submit", ".settings-page [data-auto-submit]"' in app_js
     assert "new FormData(form, submitter)" in app_js
     assert 'submitter?.getAttribute("formaction") || form.getAttribute("action")' in app_js
     assert "submitter?.formAction" not in app_js

@@ -29,8 +29,10 @@ undo        state, config, secrets; language, access                         its
 config      config; the request's language                                   -
 version     the code and the static files                                    -
 release     the published release answer, the update job                     -
-page        Sites: config, state, secrets, status; Settings: config, state, secrets, status,
-            backup inventory, service; History: event log, config, names; language, access
+page        Sites, Settings: the digests of the fragments the page draws (tow.web.page_sync),
+            drawn when config, state, secrets, status or schedule (Settings: also the backup
+            inventory, the service) changed - a write that changes nothing drawn, none; History:
+            event log, config, names, its filters; language, access              midnight
 """
 
 from __future__ import annotations
@@ -56,7 +58,7 @@ from tow.clock import local_zone, parse_timestamp
 from tow.config import flash_ttl, interval_sec_of
 from tow.records import shown_title
 from tow.store import SecretStoreError
-from tow.web import _context, check_jobs, services
+from tow.web import _context, check_jobs, page_sync, services
 
 SCHEMA = 1
 # A file another process wrote (a scheduled check, the supervisor) reaches a page within one
@@ -682,56 +684,45 @@ def _release(sample: Sample, now: float) -> Computed:
     return AREAS_MEMO.get("release", (), key, now, build)
 
 
-def _page(sample: Sample, who: Viewer, page: str, now: float) -> Computed:
-    ctx = {"lang": who.lang, "local": who.local, "page": page}
+def page_revision(who: Viewer, page: str, value: Any, filters: Mapping[str, str] | None = None) -> str:
+    """The page area's revision of ``value`` for this viewer (and History's filters)."""
+    ctx: dict[str, Any] = {"lang": who.lang, "local": who.local, "page": page}
+    if page == "/history":
+        ctx.update(filters or {"group": "", "q": ""})
+    return revision("page", value, ctx)
+
+
+def _page(
+    sample: Sample,
+    who: Viewer,
+    page: str,
+    now: float,
+    request: Request,
+    filters: Mapping[str, str] | None = None,
+) -> Computed:
+    """Sites and Settings: the digests of the fragments the page draws (``page_sync``), drawn from
+    this sample for this viewer - a write that changes nothing they show (a routine check's times,
+    the supervisor's plan) changes no revision. ``extra``: the fragments themselves, so that
+    ``/page/fragments`` hands out exactly the revision named. History: its log, the names it
+    writes and its filters."""
     if page == "/":
         value: Any = {"page": "/"}  # Home: the topics area
-        return Computed(value, revision("page", value, ctx), None)
-    if page == "/sites":
-        key: Any = (*sample.key("state", "config", "secrets", "status"), sample.running)
+        return Computed(value, page_revision(who, page, value), None)
+    if page in page_sync.FRAGMENT_PAGES:
+        key: Any = (*sample.key("state", "config", "secrets", "legacy_secrets", "status", "schedule"), sample.running)
+        if page == "/settings":
+            inventory = AREAS_MEMO.inventory(sample, lambda: _backup_inventory(sample.config))
+            key = (*key, _canonical(inventory))
 
-        def build_sites() -> Computed:
-            state = {name: value for name, value in sample.state.items() if name not in ("topics", "undo")}
-            sites = sorted({str(topic.get("url") or "") for topic in sample.state.get("topics") or []})
-            value = {
-                "trackers": sample.config.get("trackers"),
-                "state": state,
-                "topic_links": hashlib.sha256(_canonical(sites)).hexdigest(),
-                "tones": [
-                    (topic.get("id"), topic.get("last_error_class"), topic.get("last_check"))
-                    for topic in sample.state.get("topics") or []
-                ],
-                "secrets": sample.digests.get("secrets", ""),
-                "status": sample.digests.get("status", ""),
-            }
-            return Computed(value, revision("page", value, ctx), None)
+        def build_fragments() -> Computed:
+            with sample.seeded():
+                found = page_sync.fragments(page_sync.render(request, page))
+            value = page_sync.projection(found)
+            # A date label ("20:31" today) is another one tomorrow.
+            return Computed(value, page_revision(who, page, value), _next_midnight(now), extra=found)
 
-        return AREAS_MEMO.get("page:/sites", (who.lang, who.local), key, now, build_sites)
-    if page == "/settings":
-        inventory = AREAS_MEMO.inventory(sample, lambda: _backup_inventory(sample.config))
-        key = (
-            *sample.key("state", "config", "secrets", "legacy_secrets", "status", "schedule"),
-            sample.running,
-            _canonical(inventory),
-        )
-
-        def build_settings() -> Computed:
-            state = {name: value for name, value in sample.state.items() if name not in ("topics", "undo")}
-            clients = sorted(str(topic.get("client_id") or "") for topic in sample.state.get("topics") or [])
-            value = {
-                "config": sample.config,
-                "state": state,
-                "topic_clients": clients,
-                "secrets": sample.digests.get("secrets", ""),
-                "legacy_secrets": sample.digests.get("legacy_secrets", ""),
-                "status": sample.digests.get("status", ""),
-                "schedule": sample.digests.get("schedule", ""),
-                "running": sample.running,
-                "inventory": inventory,
-            }
-            return Computed(value, revision("page", value, ctx), None)
-
-        return AREAS_MEMO.get("page:/settings", (who.lang, who.local), key, now, build_settings)
+        return AREAS_MEMO.get(f"page:{page}", (who.lang, who.local), key, now, build_fragments)
+    shown = dict(filters or {"group": "", "q": ""})
     key = sample.key("log", "config", "state")
 
     def build_history() -> Computed:
@@ -745,9 +736,51 @@ def _page(sample: Sample, who: Viewer, page: str, now: float) -> Computed:
             },
             "day": _today(now),
         }
-        return Computed(value, revision("page", value, ctx), _next_midnight(now))
+        return Computed(value, page_revision(who, page, value, shown), _next_midnight(now))
 
-    return AREAS_MEMO.get("page:/history", (who.lang, who.local), key, now, build_history)
+    return AREAS_MEMO.get("page:/history", (who.lang, who.local, shown["group"], shown["q"]), key, now, build_history)
+
+
+def annotated_page(request: Request, page: str, html: str) -> str:
+    """A Sites or Settings page as its route drew it, knowing its own revision and each fragment's
+    digest (``page_sync.annotate``): it asks for nothing until what it shows changes."""
+    found = page_sync.fragments(html)
+    return page_sync.annotate(html, page_revision(viewer(request), page, page_sync.projection(found)), found)
+
+
+def page_fragments(request: Request, page: str) -> dict[str, Any]:
+    """Sites or Settings: every fragment of the page's current revision, in its order. Raises
+    ``Unavailable``."""
+    sample = SAMPLER.current()
+    computed = _page(sample, viewer(request), page, time.time(), request)
+    found: Mapping[str, tuple[str, str]] = computed.extra
+    return {
+        "ok": True,
+        "page": page,
+        "rev": computed.rev,
+        "order": list(found),
+        "fragments": [{"id": fid, "hash": item[0], "html": item[1]} for fid, item in found.items()],
+    }
+
+
+def history_fragments(request: Request, filters: Mapping[str, str]) -> dict[str, Any]:
+    """History's newest lines (at most ``page_sync.HISTORY_LIMIT``) as its filters choose them,
+    each with its key and digest, and the revision of the sample they go with. Raises
+    ``Unavailable``."""
+    from tow.log import index_event_titles
+
+    sample = SAMPLER.current()
+    computed = _page(sample, viewer(request), "/history", time.time(), request, filters)
+    with sample.seeded():
+        events = services.history_events(
+            group=filters["group"],
+            text=filters["q"],
+            limit=page_sync.HISTORY_LIMIT,
+            title_index=index_event_titles(sample.state.get("topics") or []),
+        )
+        rows = page_sync.history_rows(events, sample.state, sample.config)
+        entries = page_sync.history_entries(page_sync.page_request(request, "/history"), rows)
+    return {"ok": True, "page": "/history", "rev": computed.rev, "entries": entries, "limit": page_sync.HISTORY_LIMIT}
 
 
 def _backup_inventory(cfg: dict[str, Any]) -> Any:
@@ -801,9 +834,17 @@ class Answer:
     body: Callable[[], dict[str, Any]]
 
 
-def answer(request: Request, have: Mapping[str, str], page: str, *, now: float | None = None) -> Answer:
+def answer(
+    request: Request,
+    have: Mapping[str, str],
+    page: str,
+    *,
+    now: float | None = None,
+    filters: Mapping[str, str] | None = None,
+) -> Answer:
     """The revisions for this request and, built only when sent, the areas whose revision
-    differs from ``have``. Raises ``Unavailable``."""
+    differs from ``have``. ``filters``: History's (its group and search), part of the exact
+    request the ETag names. Raises ``Unavailable``."""
     sample = SAMPLER.current()
     now = time.time() if now is None else now
     who = viewer(request)
@@ -821,8 +862,9 @@ def answer(request: Request, have: Mapping[str, str], page: str, *, now: float |
         "version": _version(now),
         "release": _release(sample, now),
     }
+    shown = dict(filters or {}) if page == "/history" else {}
     if page:
-        computed["page"] = _page(sample, who, page, now)
+        computed["page"] = _page(sample, who, page, now, request, shown or None)
     revs = {name: item.rev for name, item in computed.items()}
     base_rows = AREAS_MEMO.rows_at(who.lang, have["topics"]) if have.get("topics") else None
     variant = {
@@ -833,6 +875,7 @@ def answer(request: Request, have: Mapping[str, str], page: str, *, now: float |
         "session": who.session,
         "lang": who.lang,
         "page": page,
+        "filters": dict(sorted(shown.items())),
         "have": dict(sorted(have.items())),
         "topics_base": base_rows is not None,
         "revs": revs,

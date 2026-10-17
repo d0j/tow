@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from tow.web import _context, services
+from tow.web import _context, page_sync, services
 from tow.web.messages import request_flash
 from tow.web.templating import TEMPLATES
 from tow.web.text import t, time_parts
@@ -14,28 +14,19 @@ from tow.web.views import issue_notes
 router = APIRouter()
 
 # The newest events History shows; the page says so only when the list stops there.
-HISTORY_LIMIT = 300
+HISTORY_LIMIT = page_sync.HISTORY_LIMIT
 
 
 @router.get("/history", response_class=HTMLResponse)
 def history_page(request: Request, group: str = "", q: str = "") -> Response:
-    from tow.log import HISTORY_GROUPS, format_event, index_event_titles, index_site_titles
+    from tow.log import HISTORY_GROUPS, index_event_titles
 
     group = group if group in HISTORY_GROUPS else ""
     state = _context.state()
     title_index = index_event_titles(state.get("topics") or [])
-    site_titles = index_site_titles(_context.config())
-    rows = []
-    seen: set[str] = set()
-    for event in services.history_events(group=group, text=q, limit=HISTORY_LIMIT, title_index=title_index):
-        row = format_event(event, title_index=title_index, site_titles=site_titles)
-        # The newest line of each kind has an address ("Needs attention" links to the newest
-        # failed check: #latest-check_blocked).
-        kind = str(event.get("kind") or "")
-        if kind and kind not in seen:
-            seen.add(kind)
-            row["anchor"] = f"latest-{kind}"
-        rows.append(row)
+    events = services.history_events(group=group, text=q, limit=HISTORY_LIMIT, title_index=title_index)
+    # Each line keyed by its event (page_sync.history_rows): the page merges the newest in by it.
+    rows = page_sync.history_rows(events, state, _context.config())
     return TEMPLATES.TemplateResponse(
         request,
         "history.html",

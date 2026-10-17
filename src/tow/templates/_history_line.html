@@ -1,0 +1,5 @@
+{#- One line of History (history.html, and a newer one the open page merges in: tow.web.page_sync).
+    Its key is its event's id: a line is on the page once. The short time (today "20:31"); the full
+    one is its tooltip. The time (log-time, even figures), the event (bold) and its words in the
+    page's font; only a raw error is code. -#}
+<div class="log-line" data-event="{{ e.key }}"{% if e.anchor %} id="{{ e.anchor }}"{% endif %}><span class="mut log-time">{{ e.iso|short_time }}</span> · <b>{{ e.label }}</b>{% if e.detail %} · {{ e.detail }}{% endif %}{% if e.raw %} <details class="raw-error"><summary>{{ t('common.details') }}</summary><code>{{ e.raw }}</code></details>{% endif %}</div>

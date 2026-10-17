@@ -18,18 +18,17 @@
   </form>
   <button type="button" class="ghost sm" data-full-times="history-log" aria-controls="history-log" aria-pressed="false">{{ t('web.time.full_toggle') }}</button>
 </div>
-{#- The list's id: the shared "Full timestamps" toggle names it (aria-controls). -#}
-<div class="card log-box history-box" id="history-log">
+{#- The list's id: the shared "Full timestamps" toggle names it (aria-controls). Its filters: the ones
+    the page follows while it is open (static/pages.js merges the newest lines in). -#}
+<div class="card log-box history-box" id="history-log" data-history-group="{{ group }}" data-history-q="{{ q }}" data-history-limit="{{ history_limit }}">
   {% for e in rows %}
-  {#- The short time (today "20:31"); the full one is its tooltip. The time (log-time, even figures),
-      the event (bold) and its words in the page's font; only a raw error is code. -#}
-  <div class="log-line"{% if e.anchor %} id="{{ e.anchor }}"{% endif %}><span class="mut log-time">{{ e.iso|short_time }}</span> · <b>{{ e.label }}</b>{% if e.detail %} · {{ e.detail }}{% endif %}{% if e.raw %} <details class="raw-error"><summary>{{ t('common.details') }}</summary><code>{{ e.raw }}</code></details>{% endif %}</div>
+  {% include "_history_line.html" %}
   {% else %}
   {#- "Nothing found" only when a search or a group narrowed it, with the way back; an empty log says so. -#}
   {% if q or group %}<p class="history-empty">{{ t('history.empty') }} <a href="/history">{{ t('history.show_all') }}</a></p>{% else %}<p class="history-empty">{{ t('history.no_events') }}</p>{% endif %}
   {% endfor %}
 </div>
 {#- Said only when the list stops at its limit. -#}
-{% if rows|length >= history_limit %}<p class="sub">{{ t('history.note', n=history_limit) }}</p>{% endif %}
+{% if rows|length >= history_limit %}<p class="sub" data-history-note>{{ t('history.note', n=history_limit) }}</p>{% endif %}
 </div>
 {% endblock %}

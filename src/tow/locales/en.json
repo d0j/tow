@@ -1349,7 +1349,9 @@
       "row_changed": "This topic was changed on another device or by TOW. Its new values show once you close it.",
       "row_removed": "This topic was removed on another device. Saving it will not bring it back.",
       "updated": "TOW was updated to {version}. Reload the page.",
-      "reload_language": "The language was changed. Reload the page."
+      "reload_language": "The language was changed. Reload the page.",
+      "section_changed": "Changed on another device or by TOW. The new state shows once you leave it.",
+      "site_removed": "This site was removed on another device."
     }
   },
   "locations": {

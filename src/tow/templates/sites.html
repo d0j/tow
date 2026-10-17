@@ -99,15 +99,17 @@
   </form>
 </details>
 
-<div class="card list">
-  {% if trackers %}
+{#- What another device or TOW changes is drawn again in place (tow.web.page_sync, static/pages.js):
+    the list's head, each site's row and the empty list are fragments between their comments. -#}
+<div class="card list" id="sites-list"><!--frags:/sites-->
+  <!--frag:sites-head-->{% if trackers %}
   <div class="list-head sites">
     <span>{{ t('sites.col_site') }}</span><span>{{ t('sites.mirrors') }}</span><span>{{ t('sites.col_login') }}</span><span></span>
   </div>
-  {% endif %}
+  {% endif %}<!--/frag:sites-head-->
   {% for name, spec in trackers.items() %}
     {% set mine = probes | selectattr('tracker', 'equalto', name) | list %}
-    <div class="row-wrap{% if frozen.get(name) %} is-paused{% endif %}" id="site-row-{{ name }}" data-subject="{{ site_title(name) }}" data-q="{{ (name ~ ' ' ~ (spec.title or '') ~ ' ' ~ ((spec.fetch_hosts or []) | join(' '))) | lower }}">
+    <!--frag:site-row-{{ name }}--><div class="row-wrap{% if frozen.get(name) %} is-paused{% endif %}" id="site-row-{{ name }}" data-subject="{{ site_title(name) }}" data-q="{{ (name ~ ' ' ~ (spec.title or '') ~ ' ' ~ ((spec.fetch_hosts or []) | join(' '))) | lower }}">
     <details class="row-edit sites{% if frozen.get(name) %} is-paused{% endif %}"{% if open_site == name %} open{% endif %}>
       <summary>
         {% set tone = site_tones.get(name, 'mut') %}
@@ -225,12 +227,13 @@
             </button>
           </form>
         </span>
-  </div>
-  {% else %}
+  </div><!--/frag:site-row-{{ name }}-->
+  {% endfor %}
+  <!--frag:sites-empty-->{% if not trackers %}
   <div class="empty-state">
     <p>{{ t('sites.empty') }}</p>
     <div class="actions"><a class="btn" href="#new" data-open-new>{{ t('sites.add_title') }}</a></div>
   </div>
-  {% endfor %}
+  {% endif %}<!--/frag:sites-empty-->
 </div>
 {% endblock %}
