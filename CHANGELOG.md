@@ -12,6 +12,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   what the next refresh shows.
 - **History** says "Only the latest 300 events are shown" also when new lines arriving while the page is open
   fill it to 300, not only when it was opened that full.
+- An open **Settings** page shows and removes the red "Saved passwords and tokens cannot be opened" note by
+  itself when the master key stops or starts matching (for example after `tow keys` on another device), instead
+  of only after a reload.
 
 ## [1.33.0] — 2026-10-17
 
