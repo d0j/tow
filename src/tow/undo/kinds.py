@@ -68,7 +68,7 @@ def _move_back(item: dict[str, Any], current: dict[str, Any]) -> bool:
 
     The client move cannot be part of the transaction: it happens first, and a client that does
     not confirm it refuses the whole undo (nothing is written)."""
-    from tow.check import await_relocation, client_owned_by_tow
+    from tow.check import await_relocation, client_owned_by_tow, release_relocation, reserve_relocation
     from tow.clock import iso_now
     from tow.folders import paths_equal
 
@@ -77,6 +77,12 @@ def _move_back(item: dict[str, Any], current: dict[str, Any]) -> bool:
     infohash = str(current.get("hash") or item.get("hash") or "")
     if not (infohash and old_path and current_path and not paths_equal(old_path, current_path)):
         return False
+    # The topic's one client move at a time, shared with the edit form's move: a save moving
+    # this torrent now (its client call runs without the persistence lock) refuses the Undo,
+    # which stays for another try.
+    topic_id = str(current.get("id") or item.get("id") or "")
+    if not reserve_relocation(topic_id):
+        raise Refused(Outcome("web.undo.move_busy", "warn"))
     try:
         from tow.clients.factory import from_secrets
 
@@ -93,6 +99,8 @@ def _move_back(item: dict[str, Any], current: dict[str, Any]) -> bool:
         fields = error_fields(exc)
         log_event("qbit_move_undo_fail", topic=item.get("id"), hash=infohash, path=old_path, **fields, how="manual")
         raise Refused(Outcome("web.undo.relocate_failed", "err")) from exc
+    finally:
+        release_relocation(topic_id)
     if outcome == "moving":
         item["move_pending"] = {"from": current_path, "to": old_path, "since": iso_now()}
     else:
