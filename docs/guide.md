@@ -15,6 +15,7 @@ How TOW thinks, what each screen and colour means, and what to do about each mes
 - [Backups](#backups)
 - [Updates](#updates)
 - [Password and network access](#password-and-network-access)
+- [Several devices and tabs](#several-devices-and-tabs)
 - [Troubleshooting](#troubleshooting)
 - [Command line](#command-line)
 - [Where things are](#where-things-are)
@@ -56,7 +57,9 @@ seconds and UTC offset, and so does the pointer resting on it.
 The **warning triangle** in the header counts current problems, including failed topic checks. Click it to open
 **Needs attention**: the list is closed by default and opens over the page without moving the content. Each link
 opens the relevant topic, site or Settings card and focuses the fix button when available. The triangle disappears
-automatically after TOW confirms that no current problems remain; old History entries do not keep it visible.
+automatically after TOW confirms that no current problems remain; old History entries do not keep it visible. A
+folder that is not on its disk (see [Choosing files](#choosing-files) and [Backups](#backups)) links to **Folders off
+their disk**, where the computer running TOW accepts the disk with **Same disk — accept**.
 
 ## Adding a topic
 
@@ -240,8 +243,10 @@ once it is connected, **Send a test** sends a test message and **Disconnect** re
     up to ten of them. It comes on top of the usual messages.
   - `heartbeat_url: https://…` (it must start with `https://`): an external monitor such as healthchecks.io that
     TOW pings every 10 minutes and that alerts you when TOW goes silent.
-- The watchdog tells you when TOW was down and why (sleep, restart, Windows Update, a crash), and when scheduled
-  checks or nightly backups fall behind.
+- The watchdog tells you when TOW was down and why (sleep, a restart or a shutdown, Windows Update, a crash), and
+  when scheduled checks or nightly backups fall behind. On Windows it tells a restart from a shutdown by the kind
+  Windows records for it, whatever the language of Windows; when that record is missing or unclear it says “shut
+  down or restarted”. On Linux and macOS it does not tell them apart.
 
 ## History and undo
 
@@ -337,8 +342,13 @@ Settings → **Version and updates**; the version in the corner of every page op
   TOW does not start: `tow run`, `tow start` and the start files refuse with “TOW was not started: an update was cut
   off…”. Run the update again: it first puts the previous version back, then installs the release you asked for.
   If TOW kept running on the new version and changed data after the cut, the update stops instead of overwriting
-  those changes and names the command (`--discard-newer-data`) that puts the snapshot back anyway. Closing the
-  window or Ctrl+C during the switch does not cut it off: the update finishes or rolls back first.
+  those changes and names the command (`--discard-newer-data`) that puts the snapshot back anyway.
+- **The update's window** (`Update TOW.cmd`, `Update TOW.command`, `update-tow`, `deploy.ps1`): the update runs in
+  its own process, and the window says so (“the update runs in its own process: closing this window no longer stops
+  it”, with the path of its log) and then only shows its progress. Closing the window, Ctrl+C or a terminal that is
+  killed no longer stops the update: it stops TOW, switches the code, starts TOW again or rolls back by itself, and
+  the log the window named says how it ended. When that process cannot be started, the window says the update runs
+  in it: keep the window open until it ends (Ctrl+C then still lets the switch finish or roll back first).
 - **Update log:** **More: history, rollback and log** → **Update log** shows the log of the latest update, with the
   install folder written as `<TOW>`. If an update did not finish, read it before trying again.
 
@@ -373,6 +383,55 @@ Settings → **Version and updates**; the version in the corner of every page op
 - Requests from public internet addresses are always refused. See [Remote access](../README.md#remote-access)
   for SSH tunnels and the reverse-proxy caveat.
 
+## Several devices and tabs
+
+Every open page follows what changes elsewhere: in another tab, on another device, by a scheduled check or a
+command. Nothing has to be reloaded.
+
+- **How fast.** A visible page with JavaScript asks TOW every 5 seconds what changed, and a change shows within
+  about 5 seconds (up to about 6 when another process of TOW made it, such as a scheduled check); another tab of the
+  same browser that changed something tells the others at once. A hidden tab asks nothing and asks at once when it is
+  shown again. A request that fails or gets no answer is asked again after 5 seconds, then less often, at least once
+  a minute. Without JavaScript a page shows what was saved when it was opened: reload it.
+- **What follows.** Home: topics added, paused, renamed or removed, a scheduled check's result and a check started
+  in another tab; the header: its sites, torrent client and messenger, **Needs attention** and **Recent messages**;
+  the **Undo** of the last change, with the time it really has left. **Sites**, **Settings** and **History**: a site,
+  a Settings section and new History lines. Only what changed is drawn again; open sections, the scroll position,
+  the Settings search and History's filter stay. The theme follows a change made elsewhere (with **As the system**
+  each device keeps following its own system). Another language or a new version of TOW reloads the page once
+  nothing is being typed or chosen; a page in use says “The language was changed. Reload the page.” or “TOW was
+  updated to … Reload the page.” instead.
+- **What you work in stays as it is.** A topic whose panel is open on Home, or a site or Settings section you are
+  editing, keeps your unsaved values and is not replaced, moved or hidden by a filter. It says “This topic was
+  changed on another device or by TOW. Its new values show once you close it.” (a section: “Changed on another
+  device or by TOW. The new state shows once you leave it.”) and follows once you are done. A topic or site removed
+  elsewhere says so: “This topic was removed on another device. Saving it will not bring it back.”
+- **Saving after a change elsewhere.** A save changes only the fields you changed in that form, and applies them to
+  what is saved now: a change another device made to another field stays, and Site access connections added on two
+  devices at the same time are both kept. Only a field changed on both sides to different values is a conflict:
+  nothing is saved, and the form comes back with “not saved: changed on another device meanwhile — choose which
+  value to keep”. Each such field shows **Saved now: …** and **Yours: …** with the choice **Keep the saved value**
+  or **Use mine**; choose, then save again. A password or token is never kept in the form: type it again. The
+  network access card and its password are saved only from a page that shows them as they are now; otherwise
+  nothing is saved and the card opens as saved now (“nothing saved: this was changed on another device after you
+  opened it …”). A form opened before an update of TOW is refused the same way (“nothing saved: this form is out of
+  date … make your change again”): reload it and make the change again.
+- **Undo** appears and goes in every tab and on every device at once. A device that may not undo a change (network
+  access, from another device) is not offered it. While a save moves a topic's folder in the torrent client,
+  **Undo** of that topic and another save of it are refused until the move ends (“not undone: a save is moving this
+  topic's folder now; try Undo again when it ends”), so the torrent is never moved back at the same time.
+- **What a device on the network does not see.** Errors read from another device show no folder or file paths and
+  no private part of a link (its query): in a topic's row and edit panel, **Needs attention**, the notes on
+  Settings, **Sites** and **History**, History's lines, the log, **Diagnostics** and **Recent messages**. The
+  computer running TOW shows the full text. A user name and password written into a link of an error
+  (`user:password@`) are hidden on every device, this computer included. Folders you set up (a topic's folder, the
+  backup folders) are settings and show everywhere. Some things are done only on the computer running TOW: turning
+  network access on or off, Site access connections (read-only from another device), choosing a network share as
+  a backup folder, and **Same disk — accept**.
+- **Many tabs.** Each tab of this computer and each signed-in device may ask up to 40 times in a row and then 4 times
+  a second; past that TOW tells the page to wait a few seconds, and it asks again then. `config.yaml` can change both
+  (`web: {rate_burst: 40, rate_per_sec: 4}`, from 10 to 1000 and from 0.5 to 50); a change applies within seconds.
+
 ## Troubleshooting
 
 The left column is the text TOW shows (on Home, in a row, in a message or on a page).
@@ -384,7 +443,9 @@ every signed-in browser and computer: up to 50 messages from the last seven days
 log can shorten that), newest first. Read and cleared are shared too: opening the list marks what it shows
 read on every device; **Clear history** removes what you see, and a message that arrived meanwhile stays. The
 icon takes the colour of the worst unread message and shows how many are unread. Under **This tab** the list
-keeps this tab's own results until the page is closed; they never count as unread. What is in the list:
+keeps this tab's own results until the page is closed; they never count as unread. The list a tab kept for itself
+before 1.33 is removed once, with the note “Recent messages are now the same on every device. The earlier list of
+this tab is no longer kept.” What is in the list:
 
 | Kind | Messages |
 |---|---|
@@ -427,6 +488,9 @@ fixed. Folding or closing a message does not clear the topic's error or its Hist
 | state.json was written by a newer TOW … | You went back to an older version. | Update TOW again, or restore a backup made by this version. |
 | TOW was not started: an update was cut off while it replaced the code … | An update stopped half-way (the computer turned off, the updater was killed). | Run the update again (`Update TOW`): it puts the previous version back first. |
 | TOW could not write its data file just now — another program may be keeping it open … | An antivirus or a backup tool holds a file in `data/` open. | Try again in a moment; if it keeps happening, exclude the TOW folder from that program. |
+| The folder of *topic* is on another disk, or its disk is not connected (…) (and the same for a backup folder) | TOW saw that folder on another disk before (see [Choosing files](#choosing-files) and [Backups](#backups)). Its files are not called missing, and no copy is written there. | Connect the disk. If it is the same disk under another name, or a new disk with the files copied over: **Same disk — accept** on **Folders off their disk** (on the computer running TOW), or `tow check --apply --rebind-volumes`. |
+| WARNING: the data folder … is on a network file system … (`tow doctor`) | The live `data/` folder is on NFS, SMB or a similar network file system, where TOW's locks may not keep a second TOW on another computer out. | Move the TOW folder to a local disk. Nightly backups and restore points may stay on a network folder. |
+| uv cannot use …uv.toml (…): correct or remove your lines below "# --- your settings below ---"; nothing was updated | A line you added to the install's own `runtime/uv.toml` does not parse, or repeats one of TOW's settings. | Correct or remove your lines below that marker, then update again ([Where things are](#where-things-are)). |
 | TOW was not started: its code is incomplete … | Files of TOW's code are gone (an antivirus, a cleanup tool, a copy that did not finish). | Run the update file with the version you had: [If something goes wrong](install.md#if-something-goes-wrong). |
 | Sign-in from other devices is off — TOW opens only on its own computer. | Network access is off. | Turn it on at the computer running TOW. |
 | No password for other devices is set yet. | Network access is on, but there is no password. | Set it on the computer running TOW: Settings → Network access. |
@@ -446,7 +510,7 @@ every one. The others:
 |---|---|
 | `tow version` | prints the version |
 | `tow start --no-browser` | starts TOW in the background without opening the page (also `TOW_NO_BROWSER=1`) |
-| `tow check` | a preview of a check that changes nothing; `--apply` hands what it finds to the client and saves it, `--dry-run` keeps it a preview even with `--apply`, `--notify` also sends the messages |
+| `tow check` | a preview of a check that changes nothing; `--apply` hands what it finds to the client and saves it, `--dry-run` keeps it a preview even with `--apply`, `--notify` also sends the messages; `--rebind-volumes` (with `--apply`, after a disk was replaced or reformatted) takes the disk each topic's folder is on now as its own, once a file of the topic is found there |
 | `tow doctor --notify` | asks the torrent client and the sites, and sends the report to the messengers too |
 | `tow watchdog` | one watchdog pass now, as `tow run` makes every 10 minutes: is TOW up and are the checks running; its alerts go to the messengers too, and it restarts nothing |
 | `tow backup` | makes a nightly backup now (as **Back up now** does) |
@@ -458,7 +522,8 @@ every one. The others:
 
 Commands typed in a terminal answer in the language chosen in Settings → Language and theme, or, when it is automatic,
 in the operating system's language. Messages and the texts scheduled checks record use the language of messages: the
-chosen one, or the one your browser last asked for.
+chosen one, or the one your browser last asked for. What `--json` writes is ASCII, other characters as `\u` escapes,
+so Windows PowerShell 5.1 reads a Cyrillic folder in it correctly (`ConvertFrom-Json`).
 
 ## Where things are
 
@@ -471,6 +536,7 @@ chosen one, or the one your browser last asked for.
 | `data/tow.jsonl` | The event log behind History and the Log window (old parts are deleted by themselves). |
 | `data/logs/` | `run.log` and the logs of the web server and the scheduled jobs (old parts are deleted by themselves). |
 | `keys/master.key` | The master key. Never in any copy. |
+| `runtime/uv.toml` | The settings of TOW's own uv, which reads no other `uv.toml` of the account or the computer. TOW writes the lines above `# --- your settings below ---`; settings your network needs (`native-tls = true`, a package index or its mirror) go below it and are kept. |
 | `backup/` | Nightly backups and pre-update snapshots. |
 | `data/restore-points/` | Restore points (**Create a backup**, and before risky changes), unless Settings → Backups names another folder. |
 
