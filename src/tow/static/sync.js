@@ -380,9 +380,11 @@
       retryAt = now() + BACKOFF_MS[Math.min(failures, BACKOFF_MS.length) - 1];
     };
     const find = (id) => rows().find((row) => idOf(row) === id) || null;
-    const nextOnPage = (order, id) => {
-      const index = order.indexOf(id);
-      const present = new Set(rows().map(idOf));
+    // The rows on the page by id, read once for a batch of answers (not once per row: with 2,000
+    // rows, 50 changed ones were 100,000 comparisons and as many copies of the list, 1.33.1 QA-12).
+    const onPage = () => new Map(rows().map((row) => [idOf(row), row]));
+    const nextOnPage = (order, id, present = onPage(), position = null) => {
+      const index = position ? (position.get(id) ?? -1) : order.indexOf(id);
       for (let i = index + 1; i < order.length; i += 1) if (present.has(order[i])) return order[i];
       return "";
     };
@@ -446,9 +448,14 @@
             retry();
             continue;
           }
+          // First every read (which row, under the owner's hands?), then every write: a read
+          // between two writes made the browser lay the page out again for each row.
+          const present = onPage();
+          const position = new Map(order.map((id, i) => [id, i]));
+          const writes = [];
           for (const fragment of body.rows) {
             if (!fragment || typeof fragment.id !== "string" || typeof fragment.html !== "string") continue;
-            const row = find(fragment.id);
+            const row = present.get(fragment.id) || null;
             // Checked again right before: the owner may have started working in it meanwhile.
             if (row && isProtected(row)) {
               if (hashOf(row) !== fragment.hash) {
@@ -457,8 +464,12 @@
               }
               continue;
             }
-            const now = place(row, fragment, row ? "" : nextOnPage(order, fragment.id));
+            writes.push([row, fragment]);
+          }
+          for (const [row, fragment] of writes) {
+            const now = place(row, fragment, row ? "" : nextOnPage(order, fragment.id, present, position));
             if (now) {
+              present.set(fragment.id, now);
               later.delete(fragment.id);
               kept.delete(fragment.id);
               note(now, "");
@@ -467,8 +478,11 @@
           }
           const listed = new Set(Array.isArray(body.order) ? body.order : order);
           for (const id of Array.isArray(body.missing) ? body.missing : []) {
-            const row = find(id);
-            if (row && !listed.has(id) && removeOrKeep(row)) result.removed.push(id);
+            const row = present.get(id) || null;
+            if (row && !listed.has(id) && removeOrKeep(row)) {
+              present.delete(id);
+              result.removed.push(id);
+            }
           }
           if (Array.isArray(body.deferred) && body.deferred.length) queue.push(...batches(body.deferred.filter((id) => typeof id === "string")));
         }

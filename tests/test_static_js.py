@@ -402,6 +402,7 @@ def test_home_rows_follow_the_topics_area_without_touching_rows_in_use():
         "emptyHomeTransitions",
         "jobsRedrawRows",
         "signedOutStops",
+        "fiftyRowsReadOnceThenWritten",
     )
     assert verdict == dict.fromkeys(keys, True)
 
