@@ -370,6 +370,7 @@ def test_the_sync_poll_keeps_its_schedule_backoff_hints_and_sign_out():
         "deltaHaveEtagAndNotModified",
         "failedReaderRetried",
         "unappliedOfferedAgainThrough304",
+        "hungReaderGivenUp",
         "backoffFiveToSixty",
         "jitterBounded",
         "retryAfterHonoured",

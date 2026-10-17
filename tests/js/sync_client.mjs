@@ -178,6 +178,35 @@ verdict.failedReaderRetried = true;
 }
 verdict.unappliedOfferedAgainThrough304 = true;
 
+// A reader whose promise never settles (a request that hangs under it) holds its area 30 s at most:
+// then it counts as failed and is offered again after later polls; a late answer of the lost
+// promise changes nothing.
+{
+  const test = harness({ answer: () => ({ status: 304 }) });
+  const asked = [];
+  const answers = [];
+  test.client.on("messages", () => {
+    asked.push(test.clock.now());
+    return new Promise((resolve) => { answers.push(resolve); });
+  });
+  test.queue.push(async () => ({ status: 200, etag: 'W/"a"', body: { ok: true, now_ts: 1, rev: {}, areas: { messages: { rev: REV(8) } } } }));
+  test.client.start();
+  await test.run(2600);
+  assert.equal(asked.length, 1);
+  await test.run(29000);
+  assert.equal(asked.length, 1); // still waiting for its reader
+  await test.run(1000 + 5000 + 5000);
+  assert.equal(asked.length, 2);
+  assert.ok(asked[1] - asked[0] >= 35000, String(asked[1] - asked[0]));
+  answers[0](true); // the lost one answers late: not its revision's answer any more
+  await flush();
+  assert.equal(test.client.applied("messages"), "");
+  answers[1](true);
+  await flush();
+  assert.equal(test.client.applied("messages"), REV(8));
+}
+verdict.hungReaderGivenUp = true;
+
 // Failures wait 5, 10, 20, 40, 60, 60 s (jitter at 0.5 = none); one success goes back to 5 s.
 {
   let failing = true;
