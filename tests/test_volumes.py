@@ -342,3 +342,4 @@ def test_a_disk_without_an_identity_is_never_seen_nor_accepted(tmp_path, monkeyp
     _run_check_with(monkeypatch, FakeClient())
     assert volumes.accept("topic:t1") == volumes.REFUSED
     assert load_download_history()["topics"]["t1"]["volume"]["id"] == "uuid:usb-disk"
+    assert "volume_unseen" in load_state()["topics"][0]  # still said: nothing was bound
