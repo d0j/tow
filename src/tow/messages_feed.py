@@ -29,22 +29,24 @@ actions     committed owner results: topic_add/edit/delete/pause, site_add/save/
             backup_restored, undo, sessions_signed_out/reset, setup_password,
             master_key_created, browser_auth (verified only), browser_auth_succeeded (ok);
             their *_fail counterparts (err); a manual undo_expired (warn)
-operations  watchdog_alert, backup_cleanup_pending, backup_restore_recovered, secret undo
-            cleanup failures (warn); backup_failed, backup_restore_failed,
+operations  watchdog_alert, backup_cleanup_pending, check_persistence_cleanup_pending,
+            backup_restore_recovered, secret undo cleanup failures (warn); backup_failed, backup_restore_failed,
             backup_restore_recovery_failed (err); a night copy after a failed one becomes
             ``backup_recovered`` (ok)
 updates     settings_update_started (info), settings_update_refused (err) and
             settings_update_result, reconciled once per job from the update job record by
             its operation id (ok / warn for rolled back or recovered / err)
 delivery    bot_delivery_failed (warn, err when dropped; repeated failures of one messenger
-            aggregate); a delivery after a failure becomes ``delivery_recovered`` (ok)
+            aggregate), add_check_notify_fail (warn); a delivery after a failure becomes
+            ``delivery_recovered`` (ok)
 =========== ===========================================================================
 
 Everything else - routine checks and passes, ``tracker_checked``, attempts (``client_add_started``,
 ``site_login`` and a ``browser_auth`` session that a check may still revert,
 ``portable_import_applied`` that a restore point may still roll back), diagnostics
 (``protection_*``, ``content_cache_failed``), bookkeeping and every successful delivery - is
-History only. Scheduled and CLI events use the same projection as the web's.
+History only; ``HISTORY_ONLY`` names each such kind, so every kind the code logs is decided.
+Scheduled and CLI events use the same projection as the web's.
 
 Order is the physical append order: a cursor names a segment (a SHA-256 of a file's first line,
 so a file keeps its identity when rotation renames it), the byte offset after the event's line
@@ -212,7 +214,6 @@ MATRIX: dict[str, tuple[str, Severity]] = {
             "settings_portable_restore",
             "settings_service_autostart",
             "settings_service_restart",
-            "settings_service_migrate",
             "settings_access_undo",
             "settings_clients_undo",
             "backup_restored",
@@ -241,10 +242,6 @@ MATRIX: dict[str, tuple[str, Severity]] = {
             "settings_portable_import_fail",
             "settings_service_autostart_fail",
             "settings_service_restart_fail",
-            "settings_service_migrate_fail",
-            "settings_undo_fail",
-            "settings_access_undo_restore_fail",
-            "settings_clients_undo_restore_fail",
             "undo_fail",
         ),
         (ACTIONS, ERR),
@@ -253,15 +250,10 @@ MATRIX: dict[str, tuple[str, Severity]] = {
         (
             "watchdog_alert",
             "backup_cleanup_pending",
+            "check_persistence_cleanup_pending",
             "backup_restore_recovered",
             "secret_undo_cleanup_fail",
             "secret_undo_cleanup_retry_fail",
-            "settings_undo_cleanup_fail",
-            "settings_undo_cleanup_marker_fail",
-            "settings_access_undo_cleanup_fail",
-            "settings_clients_undo_cleanup_fail",
-            "site_secret_undo_cleanup_fail",
-            "site_secret_undo_cleanup_marker_fail",
         ),
         (OPERATIONS, WARN),
     ),
@@ -271,8 +263,38 @@ MATRIX: dict[str, tuple[str, Severity]] = {
     "settings_update_refused": (UPDATES, ERR),
     "settings_update_result": (UPDATES, _update_result),
     "bot_delivery_failed": (DELIVERY, _delivery_failed),
+    "add_check_notify_fail": (DELIVERY, WARN),
     "delivery_recovered": (DELIVERY, OK),
 }
+
+# Logged, and decided not to be a message: History only. Every kind the code logs is in MATRIX,
+# a recovery's success kind or here (tests/test_messages_feed.py derives them from the code).
+HISTORY_ONLY = frozenset(
+    {
+        "check",  # a routine run
+        "tracker_found",  # what a check found; the client's confirmed result is the message
+        "tracker_magnet_found",
+        "site_probe",  # Diagnostics and the mirrors' probes
+        "site_prefer",  # also logged when nothing changed
+        "client_add_started",  # attempts: their outcome is the message
+        "client_verification_pending",
+        "site_login",  # a follow-up check may still put the old login back
+        "portable_import_applied",  # a restore point may still roll it back
+        "bot_delivery_started",
+        "protection_attempt",  # diagnostics
+        "protection_failed",
+        "protection_replay_refused",
+        "protection_restored",
+        "content_cache_failed",
+        "qbit_unreachable",  # a client's Check button: its page says the answer
+        "notifier_test",  # a messenger's Test button: likewise
+        "settings_portable_check",  # a TOW file checked on Settings: likewise
+        "download_history_rebuilt",  # bookkeeping
+        "download_history_trimmed",
+        "secret_undo_cleanup_retry",  # a cleanup that waited, done
+        "setup_skipped",
+    }
+)
 
 # A success after a failure of the same subject is a message (a recovery); every other success of
 # these kinds is routine. (failure kinds, success kind, the field naming the subject, message kind)
