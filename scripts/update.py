@@ -2692,11 +2692,23 @@ def _utf8_output() -> None:
                 stream.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
-def main(argv: list[str] | None = None) -> int:
-    _utf8_output()
-    if sys.version_info < (3, 11):  # noqa: UP036 - deploy.ps1 may fall back to any Python 3
-        print(f"update.py needs Python 3.11 or newer (this is {sys.version.split()[0]})")
-        return 2
+def _caller_paths(args: argparse.Namespace, cwd: str) -> list[str]:
+    """The path arguments as the caller meant them, for the owner, which starts in the install's
+    folder: ``--source``, ``--sums`` and a ``--uv`` given as a path (a bare name is looked up on
+    PATH, as before) made absolute against the caller's folder ``cwd``. Appended after the
+    caller's own arguments, they replace what those said (an option's last value counts), however
+    the caller spelled them (``--sums=x``, ``--sou x``)."""
+    extra: list[str] = []
+    for flag, value in (("--source", args.source), ("--sums", args.sums)):
+        if value is not None:
+            extra += [flag, os.path.abspath(os.path.join(cwd, os.fspath(value)))]
+    uv = args.uv
+    if uv and not os.path.isabs(uv) and any(sep and sep in uv for sep in (os.sep, os.altsep, "/")):
+        extra += ["--uv", os.path.abspath(os.path.join(cwd, uv))]
+    return extra
+
+
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Update this TOW install to a release tag (or a commit of a git clone)."
     )
@@ -2719,11 +2731,21 @@ def main(argv: list[str] | None = None) -> int:
     # The update's own process (run_owner): started by this file, never by hand.
     parser.add_argument("--owner", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--app", default=None, help=argparse.SUPPRESS)
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    _utf8_output()
+    if sys.version_info < (3, 11):  # noqa: UP036 - deploy.ps1 may fall back to any Python 3
+        print(f"update.py needs Python 3.11 or newer (this is {sys.version.split()[0]})")
+        return 2
+    args = _parser().parse_args(argv)
     if args.owner:
         return run_owner(args) if args.app else 2
     if os.environ.get(IN_PROCESS) != "1":
-        code = start_owner(list(sys.argv[1:] if argv is None else argv), System(APP, uv=args.uv))
+        # The owner starts in the install's folder: relative paths keep the caller's meaning.
+        given = list(sys.argv[1:] if argv is None else argv)
+        code = start_owner([*given, *_caller_paths(args, os.getcwd())], System(APP, uv=args.uv))
         if code is not None:
             return code
     return update(

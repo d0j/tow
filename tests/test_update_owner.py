@@ -276,3 +276,43 @@ def test_the_web_worker_still_runs_the_update_in_its_own_process():
     assert "updater.update(" in worker
     assert "updater.main(" not in worker
     assert "start_owner" not in worker
+
+
+def test_relative_paths_keep_the_callers_meaning_in_the_owner(tmp_path, monkeypatch):
+    # 1.33.1 review: the owner starts in the install's folder, while --source and --sums were
+    # resolved only there: an update run from another folder read other files or refused. They
+    # (and a --uv given as a path) are made absolute against the caller's folder before the handoff,
+    # however they were spelled; a bare --uv name is still looked up on PATH.
+    app = _install(tmp_path)
+    caller = tmp_path / "downloads"
+    (caller / "pkg").mkdir(parents=True)
+    forwarded: list[list[str]] = []
+    monkeypatch.setattr(updater, "System", lambda *_args, **_kwargs: Starter(app))
+    monkeypatch.setattr(updater, "start_owner", lambda argv, _system: forwarded.append(argv) or 0)
+    owners: list[Any] = []
+    monkeypatch.setattr(updater, "run_owner", lambda args: owners.append(args) or 0)
+
+    def owner_reads(argv: list[str]) -> Any:
+        """The owner's arguments as it reads them, in the install's folder where it starts."""
+        monkeypatch.chdir(app.parent)
+        assert updater.main([*argv, "--owner", "--app", str(app)]) == 0
+        monkeypatch.chdir(caller)
+        return owners[-1]
+
+    monkeypatch.chdir(caller)
+    given = ["--ref", "latest", "--sou", "pkg/tow.tar.gz", "--sums=pkg/SHA256SUMS", "--uv", "tools/uv"]
+    assert updater.main(given) == 0
+    assert forwarded[0][: len(given)] == given  # the caller's own arguments first, unchanged
+    owner = owner_reads(forwarded[0])
+    monkeypatch.chdir(app.parent)
+    assert owner.source.resolve() == (caller / "pkg" / "tow.tar.gz").resolve()
+    assert owner.sums.resolve() == (caller / "pkg" / "SHA256SUMS").resolve()
+    assert Path(owner.uv) == caller / "tools" / "uv"
+    monkeypatch.chdir(caller)
+
+    elsewhere = str(tmp_path / "elsewhere" / "tow.tar.gz")
+    assert updater.main(["--ref", "latest", "--source", elsewhere, "--uv", "uv"]) == 0
+    owner = owner_reads(forwarded[1])
+    assert (str(owner.source), owner.uv) == (elsewhere, "uv")  # absolute and bare names stay
+    assert updater.main(["--ref", "v1.33.1"]) == 0
+    assert forwarded[2] == ["--ref", "v1.33.1"]
