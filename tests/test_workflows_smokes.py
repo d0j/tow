@@ -191,6 +191,8 @@ def test_real_runs_qbittorrent_on_windows_with_cyrillic_windows_paths_and_the_na
     assert re.fullmatch(r"\d+\.\d+\.\d+", job["env"]["QBITTORRENT_VERSION"])  # pinned, never "latest"
     runs = _runs(job)
     assert "choco install qbittorrent --version $env:QBITTORRENT_VERSION" in runs
+    # The program says "v5.2.4": the check drops the "v" and compares the whole version.
+    assert "if ((\"$version\" -replace '^v', '') -ne $env:QBITTORRENT_VERSION)" in runs
     assert "Get-FileHash" in runs  # provenance recorded
     assert "Get-AuthenticodeSignature" in runs
     assert "-k qbittorrent --basetemp $base" in runs

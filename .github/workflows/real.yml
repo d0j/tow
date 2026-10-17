@@ -266,7 +266,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\clients\logs" | Out-Null
           "qBittorrent $version; SHA-256 $hash; signature $($signature.Status) $($signature.SignerCertificate.Subject)" |
             Tee-Object -FilePath "$env:RUNNER_TEMP\clients\logs\provenance.txt"
-          if (-not "$version".StartsWith($env:QBITTORRENT_VERSION)) { throw "qBittorrent $version, not $env:QBITTORRENT_VERSION" }
+          # The program's ProductVersion reads "v5.2.4".
+          if (("$version" -replace '^v', '') -ne $env:QBITTORRENT_VERSION) { throw "qBittorrent $version, not $env:QBITTORRENT_VERSION" }
           "QBT_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: A login for this run; qBittorrent started with it on 127.0.0.1:18080
         shell: pwsh
