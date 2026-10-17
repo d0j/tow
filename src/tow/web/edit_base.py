@@ -334,6 +334,15 @@ def _with_query(target: str, name: str, value: str) -> str:
     return f"{path}{'&' if '?' in path else '?'}{name}={value}{mark}{fragment}"
 
 
+def touched_draft(spec: Spec, merged: Merge, draft: Mapping[str, Any]) -> dict[str, Any]:
+    """The draft a conflict brings back: only the groups the owner changed or that conflict. A
+    group the owner left alone shows what is saved now (the new base's value): kept from the old
+    draft, it would read as the owner's change and put back what another device saved."""
+    kept = merged.changed | set(merged.conflicts)
+    untouched = {name for group, names in spec.groups.items() if group not in kept for name in names}
+    return {key: value for key, value in draft.items() if key not in untouched}
+
+
 def conflict_redirect(
     spec: Spec,
     ident: str,
@@ -348,7 +357,12 @@ def conflict_redirect(
     """Back to the form at ``target`` with the conflict: the owner's draft, both values and a
     new base (saved now, the conflicting groups waiting for a choice). Nothing was saved."""
     token = keep_conflict(
-        spec, ident, base=encode(spec, ident, now, merged.conflicts), draft=draft, rows=rows, retype=retype
+        spec,
+        ident,
+        base=encode(spec, ident, now, merged.conflicts),
+        draft=touched_draft(spec, merged, draft),
+        rows=rows,
+        retype=retype,
     )
     return flash_redirect(_with_query(target, "conflict", token), "web.edit.conflict", "warn")
 
