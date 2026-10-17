@@ -615,25 +615,37 @@ FEED_WAIT_SEC = 0.3
 def _messages(sample: Sample, who: Viewer, now: float) -> Computed:
     """Recent messages: the shared feed's own revision (entries, words, read state), so a routine
     log line that is no message changes nothing; due again when its oldest entry expires. Without
-    the feed (its reader not started yet) the log's tail stands in for it."""
+    the feed (its reader not started yet) the log's tail stands in for it.
+
+    The feed is rendered (its words, its topics' and sites' names) once per snapshot of the
+    reader - the same object while neither the log nor the read markers changed - and per state
+    and config (the names) in each language: a poll that finds nothing new renders nothing
+    (1.33.1 QA-11: a 304 rendered the whole feed every time)."""
     from tow.web.messages import feed_payload
 
     try:
         # Up to 0.3 s for the feed's own reader (it takes no lock), so a new message is in this very
         # poll rather than the next one, five seconds later.
-        feed = feed_payload(wait=FEED_WAIT_SEC)
-    except Exception:  # noqa: BLE001 - the poll answers with the stand-in rather than failing
-        key = sample.key("log", "config")
+        snapshot = services.message_feed().snapshot(wait=FEED_WAIT_SEC)
 
         def build() -> Computed:
+            feed = feed_payload(snapshot)
+            value = {"feed": str(feed.get("revision") or "")}
+            expires = feed.get("expires_at")
+            deadline = float(expires) if isinstance(expires, int | float) and expires > 0 else None
+            return Computed(value, revision("messages", value, {"lang": who.lang}), deadline)
+
+        return AREAS_MEMO.get(
+            "messages:feed", (who.lang, who.local), (snapshot, sample.key("state", "config")), now, build
+        )
+    except Exception:  # noqa: BLE001 - the poll answers with the stand-in rather than failing
+        tail = sample.key("log", "config")
+
+        def stand_in() -> Computed:
             value = {"log": sample.digests.get("log", ""), "config": sample.digests.get("config", "")}
             return Computed(value, revision("messages", value, {"lang": who.lang}), None)
 
-        return AREAS_MEMO.get("messages", (who.lang,), key, now, build)
-    value = {"feed": str(feed.get("revision") or "")}
-    expires = feed.get("expires_at")
-    deadline = float(expires) if isinstance(expires, int | float) and expires > 0 else None
-    return Computed(value, revision("messages", value, {"lang": who.lang}), deadline)
+        return AREAS_MEMO.get("messages", (who.lang,), tail, now, stand_in)
 
 
 def _undo(sample: Sample, who: Viewer, now: float) -> Computed:

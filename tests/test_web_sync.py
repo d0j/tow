@@ -121,6 +121,37 @@ def test_the_answer_names_a_revision_per_area_and_is_conditional():
     assert again.content == b""
 
 
+def test_a_poll_that_finds_nothing_new_renders_no_messages(monkeypatch):
+    """The messages area is rendered once per reading of the feed (and of the names it uses), per
+    language: a 304 rendered the whole feed every time, about 9 ms of 13 at 2,000 topics (1.33.1
+    QA-11). A new message renders it again, and its revision changes."""
+    from tow.log import log_event
+
+    _seed()
+    log_event("backup_failed", error="disk full", how="auto")
+    rendered: list[str] = []
+    real = services.render_message_feed
+
+    def counting(*args, **kwargs):
+        rendered.append(kwargs.get("lang", ""))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(services, "render_message_feed", counting)
+    client = TestClient(app)
+    first = _poll(client)
+    assert first.status_code == 200
+    assert len(rendered) == 1
+    for _ in range(5):
+        assert client.get("/sync.json", headers={"If-None-Match": first.headers["etag"]}).status_code == 304
+    assert len(rendered) == 1
+    log_event("backup_failed", error="disk full again", how="auto")
+    services.message_feed().refresh()
+    changed = _poll(client, first.json()["rev"])
+    assert changed.status_code == 200
+    assert changed.json()["rev"]["messages"] != first.json()["rev"]["messages"]
+    assert len(rendered) >= 2
+
+
 def test_another_have_is_another_answer_then_its_own_304():
     _seed()
     client = TestClient(app)

@@ -1013,7 +1013,7 @@ class MarkerRefused(ValueError):
     log rotated): the page fetches the feed again."""
 
 
-@dataclass
+@dataclass(eq=False)  # one reading of the log: equal only to itself (a memo's key, tow.web.sync)
 class _Snapshot:
     window: Window
     markers: Markers
