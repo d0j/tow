@@ -2389,6 +2389,7 @@
       "last": "the last change",
       "topic_done": "removal undone: the topic is back in the list",
       "relocate_failed": "could not move the files back",
+      "move_busy": "not undone: a save is moving this topic's folder now; try Undo again when it ends",
       "topic_put_done": "topic edit undone",
       "topic_add_done": "adding undone: the topic is removed from TOW; the torrent in the torrent client was not touched",
       "secrets_failed": "could not restore the saved passwords and tokens",

@@ -411,6 +411,62 @@ def test_two_moves_of_one_topic_never_run_together(mover):
     assert topic()["save_path"] == r"D:\First"
 
 
+def test_undo_never_moves_a_torrent_whose_folder_a_save_is_moving(monkeypatch):
+    """Final review 1.33.0 #5: an earlier folder edit was still undoable; while another save's
+    unlocked client move waited, Undo sent its own move of the same torrent beside it. Undo now
+    shares the save's per-topic reservation: it is refused (nothing written, the Undo stays) and
+    works once the move has ended."""
+    import asyncio
+
+    monkeypatch.setattr("tow.web.middleware._SITE_HTTP_LOCK", asyncio.Lock())
+    _english()
+    save_state({"topics": [_topic(hash=HASH)], "mirrors": {}})
+    calls: list[str] = []
+    where = {"path": r"D:\TV"}
+    entered, release = threading.Event(), threading.Event()
+    release.set()  # the first save's move ends at once
+
+    class Client:
+        def set_location(self, infohash: str, save_path: str) -> str:
+            calls.append(save_path)
+            where["path"] = save_path
+            return "ok"
+
+        def inspect_torrent(self, infohash: str) -> dict:
+            return {"hash": HASH, "save_path": where["path"], "tags": ["tow"]}
+
+    def slow_move(*_args, **_kwargs):
+        entered.set()
+        release.wait(10)
+        return "done"
+
+    monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a, **_k: Client())
+    monkeypatch.setattr("tow.clients.factory.from_secrets", lambda *_a, **_k: Client())
+    monkeypatch.setattr("tow.web.services.await_relocation", slow_move)
+    monkeypatch.setattr("tow.check.await_relocation", lambda *_a, **_k: "done")
+    with TestClient(app, headers={"Origin": "http://127.0.0.1"}) as b:
+        save(b, {**panel(b), "save_path": r"D:\First"})
+        assert topic()["save_path"] == r"D:\First"
+        entered.clear()
+        release.clear()
+        form = panel(b)
+        thread, _out = _in_thread(lambda: save(b, {**form, "save_path": r"D:\Second"}))
+        try:
+            assert entered.wait(5)
+            refused = b.post("/undo", follow_redirects=False)
+            assert refused.status_code == 303
+            assert calls == [r"D:\First", r"D:\Second"]  # no move back beside the running one
+            assert load_state().get("undo")  # the Undo stays for another try
+            assert "not undone: a save is moving this topic" in b.get(refused.headers["location"]).text
+        finally:
+            release.set()
+            thread.join(10)
+        assert topic()["save_path"] == r"D:\Second"
+        assert b.post("/undo", follow_redirects=False).status_code == 303
+    assert calls == [r"D:\First", r"D:\Second", r"D:\First"]
+    assert topic()["save_path"] == r"D:\First"
+
+
 # --- Sites ------------------------------------------------------------------------------------
 
 

@@ -8,7 +8,6 @@ The record comes from ``tow.topic_form``; every store, client, site and check is
 from __future__ import annotations
 
 import copy
-import threading
 from collections.abc import Callable
 from typing import Any, NamedTuple
 from urllib.parse import quote
@@ -285,25 +284,6 @@ class _Edit(NamedTuple):
     edited: dict[str, Any]  # the topic_edit event, logged by _save_edit once the edit is saved
 
 
-# The topics whose folder a save is moving in the client now: a second move of the same topic
-# waits for the first to end (it is refused, never run beside it).
-_RELOCATING: set[str] = set()
-_RELOCATING_LOCK = threading.Lock()
-
-
-def _reserve_move(tid: str) -> bool:
-    with _RELOCATING_LOCK:
-        if tid in _RELOCATING:
-            return False
-        _RELOCATING.add(tid)
-        return True
-
-
-def _release_move(tid: str) -> None:
-    with _RELOCATING_LOCK:
-        _RELOCATING.discard(tid)
-
-
 def _default_client() -> str:
     try:
         return str(client_configuration(services.load_config(), None)["id"])
@@ -374,13 +354,15 @@ def edit_topic(
         old_hash = str(topic.get("hash") or "")
         if not old_hash or paths_equal(old_dest, edit.dest):
             return _save_edit(state, topic, edit.before, edit.candidate, edit.dest, None, edited=edit.edited)
-        if not _reserve_move(tid):  # another save moves this topic's folder now
+        # The topic's one client move (shared with Undo's move back): a second one is refused,
+        # never run beside it.
+        if not services.reserve_relocation(tid):
             return flash_redirect("/", "web.edit.move_busy", "warn")
     try:
         moved = _move_in_client(edit.candidate, tid, old_hash, edit.dest)
         return _after_move(tid, edit, moved, old_dest, old_hash, base, wanted, resolutions)
     finally:
-        _release_move(tid)
+        services.release_relocation(tid)
 
 
 def _decide(state: dict[str, Any], topic: dict[str, Any], form: TopicForm) -> _Edit:

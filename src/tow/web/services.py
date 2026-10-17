@@ -27,7 +27,14 @@ from tow.access import credential as network_credential
 from tow.access import set_session_cookie, sign_out, sign_out_everywhere
 from tow.adopt import adopt_topic
 from tow.browser_auth import browser_auth
-from tow.check import await_relocation, client_owned_by_tow, record_check_failure, run_check
+from tow.check import (
+    await_relocation,
+    client_owned_by_tow,
+    record_check_failure,
+    release_relocation,
+    reserve_relocation,
+    run_check,
+)
 from tow.check.notices import notify_topic_error
 from tow.check.space import folder_free
 from tow.check_outcomes import counts_of as check_outcome_counts
@@ -200,9 +207,11 @@ __all__ = [
     "record_check_failure",
     "recover_store_transaction",
     "release_cached",
+    "release_relocation",
     "release_status",
     "render_message_feed",
     "request_restart",
+    "reserve_relocation",
     "reset_protection",
     "restore_from_point",
     "restore_point_cleanup_status",

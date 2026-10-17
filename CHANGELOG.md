@@ -33,7 +33,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Two devices editing the same topic, site or setting no longer undo each other's changes (a rename was put back
   by another device's timer-only save, which said "saved"): a save changes only what you changed in that form. A
   field changed on both devices comes back with both values and what you typed (never a password) until you
-  choose; a form opened before the update asks to be opened again.
+  choose; a form opened before the update asks to be opened again. Undo pressed while a save moves the topic's
+  folder in the torrent client no longer moves the torrent back at the same time: it says so and works once the
+  move has ended.
 - History and Recent messages no longer say a topic was edited or removed, or a change undone, when saving it
   failed or was refused.
 

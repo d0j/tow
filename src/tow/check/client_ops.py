@@ -6,6 +6,7 @@ ownership and relocation checks too."""
 from __future__ import annotations
 
 import re
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -91,6 +92,27 @@ def confirm_client_add(
 
 
 RELOCATION_WAIT_SEC = 20.0
+
+# The topics whose torrent a save or an Undo is moving in its client now (this process: the web
+# server). One reservation per topic, taken before the client is asked to move and released when
+# the move is recorded: an edit's move and an Undo's move back never run side by side; the
+# second is refused with a message, never run beside the first.
+_RELOCATING: set[str] = set()
+_RELOCATING_LOCK = threading.Lock()
+
+
+def reserve_relocation(topic_id: str) -> bool:
+    """Reserve ``topic_id`` for one client move; False: another one runs now."""
+    with _RELOCATING_LOCK:
+        if topic_id in _RELOCATING:
+            return False
+        _RELOCATING.add(topic_id)
+        return True
+
+
+def release_relocation(topic_id: str) -> None:
+    with _RELOCATING_LOCK:
+        _RELOCATING.discard(topic_id)
 
 
 def await_relocation(

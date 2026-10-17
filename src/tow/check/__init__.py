@@ -19,6 +19,8 @@ from tow.check.client_ops import (
     await_relocation,
     blocked_by_previous_revision,
     client_owned_by_tow,
+    release_relocation,
+    reserve_relocation,
 )
 from tow.check.run import record_check_failure, run_check
 
@@ -30,5 +32,7 @@ __all__ = [
     "client_owned_by_tow",
     "free_space_problem",
     "record_check_failure",
+    "release_relocation",
+    "reserve_relocation",
     "run_check",
 ]
