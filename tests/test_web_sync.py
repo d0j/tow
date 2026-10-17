@@ -734,6 +734,39 @@ def test_rate_limits_are_per_session_with_retry_after(monkeypatch):
     assert _poll(second).status_code == 200  # the same address, another session: its own bucket
 
 
+def test_the_rate_follows_the_config_without_a_fresh_burst(monkeypatch):
+    """1.33.1 A02: web.rate_burst and web.rate_per_sec set the buckets, read from the poll's own
+    sample (no lock, no extra read). A changed policy applies to the buckets as they are: an
+    emptied bucket gets no fresh burst from a larger one, a fuller one is cut to a smaller one."""
+    _seed()
+    cfg = load_config()
+    cfg["web"] = {"rate_burst": 10, "rate_per_sec": 0.5}
+    save_config(cfg)
+    sync.SAMPLER.current()  # the poll's sample has the config
+    tab = TestClient(app, headers={**ORIGIN, "X-TOW-Tab": "tab-a"})
+    codes = [_poll(tab).status_code for _ in range(11)]
+    assert codes == [200] * 10 + [429]  # 40 on v1.33.0
+    other = TestClient(app, headers={**ORIGIN, "X-TOW-Tab": "tab-b"})
+    assert _poll(other).status_code == 200  # each tab its own bucket still
+    # The policy changes: buckets keep their tokens.
+    assert sync.take_token("policy", now=100.0, policy=(40.0, 4.0)) == 0
+    for _ in range(39):
+        sync.take_token("policy", now=100.0, policy=(40.0, 4.0))
+    assert sync.take_token("policy", now=100.0, policy=(1000.0, 4.0)) > 0  # no fresh burst
+    assert sync.take_token("policy", now=110.0, policy=(1000.0, 4.0)) == 0  # refilled at its rate
+    sync.take_token("full", now=200.0, policy=(40.0, 4.0))
+    assert sync.take_token("full", now=200.0, policy=(2.0, 4.0)) == 0
+    assert sync.take_token("full", now=200.0, policy=(2.0, 4.0)) == 0
+    assert sync.take_token("full", now=200.0, policy=(2.0, 4.0)) > 0  # cut to the smaller burst
+
+
+def test_the_rate_policy_defaults_and_ignores_what_is_not_a_policy():
+    assert sync.rate_policy({}) == (40.0, 4.0)
+    assert sync.rate_policy(None) == (40.0, 4.0)
+    assert sync.rate_policy({"web": {"rate_burst": 10}}) == (10.0, 4.0)
+    assert sync.rate_policy({"web": {"rate_burst": True, "rate_per_sec": float("nan")}}) == (40.0, 4.0)
+
+
 # --------------------------------------------------------------------------- read-only, no waiting
 
 

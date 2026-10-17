@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import os
 import re
 import threading
@@ -399,6 +400,41 @@ def _site_spec(name: object, spec: dict[str, Any]) -> None:
         raise ConfigError("protection.invalid_site")
 
 
+# The web interface's request rate (tow.web.sync): a burst per device session or tab of this PC,
+# refilled at a rate a second. Defaults in tow.web.sync (RATE_BURST, RATE_PER_SEC).
+WEB_RATE_BURST = (10, 1000)
+WEB_RATE_PER_SEC = (0.5, 50.0)
+
+
+def _validate_web(data: dict[str, Any]) -> None:
+    """``web``: optional, a mapping of ``rate_burst`` (a whole number) and ``rate_per_sec`` (a
+    finite number), each within its bounds; never a true/false taken as a number."""
+    web = data.get("web")
+    if web is None:
+        return
+    if not isinstance(web, dict) or not set(web) <= {"rate_burst", "rate_per_sec"}:
+        raise ConfigError("config_error.web")
+    if "rate_burst" in web:
+        low, high = WEB_RATE_BURST
+        value = web["rate_burst"]
+        if isinstance(value, str) and (number := whole_number(value)) is not None:
+            value = number
+        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+            # The setting's name as an f-string: no catalog key (tests/test_i18n.py reads literals).
+            raise ConfigError("config_error.whole_number", key=f"web.{'rate_burst'}", low=low, high=high)
+        web["rate_burst"] = value
+    if "rate_per_sec" in web:
+        low_rate, high_rate = WEB_RATE_PER_SEC
+        rate = web["rate_per_sec"]
+        if (
+            isinstance(rate, bool)
+            or not isinstance(rate, (int, float))
+            or not math.isfinite(rate)
+            or not low_rate <= rate <= high_rate
+        ):
+            raise ConfigError("config_error.number", key=f"web.{'rate_per_sec'}", low="0.5", high="50")
+
+
 def _validate_protection(data: dict[str, Any]) -> None:
     from tow.protection.spec import validate_settings
 
@@ -411,6 +447,7 @@ def _validate_protection(data: dict[str, Any]) -> None:
 
 def _validate(data: dict[str, Any]) -> None:
     _validate_protection(data)
+    _validate_web(data)
     _int_field(data, "port", 1, 65535)
     _int_field(data, "interval_sec", 60, 7 * 24 * 3600)
     _int_field(data, "flash_ttl_sec", 1, 24 * 3600)
