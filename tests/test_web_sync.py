@@ -6,11 +6,13 @@ never a recovery, a quarantine or a folder made."""
 from __future__ import annotations
 
 import concurrent.futures
+import json
 import os
 import re
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1002,17 +1004,22 @@ def _night_restore_marker() -> Path:
     return data_dir() / restore._MARKER
 
 
-def _import_checkpoint(status: str) -> Path:
-    import json
-
+def _import_checkpoint(status: Any) -> Path:
     from tow.bundle import checkpoint
     from tow.paths import data_dir
 
     folder = data_dir() / "import-checkpoints" / "20261017-100000-test"
-    folder.mkdir(parents=True, exist_ok=True)
     # As write_import_transaction writes it, without its atomic writer's lock (held by the test).
     record = {"format": checkpoint.TRANSACTION_FORMAT, "checkpoint": str(folder), "status": status}
-    (folder / "TRANSACTION.json").write_text(json.dumps(record), encoding="utf-8")
+    return _import_marker(json.dumps(record))
+
+
+def _import_marker(content: str) -> Path:
+    from tow.paths import data_dir
+
+    folder = data_dir() / "import-checkpoints" / "20261017-100000-test"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "TRANSACTION.json").write_text(content, encoding="utf-8")
     return folder
 
 
@@ -1042,6 +1049,14 @@ _MARKERS = {
     "check": _made_check,
     "night_restore": _made_night_restore,
     "import": lambda: _import_checkpoint("prepared"),
+    # Re-check 1.33.0 #5: a status of the wrong type is a malformed marker - still a transaction
+    # to recover (503, recovery started), never a TypeError and a 500.
+    "import_status_list": lambda: _import_checkpoint([]),
+    "import_status_object": lambda: _import_checkpoint({}),
+    "import_status_number": lambda: _import_checkpoint(1),
+    "import_status_missing": lambda: _import_marker("{}"),
+    "import_not_an_object": lambda: _import_marker("[]"),
+    "import_not_json": lambda: _import_marker("{"),
 }
 
 

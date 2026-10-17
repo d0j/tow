@@ -202,7 +202,8 @@ def _import_pending(root: Path) -> bool:
             status = json.loads(reading.content or b"").get("status") if reading.status == "ok" else None
         except ValueError, AttributeError, RecursionError:
             status = None
-        if status not in {"committed", "rolled_back"}:
+        # A status of any other type ([], {}) is a malformed marker: still a transaction, no TypeError.
+        if not isinstance(status, str) or status not in {"committed", "rolled_back"}:
             return True
     return False
 

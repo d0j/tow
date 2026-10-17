@@ -240,7 +240,10 @@ def finished_job() -> dict[str, Any] | None:
         job = _read(_job_file())
     except WebUpdateError:
         return None
-    if job.get("status") not in _TERMINAL or not isinstance(job.get("id"), str) or not _JOB_ID.fullmatch(job["id"]):
+    status = job.get("status")
+    if not isinstance(status, str) or status not in _TERMINAL:  # [] or {}: unreadable, not a TypeError
+        return None
+    if not isinstance(job.get("id"), str) or not _JOB_ID.fullmatch(job["id"]):
         return None
     if job.get("status") in {"failed", "refused", "rolled_back"}:
         job = _recover_completed(job, _updater_record(), False)

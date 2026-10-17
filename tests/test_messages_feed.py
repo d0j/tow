@@ -480,7 +480,7 @@ def test_undo_does_not_touch_the_sidecar():
 # --------------------------------------------------------------------------- update results
 
 
-def _job(status: str, **extra: object) -> dict:
+def _job(status: object, **extra: object) -> dict:
     return {"id": "f" * 32, "status": status, "target": "1.33.0", "previous": "1.32.3", **extra}
 
 
@@ -502,6 +502,12 @@ def test_a_failed_update_is_an_error_and_a_running_one_is_nothing_yet(status, se
     assert messages_feed.reconcile_update(_job("installing")) is False
     assert messages_feed.reconcile_update(_job(status)) is True
     assert _feed()["items"][0]["kind"] == severity
+
+
+@pytest.mark.parametrize("status", [[], {}, 1, None])
+def test_an_update_record_of_the_wrong_status_type_is_nothing(status):
+    """Re-check 1.33.0 #5: a status of the wrong type is no outcome, never a TypeError."""
+    assert messages_feed.reconcile_update(_job(status)) is False
 
 
 def test_a_lost_append_of_an_update_result_is_tried_again(monkeypatch):
