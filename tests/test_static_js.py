@@ -52,6 +52,13 @@ def test_content_picker_boundaries_and_async_selection():
     assert all(json.loads(result.stdout.strip()).values())
 
 
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_automatic_update_checks_box_follows_another_device_but_not_under_the_owners_hands():
+    verdict = _verdict("update_checks_sync.mjs")
+    assert verdict == dict.fromkeys(("followsAnotherDevice", "protectedWhileInUse", "conflictKeepsItsBase"), True)
+
+
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_update_notice_and_disabled_check_status():

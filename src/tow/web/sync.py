@@ -643,12 +643,15 @@ def _config(sample: Sample, who: Viewer, now: float) -> Computed:
     key = sample.key("config")
 
     def build() -> Computed:
+        from tow.config import as_bool
+
         theme = sample.config.get("theme")
         value = {
             "theme": theme if theme in ("light", "dark") else "auto",
             "language": i18n.setting(sample.config),
             "language_resolved": who.lang,
             "interval_sec": interval_sec_of(sample.config),
+            "check_updates": as_bool(sample.config.get("check_updates", True)),
         }
         return Computed(value, revision("config", value), None)
 

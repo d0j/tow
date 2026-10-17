@@ -23,11 +23,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   (Auto stays each device's own); another language or a new TOW version reloads an open page once nothing is being
   typed or chosen, and a page in use says so instead.
 - **Sites**, **Settings** and **History** keep themselves up to date too: a site added, paused or changed on
-  another device, a messenger connected or a setting saved elsewhere, and new History lines show within about 5
-  seconds without a reload. Only what changed is drawn again; open sections, cards and details, the scroll
-  position, the Settings search and History's filter stay as they are, and a routine check redraws nothing. A
-  section or site you are editing keeps your unsaved values, says that it changed elsewhere and follows once you
-  leave it.
+  another device, a messenger connected or a setting saved elsewhere (**Check for updates automatically** too), and
+  new History lines show within about 5 seconds without a reload. Only what changed is drawn again; open sections,
+  cards and details, the scroll position, the Settings search and History's filter stay as they are, and a routine
+  check redraws nothing. A section or site you are editing keeps your unsaved values, says that it changed
+  elsewhere and follows once you leave it.
 
 ### Fixed
 
