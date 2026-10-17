@@ -154,16 +154,24 @@ class _ReconcilePass:
     observed_completed_episode_keys: set[str] = field(default_factory=set)
     completed_file_labels: list[str] = field(default_factory=list)
     seen_identities: set[str] = field(default_factory=set)
+    # The owner's ``tow check --rebind-volumes``: the folder's recorded volume is not compared,
+    # and a file confirmed now records the volume it is on instead.
+    rebind_volume: bool = False
+    # A file was confirmed on disk in full by this pass (not reused): its folder's volume is proven.
+    volume_confirmed: bool = False
     _evidence_base: tuple[Path | None] | None = field(default=None, init=False)
     _seen: bool | None = field(default=None, init=False)
 
     def seen_from_here(self) -> bool:
         """Whether this PC sees the save folder, asked once per pass and only when a file is
-        looked at on disk (a share or a sleeping NAS can take its timeout for each look)."""
+        looked at on disk (a share or a sleeping NAS can take its timeout for each look). With a
+        recorded volume the folder must be on it: an unmounted disk is not seen, never "missing"."""
         if self._seen is None:
             from tow import folders
 
-            self._seen = folders.seen_from_here(self.evidence_save_path)
+            recorded = folders.recorded_volume(self.record.get("volume"), self.evidence_save_path)
+            expected = None if self.rebind_volume else recorded
+            self._seen = folders.seen_from_here(self.evidence_save_path, volume=expected)
         return self._seen
 
     def evidence_base(self) -> Path | None:
@@ -320,7 +328,25 @@ def _file_confirmed(
     )
     if confirmed is True and not fresh:
         item["confirmed_ts"] = int(time.time())
+        work.volume_confirmed = True
     return confirmed
+
+
+def _record_volume(work: _ReconcilePass) -> None:
+    """The volume of the save folder, recorded when this pass confirmed a file there and the
+    history keeps none for this folder (or the owner asked to bind it again). A recorded one is
+    never replaced otherwise: after a mismatch the folder stays unknown, it is not rebound. It
+    lives in the history, which only an applying check writes (a dry run discards it)."""
+    if not work.volume_confirmed:
+        return
+    from tow import folders
+
+    recorded = folders.recorded_volume(work.record.get("volume"), work.evidence_save_path)
+    if recorded is not None and not work.rebind_volume:
+        return
+    identity = folders.volume_at(work.evidence_save_path)
+    if identity:
+        work.record["volume"] = {"path": work.evidence_save_path, "id": identity}
 
 
 def _update_item_status(
@@ -397,9 +423,12 @@ def reconcile_topic(
     client_adapter: TorrentClientAdapter,
     history: DownloadHistory,
     now: str,
+    *,
+    rebind_volume: bool = False,
 ) -> dict[str, Any]:
     """Look at the topic's torrent in its client and its files on disk; record in ``history``
-    what changed (new files, completions, the torrent gone or back) and return the events."""
+    what changed (new files, completions, the torrent gone or back) and return the events.
+    ``rebind_volume``: the owner's ``tow check --rebind-volumes`` (``_record_volume``)."""
     record, initial_baseline, expected = _open_record(topic, history)
     events: list[str] = []
     if (client_adapter.capabilities or {}).get("inspect") is False:
@@ -458,6 +487,7 @@ def reconcile_topic(
         evidence_save_path=evidence_save_path,
         current_client_paths={rel.casefold() for _row, rel, _size, _selected in prepared_all},
         events=events,
+        rebind_volume=rebind_volume,
     )
     for (row, rel, size), coverage in prepared:
         item, carried_completion = _track_item(work, rel, size, coverage)
@@ -471,6 +501,7 @@ def reconcile_topic(
             ):
                 historical_item["superseded"] = True
 
+    _record_volume(work)
     completed_episode_label = _note_completed_episodes(work)
     if client_event:
         set_label(client_event, latest_item_label(record, prefer_completed=client_event.get("kind") != "client_added"))

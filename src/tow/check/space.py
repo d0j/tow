@@ -125,23 +125,43 @@ def _on_disk(candidates: Iterable[Path], size: int, folder: Path | None) -> int:
     return allocated
 
 
-def measure(dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]]) -> Shortfall | None:
+def measure(
+    dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]], *, volume: str | None = None
+) -> Shortfall | None:
     """Whether the files ``wanted`` - (where each may already lie, its size, the bytes the
-    client already has) - fit in ``dest``; None when they do or when it cannot be known."""
-    return _measured(dest, wanted)[1]
+    client already has) - fit in ``dest``; None when they do or when it cannot be known.
+    ``volume``: the identity recorded for the folder (``recorded_volume_of``)."""
+    return _measured(dest, wanted, volume=volume)[1]
 
 
-def _measured(dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]]) -> tuple[bool, Shortfall | None]:
+def recorded_volume_of(topic: Topic, dest: str) -> str | None:
+    """The volume the download history recorded for the topic's save folder ``dest``
+    (tow.folders.recorded_volume); None without one, or when the history cannot be read."""
+    from tow.folders import recorded_volume
+    from tow.store import StoreCorruptionError, load_download_history
+
+    try:
+        history = load_download_history(quarantine=False)
+    except OSError, ValueError, StoreCorruptionError:
+        return None
+    record = as_dict(as_dict(history.get("topics")).get(str(topic.get("id"))))
+    return recorded_volume(record.get("volume"), dest)
+
+
+def _measured(
+    dest: str, wanted: Iterable[tuple[tuple[Path, ...], int, int]], *, volume: str | None = None
+) -> tuple[bool, Shortfall | None]:
     """``measure`` with whether it is known at all: (False, None) for a folder this computer
-    does not see or free space it cannot read - a new add then does not wait, but a torrent
-    that already waits is not started on a drive that is gone for the moment."""
+    does not see, one no longer on its recorded volume (an unmounted disk: the free space of the
+    folder under it is not its) or free space it cannot read - a new add then does not wait, but
+    a torrent that already waits is not started on a drive that is gone for the moment."""
     from tow.folders import seen_from_here
 
     items = list(wanted)
     needed = sum(size for _where, size, _done in items)
     if needed <= 0:
         return True, None
-    if not seen_from_here(dest):
+    if not seen_from_here(dest, volume=volume):
         return False, None  # /downloads of a remote client, or a drive this PC does not have
     folder = _save_folder(dest) if any(where for where, _size, _done in items) else None
     needed -= sum(min(size, max(done, _on_disk(where, size, folder))) for where, size, done in items)
@@ -376,7 +396,11 @@ def recheck(
         forget(topic)  # the owner chose its files in the client: his decision
         return OWNER
     dest = str(info.get("save_path") or topic.get("save_path") or "")
-    known, shortfall = (True, None) if client_id in run.remote_clients else _measured(dest, _client_wanted(info, dest))
+    known, shortfall = (
+        (True, None)
+        if client_id in run.remote_clients
+        else _measured(dest, _client_wanted(info, dest), volume=recorded_volume_of(topic, dest))
+    )
     kind = str(waiting.get("kind") or "added")
     if not known:
         return _keep_waiting(topic, run, row, h=h, waiting=waiting)

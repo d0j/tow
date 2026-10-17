@@ -163,7 +163,7 @@ def test_a_pass_asks_once_whether_the_save_folder_is_seen_from_here(tmp_path: Pa
 
     # A UNC share, a sleeping NAS or a lost mapped drive can take the SMB timeout for each look.
     asked: list[str] = []
-    monkeypatch.setattr("tow.folders.seen_from_here", lambda path: asked.append(path) or seen)
+    monkeypatch.setattr("tow.folders.seen_from_here", lambda path, volume=None: asked.append(path) or seen)
     (tmp_path / "Show").mkdir()
     for n in range(1, 7):
         (tmp_path / "Show" / f"S01E0{n}.mkv").write_bytes(b"0123456789")
@@ -2262,3 +2262,67 @@ def test_restarted_numbering_needs_more_than_half_below_the_range(episodes, numb
     assert (result or {}).get("numbering") == numbering
     if result is not None:
         assert {key: result[key] for key in _RANGE_73_176} == _RANGE_73_176  # the title's range stays
+
+
+def _volume_world(tmp_path: Path, monkeypatch, identity: str | None):
+    """A complete S01E01 in the save folder, and the volume the folder is on now."""
+    from tow import platform as tow_platform
+
+    (tmp_path / "Show").mkdir()
+    (tmp_path / "Show" / "S01E01.mkv").write_bytes(b"0123456789")
+    current = {"id": identity}
+    monkeypatch.setattr(
+        tow_platform, "volume_of", lambda path: tow_platform.Volume(current["id"], "local") if current["id"] else None
+    )
+    client = FakeClient()
+    client.progress = 1.0
+    topic = {"id": "vol", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
+    history = {"topics": {"vol": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
+    return client, topic, history, current
+
+
+def test_a_confirmed_file_records_the_volume_of_its_folder(tmp_path: Path, monkeypatch):
+    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "usb-disk")
+    reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "usb-disk"}
+
+
+def test_a_folder_on_another_volume_is_unverified_never_missing(tmp_path: Path, monkeypatch):
+    client, topic, history, current = _volume_world(tmp_path, monkeypatch, "system-disk")
+    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "usb-disk"}
+    (tmp_path / "Show" / "S01E01.mkv").unlink()  # the disk is gone: its folder is empty
+
+    reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+
+    statuses = {item["status"] for item in history["topics"]["vol"]["items"].values()}
+    assert statuses == {"unverified"}
+    assert history["topics"]["vol"]["volume"]["id"] == "usb-disk"  # never silently rebound
+    current["id"] = None  # the volume cannot be told: unknown as well
+    reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00")
+    assert {item["status"] for item in history["topics"]["vol"]["items"].values()} == {"unverified"}
+
+
+def test_the_owner_rebinds_a_folder_only_with_a_file_confirmed_on_the_new_volume(tmp_path: Path, monkeypatch):
+    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "new-disk")
+    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "old-disk"}
+    reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert history["topics"]["vol"]["volume"]["id"] == "old-disk"  # a mismatch alone binds nothing
+
+    reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00", rebind_volume=True)
+    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "new-disk"}
+    assert {item["status"] for item in history["topics"]["vol"]["items"].values()} == {"completed"}
+
+
+def test_a_rebind_without_a_confirmed_file_keeps_the_record(tmp_path: Path, monkeypatch):
+    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "system-disk")
+    history["topics"]["vol"]["volume"] = {"path": str(tmp_path), "id": "usb-disk"}
+    (tmp_path / "Show" / "S01E01.mkv").unlink()  # an unmounted disk: nothing to confirm
+    reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00", rebind_volume=True)
+    assert history["topics"]["vol"]["volume"]["id"] == "usb-disk"
+
+
+def test_a_moved_topic_records_its_new_folder(tmp_path: Path, monkeypatch):
+    client, topic, history, _current = _volume_world(tmp_path, monkeypatch, "usb-disk")
+    history["topics"]["vol"]["volume"] = {"path": str(tmp_path / "old"), "id": "old-disk"}
+    reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
+    assert history["topics"]["vol"]["volume"] == {"path": str(tmp_path), "id": "usb-disk"}

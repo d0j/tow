@@ -217,7 +217,9 @@ def _reconcile_one(
     had_history = topic_key in history_topics
     topic_history_before = copy.deepcopy(history_topics.get(topic_key))
     try:
-        reconcile = reconcile_topic(topic, topic_client, history, now=iso_now())
+        # Only the owner's --rebind-volumes passes the option: every other run calls it as before.
+        rebind = {"rebind_volume": True} if getattr(run, "rebind_volumes", False) else {}
+        reconcile = reconcile_topic(topic, topic_client, history, now=iso_now(), **rebind)
     except Exception as exc:  # noqa: BLE001 - a failed reconcile is the topic's result (recorded), never the run's end
         if had_history:
             history_topics[topic_key] = cast(HistoryRecord, topic_history_before)

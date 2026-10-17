@@ -115,16 +115,18 @@ options:
   --json           machine-readable output (JSON), also when the command fails
 
 $ tow check --help
-usage: tow check [-h] [--json] [--apply] [--dry-run] [--notify]
+usage: tow check [-h] [--json] [--apply] [--dry-run] [--notify] [--rebind-volumes]
 
 check the topics now (a preview that changes nothing unless --apply)
 
 options:
-  -h, --help  show this help message and exit
-  --json      machine-readable output (JSON), also when the command fails
-  --apply     hand what is found to the torrent client and save the result
-  --dry-run   a preview only, even with --apply
-  --notify    send messages about what is found to the messengers
+  -h, --help        show this help message and exit
+  --json            machine-readable output (JSON), also when the command fails
+  --apply           hand what is found to the torrent client and save the result
+  --dry-run         a preview only, even with --apply
+  --notify          send messages about what is found to the messengers
+  --rebind-volumes  after a disk was replaced or reformatted: take the volume each save folder is
+                    on now as its own, once a file of the topic is confirmed there
 
 $ tow serve --help
 usage: tow serve [-h] [--host HOST] [--port PORT] [--log-file LOG_FILE]

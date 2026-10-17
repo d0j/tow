@@ -120,6 +120,11 @@ other files for it in the client, or remove it, TOW stops waiting. Only a drive 
 client on another computer, a folder this computer cannot see or free space that cannot be read never holds a
 torrent back, and the forms then show no free space.
 
+Once TOW has seen a file of a topic in its folder, it also remembers which disk that folder is on. When that disk
+is later not mounted (its folder is empty or lies on another disk), TOW does not call the files missing and does not
+measure the other disk's free space: they stay unconfirmed until the disk is back. After you replace or reformat the
+disk, run `tow check --apply --rebind-volumes` once the files are on the new one.
+
 When a new version arrives while the previous one is still seeding the same file, TOW does not touch the old
 torrent. It asks you: **Stop the previous one and add** stops the old torrent (its files stay) and adds the new one.
 While it waits, scheduled checks do not download the new version's `.torrent` again when the topic page's magnet

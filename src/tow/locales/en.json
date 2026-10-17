@@ -545,6 +545,7 @@
       "check_apply": "hand what is found to the torrent client and save the result",
       "check_dry_run": "a preview only, even with --apply",
       "check_notify": "send messages about what is found to the messengers",
+      "check_rebind_volumes": "after a disk was replaced or reformatted: take the volume each save folder is on now as its own, once a file of the topic is confirmed there",
       "serve": "serve the web page alone (tow run does it together with the schedule)",
       "serve_host": "the address to listen on (default: bind in config.yaml)",
       "serve_port": "the port (default: port in config.yaml, 8787)",

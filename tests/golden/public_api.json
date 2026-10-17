@@ -109,7 +109,7 @@
   "CONFIRMATION_REUSE_SEC": "value int",
   "filesystem_confirmation": "def(save_path: 'str', relative_path: 'str', expected_size: 'int | None', *, base: 'Path | None' = None, seen: 'bool | None' = None) -> 'bool | None'",
   "progress_summary": "def(topic_id: 'str', history: 'Mapping[str, Any]') -> 'dict[str, Any]'",
-  "reconcile_topic": "def(topic: 'Topic', client_adapter: 'TorrentClientAdapter', history: 'DownloadHistory', now: 'str') -> 'dict[str, Any]'",
+  "reconcile_topic": "def(topic: 'Topic', client_adapter: 'TorrentClientAdapter', history: 'DownloadHistory', now: 'str', *, rebind_volume: 'bool' = False) -> 'dict[str, Any]'",
   "safe_relative_path": "def(save_path: 'str', client_file_name: 'str') -> 'str | None'"
  },
  "tow.snapshots": {

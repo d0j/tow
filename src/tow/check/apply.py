@@ -46,7 +46,13 @@ def _where_it_may_lie(dest: str, file: Any, name: str, is_multi: bool) -> tuple[
 
 
 def free_space_problem(
-    dest: str, files: tuple[Any, ...], selected_indices: Any, *, name: str = "", is_multi: bool = False
+    dest: str,
+    files: tuple[Any, ...],
+    selected_indices: Any,
+    *,
+    name: str = "",
+    is_multi: bool = False,
+    volume: str | None = None,
 ) -> Shortfall | None:
     """G6: the selected files do not fit on the target drive (None: they do, or it cannot be
     known - the folder is on another machine or not reachable from here).
@@ -57,12 +63,15 @@ def free_space_problem(
     wanted = set(selected_indices or ())
     selected = [f for f in files if f.index in wanted and not getattr(f, "is_pad", False)]
     return space.measure(
-        dest, ((_where_it_may_lie(dest, f, name, is_multi), int(getattr(f, "size", 0) or 0), 0) for f in selected)
+        dest,
+        ((_where_it_may_lie(dest, f, name, is_multi), int(getattr(f, "size", 0) or 0), 0) for f in selected),
+        volume=volume,
     )
 
 
-def _shortfall(run: CheckRun, client_id: str, dest: str, metadata: Any, plan: Any) -> Shortfall | None:
-    """Whether the plan's files do not fit; a client on another computer is never judged here."""
+def _shortfall(run: CheckRun, client_id: str, dest: str, metadata: Any, plan: Any, topic: Topic) -> Shortfall | None:
+    """Whether the plan's files do not fit; a client on another computer is never judged here,
+    a folder no longer on the volume recorded for it neither (its free space is not known)."""
     if client_id in run.remote_clients:
         return None
     return free_space_problem(
@@ -71,6 +80,7 @@ def _shortfall(run: CheckRun, client_id: str, dest: str, metadata: Any, plan: An
         plan.selected_indices,
         name=str(getattr(metadata, "name", "") or ""),
         is_multi=bool(getattr(metadata, "is_multi", False)),
+        volume=space.recorded_volume_of(topic, dest),
     )
 
 
@@ -150,7 +160,7 @@ def _add_new_revision(
 
     Returns the hash the client actually registered (a hybrid may come back as its v1 hash).
     """
-    shortfall = _shortfall(run, client_id, dest, metadata, plan)
+    shortfall = _shortfall(run, client_id, dest, metadata, plan, topic)
     if shortfall is None:
         added_info = topic_client.add_torrent_selected(blob, dest, h, plan.selected_indices)
     else:
@@ -250,7 +260,7 @@ def _update_client_selection(
     # A waiting torrent, and an unfinished add left stopped (an earlier add whose files did not
     # fit and whose read-back failed): measured before anything starts it.
     measured = waiting is not None or ((completed_pending_add or recovering_verification) and space.is_stopped(info))
-    shortfall = _shortfall(run, client_id, dest, metadata, plan) if measured else None
+    shortfall = _shortfall(run, client_id, dest, metadata, plan, topic) if measured else None
     if waiting is not None and shortfall is None:
         revisions = [str(value) for value in topic.get("previous_hashes") or []]
         if overlap := live_previous_overlap(topic_client, revisions, metadata.files):

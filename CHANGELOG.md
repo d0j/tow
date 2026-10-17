@@ -51,6 +51,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On a Windows that is not in English, the watchdog's message after the computer was off says whether it was
   restarted or powered off: TOW reads the kind Windows itself records for the shutdown, and stays neutral when that
   record is missing or unclear.
+- A topic's files are no longer called missing when the disk their folder is on is not mounted (Linux, macOS, and
+  Windows folders a disk is mounted on): TOW remembers the disk once it has seen a file there, keeps the files
+  unconfirmed and measures no other disk's free space until it is back. After replacing or reformatting the disk, run
+  `tow check --apply --rebind-volumes`.
 - On Linux and macOS, `tow export` to a drive without hard links (an exFAT or FAT USB stick, some network shares)
   works: the finished file is put in place by the system's own rename that never replaces an existing file, instead of
   failing. A drive that offers neither still refuses, as before.

@@ -244,22 +244,61 @@ def save_path_problem(path: str, *, allow_unc: bool = False) -> str | None:
     return None
 
 
-def seen_from_here(path: str) -> bool:
+def seen_from_here(path: str, *, volume: str | None = None) -> bool:
     """Whether this PC sees the drive, share or top folder of a client's save path.
 
     ``/downloads`` of a client in a container (no such folder here), a Windows path while TOW
     runs on Linux or macOS, a POSIX path while it runs on Windows, a missing drive letter: no.
+
+    ``volume``: the identity recorded for this folder (``recorded_volume``). Then the folder -
+    or, while it is missing, its nearest existing folder - must be on that very volume: an
+    unmounted disk leaves its empty mount point folder (or its parent) on another one, whose
+    files and free space say nothing about the disk. Another or an unreadable volume: no.
     """
     value = str(path or "").strip()
     if not value:
         return False
     anchor = os.path.splitdrive(value)[0]  # a drive or share on Windows; always "" on POSIX
     if anchor:
-        return os.path.exists(anchor + os.sep)
-    if not os.path.isabs(value) or value.startswith(("\\\\", "//")):
+        seen = os.path.exists(anchor + os.sep)
+    elif not os.path.isabs(value) or value.startswith(("\\\\", "//")):
         return False
-    top = next((part for part in value.split("/") if part), "")
-    return bool(top) and os.path.isdir("/" + top)
+    else:
+        top = next((part for part in value.split("/") if part), "")
+        seen = bool(top) and os.path.isdir("/" + top)
+    return seen and (volume is None or volume_at(value) == volume)
+
+
+def volume_at(path: str) -> str | None:
+    """The identity of the volume holding ``path``, or its nearest existing folder while it is
+    missing (``tow.platform.volume_of``); None when it cannot be told. Read-only."""
+    current = os.path.normpath(str(path or "").strip())
+    try:
+        while not os.path.exists(current):
+            parent = os.path.dirname(current)
+            if parent == current:
+                return None
+            current = parent
+    except OSError, ValueError:
+        return None
+    found = platform.volume_of(current)
+    return found.identity if found is not None else None
+
+
+def recorded_volume(record: object, path: str) -> str | None:
+    """The volume identity a download history record keeps for the save folder ``path``
+    (``{"path", "id"}``, written by an applying check that confirmed a file there). None: no
+    record, or one for another folder (the topic moved: it is recorded again). A damaged record
+    is "", which no volume matches: the folder counts as not seen until a check run with
+    ``--rebind-volumes`` records it again."""
+    if record is None:
+        return None
+    if not isinstance(record, dict) or not isinstance(record.get("path"), str):
+        return ""
+    if not paths_equal(record["path"], path):
+        return None
+    identity = record.get("id")
+    return identity if isinstance(identity, str) and identity else ""
 
 
 def _comparable(path: str) -> str:
