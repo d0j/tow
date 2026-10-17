@@ -78,7 +78,7 @@ def index(request: Request) -> Response:
     if is_browser_navigation(request) and access.is_local(request) and first_run(cfg):
         return RedirectResponse("/setup", status_code=303)
     state = _context.state()
-    rows = topic_rows(state)
+    rows = topic_rows(state, local=access.is_local(request))
     for row in rows:
         row["manual_job"] = check_jobs.pending_topic(str(row["id"]))
     # YAML accepts scalar keys; HTML/URL filter values are always text. Preserve

@@ -503,7 +503,7 @@ def _topics(sample: Sample, who: Viewer, now: float) -> Computed:
         from tow.web.views import topic_rows
 
         with sample.seeded():
-            rows = topic_rows(sample.state)
+            rows = topic_rows(sample.state, local=who.local)  # a network device's words are scrubbed
             day = _today(now)
             hashes = {
                 str(row["id"]): _row_hash(
@@ -513,11 +513,11 @@ def _topics(sample: Sample, who: Viewer, now: float) -> Computed:
             }  # = row_hash(row, ...) for each row, the day computed once
         order = [str(row["id"]) for row in rows]
         value = {"order": order, "rows": hashes}
-        rev = revision("topics", value, {"lang": who.lang})
-        AREAS_MEMO.remember_rows(who.lang, rev, hashes)
+        rev = revision("topics", value, {"lang": who.lang, "local": who.local})
+        AREAS_MEMO.remember_rows((who.lang, who.local), rev, hashes)
         return Computed(value, rev, _next_midnight(now))
 
-    return AREAS_MEMO.get("topics", (who.lang,), key, now, build)
+    return AREAS_MEMO.get("topics", (who.lang, who.local), key, now, build)
 
 
 def _jobs(now: float) -> Computed:
@@ -871,7 +871,7 @@ def answer(
     if page:
         computed["page"] = _page(sample, who, page, now, request, shown or None)
     revs = {name: item.rev for name, item in computed.items()}
-    base_rows = AREAS_MEMO.rows_at(who.lang, have["topics"]) if have.get("topics") else None
+    base_rows = AREAS_MEMO.rows_at((who.lang, who.local), have["topics"]) if have.get("topics") else None
     variant = {
         "schema": SCHEMA,
         "install": _install(),
@@ -984,7 +984,7 @@ def rows(request: Request, ids: list[str]) -> dict[str, Any]:
     template = TEMPLATES.env.get_template("_topic_row.html")
     with sample.seeded():
         present = [tid for tid in ids if tid in by_id]
-        for row in topic_rows({**sample.state, "topics": [by_id[tid] for tid in present]}):
+        for row in topic_rows({**sample.state, "topics": [by_id[tid] for tid in present]}, local=who.local):
             tid = str(row["id"])
             if size >= ROWS_BYTE_CAP:
                 deferred.append(tid)

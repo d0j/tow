@@ -60,6 +60,7 @@ from tow.messages_feed import MarkerRefused as MessageMarkerRefused
 from tow.messages_feed import feed as message_feed
 from tow.messages_feed import reconcile_update as reconcile_update_result
 from tow.messages_feed import render as render_message_feed
+from tow.messages_feed import scrub_display
 from tow.mirrors import mirror_observations
 from tow.mirrors import note_signed_in as _note_signed_in
 from tow.mirrors import prefer_host as _prefer_host
@@ -226,6 +227,7 @@ __all__ = [
     "save_config",
     "save_secrets",
     "save_state",
+    "scrub_display",
     "scrub_text",
     "secrets_from_bytes",
     "service_status",

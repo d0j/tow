@@ -795,6 +795,35 @@ def test_a_transaction_in_progress_is_503_and_its_recovery_runs_apart(monkeypatc
     assert _poll(client).status_code == 200
 
 
+RAW_ERROR = r"cannot write D:\TV\Show A\e01.mkv (see /home/owner/tow/state.json) via http://tracker.example/dl.php?uk=SECRET1&pk=SECRET2"
+
+
+def test_a_network_device_never_sees_a_rows_raw_error(monkeypatch, clock):
+    """Final browser QA 1.33.0 Q5: a Home row's error tooltip (also /topics/rows and the row's
+    panel) carried local paths and a link's secret query to network devices, while Recent
+    messages scrub them. A network device gets the same scrubbed words; this PC keeps them all."""
+    _seed(_topic("t1", last_error=RAW_ERROR, last_error_class="disk"), _topic("t2", "Show B"))
+    lan = _lan(monkeypatch)
+    local = TestClient(app, headers=ORIGIN)
+    secrets = ("SECRET1", "SECRET2", r"D:\TV", "/home/owner", "e01.mkv")
+
+    def row_of(html: str) -> str:  # Home's row t1 (the header's Needs attention is not the row's)
+        start = html.index('id="row-t1"')
+        return html[start : html.index("</details>", start)]
+
+    for address in ("/", "/topics/rows?ids=t1", "/topics/t1/edit-panel", "/topics/t1/row"):
+        page = lan.get(address).text
+        shown = row_of(page) if address == "/" else page
+        assert "tracker.example" in shown, address  # the link's host stays
+        assert not [secret for secret in secrets if secret in shown], address
+    assert r"D:\TV\Show A\e01.mkv" in row_of(local.get("/").text)
+    # The rows' digests follow what each one is shown: another for a network device.
+    remote_rows = _poll(lan).json()["areas"]["topics"]["rows"]
+    local_rows = _poll(local).json()["areas"]["topics"]["rows"]
+    assert remote_rows["t1"] != local_rows["t1"]
+    assert remote_rows["t2"] == local_rows["t2"]
+
+
 def test_settings_and_history_polls_never_wait_for_the_data_or_the_logs_lock(clock):
     """Final review 1.33.0 #8: the Settings inventory read the night copies' cleanup under the
     data lock (whose taking runs the recovery steps), and History's lines took the log's lock -
