@@ -936,9 +936,13 @@ def test_a_cyrillic_command_line_is_read_whole_on_windows(tmp_path, monkeypatch)
     seen: dict[str, Any] = {}
 
     def powershell(argv, **options):
+        # The probe writes "cmd:" and the line in ASCII, every other character, a quote and a
+        # backslash as \u escapes (Constrained Language Mode cannot switch the output to UTF-8),
+        # so the console's cp866 read as cp1251 changes nothing.
         seen.update(options, argv=list(argv))
-        utf8 = "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)" in argv[-1]
-        raw = (command + "\r\n").encode("utf-8" if utf8 else "cp866")
+        assert "'\\u{0:x4}' -f $n" in argv[-1]
+        escaped = "".join(f"\\u{ord(c):04x}" if ord(c) > 126 or c in '"\\' else c for c in command)
+        raw = ("cmd:" + escaped + "\r\n").encode("cp866")
         decoded = raw.decode(options.get("encoding") or "cp1251", options.get("errors") or "strict")
         return subprocess.CompletedProcess(argv, 0, decoded, "")
 

@@ -19,7 +19,7 @@ rem uv error and a stray app\.venv); TOW's own tow.exe says it itself (`tow stat
 set "TOW_CUT="
 if exist "%TOW_ROOT%\.update-switch.json" if /i "%~1"=="setup" set "TOW_CUT=1"
 if exist "%TOW_ROOT%\.update-switch.json" if not exist "%TOW_EXE%" set "TOW_CUT=1"
-if defined TOW_CUT "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$d = $env:TOW_ROOT; try { $j = Get-Content -LiteralPath (Join-Path $d '.update-switch.json') -Raw | ConvertFrom-Json; if ($j.phase -eq 'accepted' -or $j.restored -eq $true) { exit 0 } } catch {}; try { $f = [IO.File]::Open((Join-Path $d '.update.lock'), 'Open', 'ReadWrite', 'ReadWrite') } catch { exit 3 }; try { $f.Lock(0, 1) } catch { $f.Close(); exit 0 }; $f.Unlock(0, 1); $f.Close(); exit 3" >nul 2>&1 && set "TOW_CUT="
+if defined TOW_CUT "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$d = $env:TOW_ROOT; try { $j = Get-Content -LiteralPath (Join-Path $d '.update-switch.json') -Raw | ConvertFrom-Json; if ($j.phase -eq 'accepted' -or $j.restored -eq $true) { exit 0 } } catch {}; try { $null = Get-Content -LiteralPath (Join-Path $d '.update.lock') -Encoding Byte -TotalCount 1 -ErrorAction Stop } catch { if ($_.Exception.HResult -eq -2147024863) { exit 0 } }; exit 3" >nul 2>&1 && set "TOW_CUT="
 if defined TOW_CUT echo TOW cannot run: an update was cut off while it replaced the code in "%TOW_ROOT%". Run "Update TOW.cmd" there again: it puts the previous version back first.
 if defined TOW_CUT exit /b 3
 rem Without an environment uv runs TOW (below): uv's own temporary files stay in runtime\uv-tmp, as in

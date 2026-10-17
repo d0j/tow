@@ -151,7 +151,10 @@ class WindowsTask:
         script = (
             "$ErrorActionPreference = 'Stop'; "
             f"try {{ $xml = Export-ScheduledTask -TaskName '{quoted}' -TaskPath '\\' }} "
-            "catch { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'absent'; exit 0 }; "
+            # A missing task, as Export-ScheduledTask itself says it: in Constrained Language Mode its
+            # module may not load at all (ObjectNotFound too, measured): unknown, never "absent".
+            "catch { if ($_.CategoryInfo.Category -eq 'ObjectNotFound' -and "
+            "$_.FullyQualifiedErrorId -like '*,Export-ScheduledTask') { 'absent'; exit 0 }; "
             "[Console]::Error.WriteLine($_.Exception.Message); exit 1 }; "
             "'xml:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($xml))"
         )

@@ -51,9 +51,32 @@ def _run(args: list[str], timeout: float = 20) -> str:
 
 def _powershell(script: str, timeout: float = 20) -> str:
     """A PowerShell script's output, written as UTF-8: without it Windows PowerShell writes the
-    ANSI code page, and a Cyrillic folder in a command line came back as U+FFFD."""
-    utf8 = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+    ANSI code page, and a Cyrillic folder in a command line came back as U+FFFD. Constrained
+    Language Mode (an AppLocker or App Control policy) refuses to set it: the script then runs
+    on in the code page, so a probe that reads paths answers in ``_ASCII_JSON``."""
+    utf8 = "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }; "
     return _run([powershell_program(), "-NoProfile", "-NonInteractive", "-Command", utf8 + script], timeout=timeout)
+
+
+# A pipeline's value as JSON in ASCII, every other character a \u escape, with no .NET call: it
+# reads the same in any code page, also in Constrained Language Mode (measured there: setting
+# the UTF-8 output fails, and a Cyrillic folder in a command line came back as U+FFFD).
+_ASCII_JSON = (
+    "| ConvertTo-Json -Compress | ForEach-Object { -join ($_.ToCharArray() | ForEach-Object "
+    "{ if ([int]$_ -gt 126) { '\\u{0:x4}' -f [int]$_ } else { [string]$_ } }) }"
+)
+
+
+def _ascii_json(raw: str) -> Any:
+    """A probe's ``_ASCII_JSON`` answer; None when there is none, it is no JSON, or it is not
+    ASCII: letters some code page guessed at are never taken for a path (unknown, not another)."""
+    text = raw.strip()
+    if not text or not text.isascii():
+        return None
+    try:
+        return json.loads(text)
+    except ValueError:
+        return None
 
 
 def _missing(*_args: Any, **_kwargs: Any) -> Any:
@@ -260,14 +283,11 @@ def port_owner(port: int) -> dict[str, Any] | None:
             'if ($c) { $p = Get-CimInstance Win32_Process -Filter "ProcessId=$($c.OwningProcess)";',
             '$q = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)";',
             "@{pid=$p.ProcessId; cmd=$p.CommandLine; parent=$p.ParentProcessId; parent_cmd=$q.CommandLine}",
-            "| ConvertTo-Json -Compress }",
+            _ASCII_JSON,
+            "}",
         ]
     )
-    raw = _powershell(script).strip()
-    try:
-        value = json.loads(raw) if raw else None
-    except ValueError:
-        return None
+    value = _ascii_json(_powershell(script))
     return value if isinstance(value, dict) and value.get("pid") else None
 
 
@@ -378,13 +398,9 @@ def process_command(pid: int) -> str | None:
         return None
     script = (
         f'Get-CimInstance Win32_Process -Filter "ProcessId={pid}" -ErrorAction SilentlyContinue '
-        "| Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"
+        "| Select-Object ProcessId,CommandLine " + _ASCII_JSON
     )
-    raw = _powershell(script, timeout=5)
-    try:
-        info = json.loads(raw) if raw else None
-    except ValueError:
-        return None
+    info = _ascii_json(_powershell(script, timeout=5))
     if not isinstance(info, dict) or info.get("ProcessId") != pid:
         return None
     command = info.get("CommandLine")

@@ -313,7 +313,9 @@ def test_the_next_run_takes_over_a_server_left_by_a_killed_supervisor(run_env, t
 
 def test_run_refuses_when_another_server_holds_the_port(run_env, capsys):
     world = World(clock=Clock(), port_busy=True)
-    assert run_supervisor(world.deps()) == 3
+    deps = world.deps()
+    deps.port_owner = lambda _port: {"pid": 78, "cmd": "python -m http.server 8787", "parent": 1}
+    assert run_supervisor(deps) == 3
     assert "порт 8787 уже занят другой программой" in capsys.readouterr().out
     assert world.children == []
 
@@ -739,6 +741,27 @@ def test_another_program_or_tow_folder_on_the_port_is_not_this_tow_running(monke
     out = capsys.readouterr().out
     assert "8787" in out
     assert "другой папкой TOW" in out  # the terminal language (the tests run in Russian)
+
+
+def test_a_port_owner_that_cannot_be_read_is_said_as_unknown_by_setup(monkeypatch, capsys):
+    # Measured in PowerShell's Constrained Language Mode: no owner could be read, and `tow setup`
+    # said "another program or another TOW folder".
+    from tow import i18n, platform
+    from tow.supervisor import _os
+
+    class Unreadable:
+        def port_owner(self, port):
+            return None
+
+    monkeypatch.setattr(layout, "running", lambda: None)
+    monkeypatch.setattr(_os, "port_open", lambda port: True)
+    monkeypatch.setattr("tow.watchdog.healthy", lambda port, install=None: False)
+    with platform.use(Unreadable()):
+        assert layout.port_holder(8787) == "unknown"
+        assert layout.busy() is False  # as before: only this install's own answer makes it busy
+        assert layout.setup_check() == 0
+    out = capsys.readouterr().out
+    assert i18n.t("cli.setup.port_unknown", i18n.terminal_language(), port=8787) in out
 
 
 def test_a_hung_web_server_of_this_install_still_counts_as_running(monkeypatch):

@@ -240,7 +240,8 @@ def configured_port() -> int:
 
 def port_holder(port: int) -> str | None:
     """Who holds ``port``: None (nobody), ``ours`` (a web server of this install, e.g. one a
-    killed supervisor left behind) or ``other`` (another program, or another TOW folder)."""
+    killed supervisor left behind), ``other`` (another program, or another TOW folder) or
+    ``unknown`` (a program whose owner could not be read)."""
     from tow.supervisor._os import port_open
     from tow.watchdog import healthy
 
@@ -250,8 +251,11 @@ def port_holder(port: int) -> str | None:
         return "ours"
     from tow import platform
 
-    # Not answering as this install: a hung server of it is still known by its command line.
-    owner = platform.current().port_owner(port) or {}
+    # Not answering as this install: a hung server of it is still known by its command line. An
+    # owner that cannot be read (PowerShell's Constrained Language Mode, rights) is "unknown".
+    owner = platform.current().port_owner(port)
+    if owner is None:
+        return "unknown"
     return "ours" if own_server_command(str(owner.get("cmd") or "")) else "other"
 
 
@@ -281,12 +285,13 @@ def setup_check() -> int:
     holder = port_holder(port)
     if holder == "ours":
         return 4
-    if holder == "other":
+    if holder in ("other", "unknown"):
         from tow import i18n
 
         with suppress(Exception):  # a broken config: the default language
             i18n.use(i18n.terminal_language())
-        print(i18n.t("cli.setup.port_other", port=port), flush=True)
+        key = "cli.setup.port_unknown" if holder == "unknown" else "cli.setup.port_other"
+        print(i18n.t(key, port=port), flush=True)
     return 0
 
 

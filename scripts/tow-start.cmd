@@ -9,10 +9,11 @@ call "%%~dp0tow-env.cmd"
 rem An update cut off while it replaced the code leaves its record: app\ may hold half of the new code.
 rem The rule of `tow run` (tow.supervisor.layout.interrupted_update): not when the record says the
 rem switch is finished (accepted, or the previous code and data restored), nor while an update holds
-rem .update.lock (it starts TOW itself). PowerShell reads both: the code in app\ may not run yet.
+rem .update.lock (it starts TOW itself). PowerShell reads both: the code in app\ may not run yet. With
+rem cmdlets only (Constrained Language Mode too): byte 0 of the lock cannot be read while it is held.
 set "TOW_CUT="
 if exist "%TOW_ROOT%\.update-switch.json" set "TOW_CUT=1"
-if defined TOW_CUT "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$d = $env:TOW_ROOT; try { $j = Get-Content -LiteralPath (Join-Path $d '.update-switch.json') -Raw | ConvertFrom-Json; if ($j.phase -eq 'accepted' -or $j.restored -eq $true) { exit 0 } } catch {}; try { $f = [IO.File]::Open((Join-Path $d '.update.lock'), 'Open', 'ReadWrite', 'ReadWrite') } catch { exit 3 }; try { $f.Lock(0, 1) } catch { $f.Close(); exit 0 }; $f.Unlock(0, 1); $f.Close(); exit 3" >nul 2>&1 && set "TOW_CUT="
+if defined TOW_CUT "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$d = $env:TOW_ROOT; try { $j = Get-Content -LiteralPath (Join-Path $d '.update-switch.json') -Raw | ConvertFrom-Json; if ($j.phase -eq 'accepted' -or $j.restored -eq $true) { exit 0 } } catch {}; try { $null = Get-Content -LiteralPath (Join-Path $d '.update.lock') -Encoding Byte -TotalCount 1 -ErrorAction Stop } catch { if ($_.Exception.HResult -eq -2147024863) { exit 0 } }; exit 3" >nul 2>&1 && set "TOW_CUT="
 if defined TOW_CUT echo TOW was not started: an update was cut off while it replaced the code in "%TOW_ROOT%". Run "Update TOW.cmd" there again: it puts the previous version back first.
 if defined TOW_CUT exit /b 3
 rem docs/PORTABLE.md 3: Windows loads no program or library (.exe, .dll, .pyd) whose full path reaches

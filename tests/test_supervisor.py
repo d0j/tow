@@ -314,9 +314,21 @@ def test_another_tow_on_the_port_is_named_as_such(tmp_path):
     from tow.i18n import t
 
     _world, sup = make(tmp_path, port_busy=True)
+    sup.deps.port_owner = lambda _port: {"pid": 78, "cmd": "python -m http.server 8787", "parent": 1}
     assert sup.preflight() == t("supervisor.port_busy", port=sup.port)
     sup.deps.tow_server = lambda _port: True
     assert sup.preflight() == t("supervisor.port_busy_tow", port=sup.port)
+
+
+def test_a_port_owner_that_cannot_be_read_is_not_called_another_program(tmp_path):
+    # Measured in PowerShell's Constrained Language Mode: the port's owner could not be read, and
+    # the refusal still said "another program" - also for a server of this install that hangs.
+    from tow.i18n import t
+
+    _world, sup = make(tmp_path, port_busy=True)
+    sup.deps.port_owner = lambda _port: None
+    sup.deps.stop_pid = lambda pid: pytest.fail(f"stopped {pid}")
+    assert sup.preflight() == t("supervisor.port_busy_unknown", port=sup.port)
 
 
 def test_this_installs_own_unrecorded_server_is_not_another_tow(tmp_path):
@@ -389,6 +401,7 @@ def test_an_orphan_that_does_not_let_the_port_go_is_a_refusal(tmp_path):
 
 def test_the_port_held_by_another_tow_is_a_clear_refusal(tmp_path):
     _world, sup = make(tmp_path, port_busy=True)
+    sup.deps.port_owner = lambda _port: {"pid": 78, "cmd": "python -m http.server 8787", "parent": 1}
     message = sup.preflight()
     assert message is not None
     assert "8787" in message

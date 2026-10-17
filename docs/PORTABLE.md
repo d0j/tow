@@ -837,16 +837,33 @@ environment and Python 3.11 syntax.
   protected folders: Windows, Program Files, ProgramData, AppData (from the environment, plus
   `C:\Windows`, `C:\Program Files…`, `C:\ProgramData` defaults so a Windows client is protected
   also when TOW runs elsewhere).
-  - **PowerShell Constrained Language Mode** (an AppLocker or App Control for Business/WDAC policy): PowerShell
-    then refuses .NET calls outside its core types. Setting `[Console]::OutputEncoding` fails, so the port's
-    owner and a process's command line come back in the ANSI code page, where a folder with other letters
-    (Cyrillic on an English Windows) no longer matches; `[Convert]::ToBase64String` fails, so the autostart task
-    cannot be read back. TOW does not try to get around the restriction. Such a probe answers "unknown", and
-    unknown is never taken as yes: a TOW web server left on the port is not recognised as this install's and is
-    not stopped (`tow run` says the port is in use: stop it yourself), a process whose command line cannot be
-    read is never stopped as an update worker, and Settings → TOW service and Diagnostics say that the autostart
-    state could not be read (turning autostart on is not confirmed either). `tow-uv-config.cmd` is written to need
-    cmdlets only.
+  - **PowerShell Constrained Language Mode** (an AppLocker or App Control for Business/WDAC policy). Measured
+    in 1.33.1 on Windows PowerShell 5.1.26100 with each probe's own text, in a session switched to the mode
+    (`$ExecutionContext.SessionState.LanguageMode`; the `__PSLockdownPolicy` variable of a process is not
+    honoured there), and kept by `tests/test_constrained_language.py`. TOW does not try to get around the
+    restriction; a probe that cannot answer says "unknown", never yes and never another program:
+    - Setting `[Console]::OutputEncoding` fails and the script runs on in the code page: before 1.33.1 a
+      Cyrillic folder in a command line came back as U+FFFD. The port's owner, a process's command line and the
+      updater's command line now come as ASCII (every other character a `\u` escape, no .NET call) and read
+      whole in both modes; an answer that is not ASCII, or has an error with it, is unknown.
+    - Windows' CDXML modules (`NetTCPIP` for `Get-NetTCPConnection`, `ScheduledTasks` for
+      `Export-ScheduledTask`) did not load in that session ("a different language mode than the module
+      manifest"); a policy that allows Windows' own signed modules may load them. Without them the port's owner
+      is unknown: `tow run` says the port "is already in use by a program TOW could not identify" (`tow setup`
+      likewise) and stops nothing there. The autostart task read back as absent before 1.33.1 (a command that
+      cannot load is "ObjectNotFound" too); now only `Export-ScheduledTask`'s own "not found" is absent and
+      anything else an error: Diagnostics and Settings say the state could not be read, and the updater starts
+      TOW itself, not through the task. With the module loaded `[Convert]::ToBase64String` fails, with the same
+      result.
+    - The start files' check of a cut-off update opened `.update.lock` with `[IO.File]::Open`, which fails
+      there: a running update read as cut off and TOW was not started. They now read byte 0 of the lock with
+      `Get-Content` (an update holds it: `ERROR_LOCK_VIOLATION`), the same in both modes.
+    - The update's local broker (only for an update process in a job that does not let it go) sets
+      `[Console]::InputEncoding` and fails: the web update says it could not be started safely and keeps TOW
+      running; an update from a terminal runs in its window and says so. `deploy.ps1` cannot switch its output
+      to UTF-8 (caught: letters other than English may be garbled when its output goes to a file); its folder
+      and version checks work. `Unblock-File` of a downloaded zip's files and `tow-uv-config.cmd` use cmdlets
+      only and work.
 - **posix.py** (`PosixBackend("linux" | "macos")`) — boot time from `/proc/uptime` or
   `sysctl -n kern.boottime`; time asleep from two clocks (`CLOCK_BOOTTIME − CLOCK_MONOTONIC` on
   Linux, `CLOCK_MONOTONIC − CLOCK_UPTIME_RAW` on macOS); sign-in time `None`; shutdown records =

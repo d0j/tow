@@ -231,6 +231,10 @@ class Supervisor:
             key = "supervisor.port_busy_own"
         elif self.deps.tow_server(self.port):
             key = "supervisor.port_busy_tow"
+        elif self.deps.port_owner(self.port) is None:
+            # Nobody could be read on a busy port (rights, PowerShell's Constrained Language
+            # Mode, no lsof/ss): unknown, which may be a hung server of this TOW - not "another".
+            key = "supervisor.port_busy_unknown"
         else:
             key = "supervisor.port_busy"
         return t(key, port=self.port)

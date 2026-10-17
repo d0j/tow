@@ -877,16 +877,29 @@ class System:
 
         PowerShell writes the console's OEM code page unless told otherwise (cp866 on a Russian
         Windows), so C:\\Users\\Иван\\TOW came back garbled and TOW's own server never matched.
+        Constrained Language Mode refuses to change that (measured), so the line comes as ASCII:
+        every other character, a quote and a backslash as a \\u escape, with no .NET call; an
+        answer that is not ASCII is a code page's guess and read as unknown ("").
         """
         if self.windows:
             script = (
                 "try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }; "
-                f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine"
+                f"$c = (Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine; "
+                "if ($c) { 'cmd:' + -join ($c.ToCharArray() | ForEach-Object { $n = [int]$_; "
+                "if ($n -gt 126 -or $n -lt 32 -or $n -eq 34 -or $n -eq 92) { '\\u{0:x4}' -f $n } "
+                "else { [string]$_ } }) }"
             )
             code, output = self._run(
                 [windows_program(*POWERSHELL), "-NoProfile", "-NonInteractive", "-Command", script], timeout=60
             )
-            return output.strip() if code == 0 else ""
+            text = output.strip()
+            if code != 0 or not text.startswith("cmd:") or not text.isascii() or any(c in text for c in '"\r\n'):
+                return ""  # nothing, an error written with it, or a code page's guess: unknown
+            try:
+                line = json.loads(f'"{text[4:]}"')
+            except ValueError:
+                return ""
+            return line if isinstance(line, str) else ""
         # -ww: the whole command, never cut at the terminal's width
         code, output = self._run(["ps", "-ww", "-o", "command=", "-p", str(int(pid))], timeout=30)
         if code == 0 and output.strip():
@@ -1198,7 +1211,10 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
         script = (
             "$ErrorActionPreference = 'Stop'; "
             f"try {{ $xml = Export-ScheduledTask -TaskName '{quoted}' -TaskPath '\\' }} "
-            "catch { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'absent'; exit 0 }; "
+            # A missing task, as Export-ScheduledTask itself says it: in Constrained Language Mode its
+            # module may not load at all (ObjectNotFound too, measured): unknown, never "absent".
+            "catch { if ($_.CategoryInfo.Category -eq 'ObjectNotFound' -and "
+            "$_.FullyQualifiedErrorId -like '*,Export-ScheduledTask') { 'absent'; exit 0 }; "
             "[Console]::Error.WriteLine($_.Exception.Message); exit 1 }; "
             "'xml:' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($xml))"
         )

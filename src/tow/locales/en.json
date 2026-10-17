@@ -630,6 +630,7 @@
     },
     "setup": {
       "use_launcher": "`setup` rebuilds TOW's environment, so it runs from the launcher, not from TOW itself. Stop TOW, then run in the install folder: {launcher} setup",
+      "port_unknown": "TOW setup: port {port} is used by a program TOW could not identify. The setup goes on; TOW starts once the port is free (or set another port in config.yaml).",
       "port_other": "TOW setup: port {port} is used by another program or another TOW folder. The setup goes on; TOW starts once the port is free (or set another port in config.yaml)."
     },
     "status": {
@@ -2243,6 +2244,7 @@
   "supervisor": {
     "port_busy": "TOW is not started: port {port} is already in use by another program. Stop that program or set another port in config.yaml.",
     "port_busy_tow": "TOW is not started: port {port} is already in use by another TOW (another TOW folder, or a copy of this one). Stop that TOW or set another port in config.yaml.",
+    "port_busy_unknown": "TOW is not started: port {port} is already in use by a program TOW could not identify. Stop that program (or a TOW of this folder that no longer answers) or set another port in config.yaml.",
     "port_busy_own": "TOW is not started: port {port} is already in use by a web server of this TOW that tow run did not start (tow serve started by hand). Stop that web server, then start TOW again.",
     "already_running": "TOW is already running (process {pid})."
   },
