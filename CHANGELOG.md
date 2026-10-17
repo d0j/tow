@@ -65,6 +65,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   more: not on **Home**'s rows and their tooltips, a topic's panel, **Needs attention**, History, the log,
   Recent messages or Settings. New errors are saved without them, and those saved before are cleaned when shown;
   the rest of the link and your folders stay visible on this computer.
+- With `allow_private_tracker_hosts` on, a proxy set for the whole system (`HTTP_PROXY`, `HTTPS_PROXY`) no
+  longer carries the requests to a site on this computer or the home network, its sign-in and cookies included,
+  when `NO_PROXY` does not name it: they go direct. Public sites still use the proxy.
 
 ### Added
 

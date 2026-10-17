@@ -593,3 +593,42 @@ def test_every_socket_operation_gets_what_is_left_of_the_request_deadline(monkey
     stream = backend.connect_tcp("mirror.example", 443, timeout=30)
     stream.read(1024, timeout=None)
     assert wrapped.seen == [("connect_tcp", 30), ("read", None)]
+
+
+@pytest.mark.parametrize(
+    ("host", "local"),
+    [
+        ("127.0.0.1", True),
+        ("[::1]", True),
+        ("localhost", True),
+        ("192.168.1.20", True),
+        ("10.0.0.2", True),
+        ("169.254.10.1", True),
+        ("tracker.lan", True),
+        ("nas.local", True),
+        ("nas", True),
+        ("tracker.example", False),
+        ("93.184.216.34", False),
+        ("rutracker.org", False),
+    ],
+)
+def test_a_local_host_is_told_from_a_public_one(host, local):
+    assert thttp.is_local_host(host) is local
+
+
+def test_a_proxy_from_the_environment_never_carries_a_local_tracker(monkeypatch):
+    """With allow_private_tracker_hosts a site may be on this computer or the home network; a
+    system HTTP(S)_PROXY carried its requests - sign-in and cookies too - unless NO_PROXY named it
+    (1.33.1 QA-14). A local host now goes direct; a public one still through the proxy."""
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.invalid:3128")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    with thttp.client(public_only=False) as c:
+        for url in ("http://127.0.0.1:9000/t", "https://192.168.1.20/forum", "http://tracker.lan/x"):
+            transport = c._transport_for_url(httpx.URL(url))
+            assert transport.route(httpx.URL(url)) is c._transport, url
+        public = httpx.URL("https://tracker.example/forum")
+        assert c._transport_for_url(public).route(public) is not c._transport
+    with thttp.client(public_only=True) as c:  # the public-only client ignores the environment
+        assert not [mount for mount in c._mounts.values() if mount is not None]
