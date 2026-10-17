@@ -12,6 +12,12 @@
   <div class="card stat"><div class="k">{{ t('doctor.notifications') }}</div><div class="v">{{ t('doctor.connected') if report.notify_set else t('doctor.not_connected') }}</div></div>
   <div class="card stat"><div class="k">{{ t('doctor.python') }}</div><div class="v">{{ report.python }}</div></div>
 </div>
+{% if report.data_network %}
+<div class="card">
+  <h2 class="section-title">{{ t('doctor.data_title') }}</h2>
+  <p><span class="pill warn pill-wrap">{{ t('doctor_report.data_network', value=report.data_network) }}</span></p>
+</div>
+{% endif %}
 {% if report.qbit is not none %}
 <div class="card">
   <h2 class="section-title">{{ t('doctor.client') }}</h2>

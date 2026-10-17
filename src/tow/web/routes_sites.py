@@ -356,6 +356,9 @@ def _scrub_doctor(view: dict[str, Any]) -> None:
     autostart = view.get("autostart")
     if isinstance(autostart, dict) and autostart.get("where"):
         view["autostart"] = {**autostart, "where": services.scrub_display(str(autostart["where"]), limit=8192)}
+    if view.get("data_network"):
+        # A folder, whatever it holds: "…" as in Recent messages (a share's name is a host too).
+        view["data_network"] = services.without_paths({"folder": view["data_network"]})["folder"]
 
 
 @router.get("/doctor", response_class=HTMLResponse)

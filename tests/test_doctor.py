@@ -486,3 +486,27 @@ def test_a_data_folder_on_a_network_file_system_is_warned_about(monkeypatch, vol
     text = doctor.doctor_text({"ok": True, "data_network": found})
     note = t("doctor_report.data_network", owner_language(), value=str(data_dir(create=False)))
     assert (note in text) is warned
+
+
+@pytest.mark.parametrize("folder", ["", r"\\nas\share\TOW\data"])
+def test_diagnostics_shows_the_network_data_warning_without_its_folder_to_the_network(monkeypatch, folder):
+    # Before: only `tow doctor` said it; the Diagnostics page left it out.
+    from fastapi.testclient import TestClient
+
+    from tow import doctor
+    from tow.auth import issue_session
+    from tow.config import load_config, save_config
+    from tow.i18n import t
+    from tow.web import app
+
+    monkeypatch.setattr(doctor, "_network_data", lambda: folder)
+    here = TestClient(app).get("/doctor", headers={"Accept-Language": "ru"}).text
+    assert (t("doctor_report.data_network", "ru", value=folder) in here) is bool(folder)
+    monkeypatch.setenv("TOW_LAN_AUTH_TOKEN", "t" * 32)
+    cfg = load_config()
+    cfg["allow_lan"] = True
+    save_config(cfg)
+    lan = TestClient(app, client=("192.168.1.7", 50000), cookies={"tow_session": issue_session("t" * 32)})
+    page = lan.get("/doctor", headers={"Accept-Language": "ru"}).text
+    assert (t("doctor_report.data_network", "ru", value="…") in page) is bool(folder)
+    assert "nas" not in page
