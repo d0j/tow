@@ -18,6 +18,11 @@ MAX_PATH_DEPTH = 64
 MAX_COMPONENT_BYTES = 255
 MAX_PATH_CHARS = 4096
 
+# The device names whose client spelling ``windows_path_key`` folds: kept as is or, for a bare
+# name, with "_" appended. Only these: no client source or observation at hand shows qBittorrent or Transmission
+# renaming COM0, LPT0, superscript digits, CONIN$ or CONOUT$ (folders._DEVICE_NAME refuses them
+# as save folders, which is a folder rule, not a client rename). Add a name only with a recorded
+# client spelling and a test of it.
 _WINDOWS_DEVICE = re.compile(r"^(?:con|prn|aux|nul|clock\$|com[1-9]|lpt[1-9])(?:\..*)?$", re.IGNORECASE)
 _WINDOWS_FORBIDDEN = str.maketrans(dict.fromkeys('<>:"|?*', "_"))
 _LONE_SURROGATE = re.compile("[\ud800-\udfff]")

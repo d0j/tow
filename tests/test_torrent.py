@@ -253,6 +253,60 @@ def test_windows_colliding_paths_fail_closed():
         parse_torrent_metadata(blob)
 
 
+@pytest.mark.parametrize(("name", "key"), [("CON", "con_"), ("Clock$", "clock$_"), ("LPT9", "lpt9_")])
+def test_bare_device_names_key_both_the_kept_and_the_suffixed_spelling(name, key):
+    # A bare device name matches whether the client keeps it or appends "_".
+    assert windows_path_key(name) == key
+    assert windows_path_key(name + "_") == key
+
+
+@pytest.mark.parametrize(
+    ("name", "key"), [("aux.txt", "aux.txt_"), ("com1.log", "com1.log_"), ("nul.tar.gz", "nul.tar.gz_")]
+)
+def test_device_names_with_an_extension_key_only_the_kept_spelling(name, key):
+    # With an extension the suffixed text is itself a device name ("aux.txt_"): only the client
+    # keeping the name matches. How a client spells it is not established, so neither is changed.
+    assert windows_path_key(name) == key
+    assert windows_path_key(name + "_") == key + "_"
+
+
+@pytest.mark.parametrize("name", ["COM0", "LPT0", "COM¹", "lpt²", "CONIN$", "CONOUT$", "CON .txt", "console"])
+def test_names_without_client_evidence_keep_their_exact_spelling(name):
+    # No client source or observation shows qBittorrent or Transmission renaming these (the folder
+    # policy refuses some of them as save folders; that is not a client rename): the key is the
+    # name itself. Extending the device set needs recorded client spellings first.
+    assert windows_path_key(name) == name.casefold()
+    assert windows_path_key(name) != windows_path_key(name + "_")
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        (b"CON", b"CON_"),
+        (b"Aux", b"aux_"),
+        (b"Ep?.mkv", b"Ep_.mkv"),
+        (b"Ep 1. ", b"Ep 1"),
+        ("é.mkv".encode(), "é.mkv".encode()),
+    ],
+)
+def test_names_that_normalize_alike_collide(first, second):
+    blob = make_torrent(v1_info(files=[{b"length": 1, b"path": [first]}, {b"length": 1, b"path": [second]}]))
+    with pytest.raises(ValueError, match="duplicate"):
+        parse_torrent_metadata(blob)
+
+
+def test_device_folders_collide_with_their_suffixed_spelling():
+    files = [{b"length": 1, b"path": [b"aux", b"a.mkv"]}, {b"length": 1, b"path": [b"AUX_", b"a.mkv"]}]
+    with pytest.raises(ValueError, match="duplicate"):
+        parse_torrent_metadata(make_torrent(v1_info(files=files)))
+
+
+def test_names_without_client_evidence_do_not_collide_with_a_suffix():
+    files = [{b"length": 1, b"path": [b"COM0"]}, {b"length": 1, b"path": [b"COM0_"]}]
+    metadata = parse_torrent_metadata(make_torrent(v1_info(files=files)))
+    assert [row.path for row in metadata.files] == ["COM0", "COM0_"]
+
+
 def test_policy_violation_is_still_a_torrent_not_a_login_page():
     blob = make_torrent(v1_info(files=[{b"length": 1, b"path": [b"..", b"escape.mkv"]}]))
     assert looks_like_torrent(blob)
