@@ -418,6 +418,8 @@
     requests = newController();
     next = null;
     soon = null;
+    blockedUntil = 0;
+    window.clearTimeout(retryTimer);
     saying.forEach((timer) => window.clearTimeout(timer));
     saying.clear();
     ["announce", "announce-alert"].forEach((name) => {
@@ -718,6 +720,21 @@
     render();
     return true;
   };
+  // Too many requests (429): nothing is asked before its Retry-After (5 s without one); then the page
+  // asks for the list once by itself. Until a list is taken refresh() answers false, so sync.js keeps
+  // the messages area unapplied and offers it again.
+  let blockedUntil = 0;
+  let retryTimer = 0;
+  const retryAfterMs = (response) => Math.max(1, Number(response.headers?.get?.("Retry-After")) || 5) * 1000;
+  const limited = (response) => {
+    const wait = retryAfterMs(response);
+    blockedUntil = Date.now() + wait;
+    window.clearTimeout(retryTimer);
+    retryTimer = window.setTimeout(() => {
+      retryTimer = 0;
+      refresh();
+    }, wait);
+  };
   const ask = () => {
     const mine = session;
     const headers = { Accept: "application/json" };
@@ -726,6 +743,10 @@
       .then(async (response) => {
         if (mine !== session) return false;
         if (response.status === 304) return shared.loaded;
+        if (response.status === 429) {
+          limited(response);
+          return false;
+        }
         if (response.status === 401) {
           shared = emptyFeed(); // signed out: nothing of the list stays on the page
           render();
@@ -755,7 +776,7 @@
   // panel opening while the tab is shown) are one request.
   let soon = null;
   const refresh = () => {
-    if (typeof fetch !== "function") return Promise.resolve(false);
+    if (typeof fetch !== "function" || Date.now() < blockedUntil) return Promise.resolve(false);
     if (!soon) {
       const mine = session;
       soon = Promise.resolve().then(() => {
@@ -767,7 +788,8 @@
   };
   const failed = (text) => center.show({ kind: "err", text: text || t("js.messages.not_saved") });
   // Read or clear up to the newest entry this page shows: an entry that arrived since stays.
-  const mark = (path) => {
+  // A read or clear refused for too many requests (429) is sent once more after its Retry-After.
+  const mark = (path, again = false) => {
     if (typeof fetch !== "function" || !shared.cursor) return Promise.resolve();
     const mine = session;
     const body = new URLSearchParams({ cursor: shared.cursor });
@@ -783,6 +805,10 @@
         if (mine !== session) return; // signed out while the body was read
         if (response.ok) {
           accept(data);
+          return;
+        }
+        if (response.status === 429 && !again) {
+          window.setTimeout(() => { if (mine === session) mark(path, true); }, retryAfterMs(response));
           return;
         }
         if (response.status === 409) {
