@@ -622,6 +622,47 @@ def test_a_check_interval_changed_on_both_sides_is_refused_with_the_draft_kept(s
     assert load_config()["interval_sec"] == 5400
 
 
+def test_a_resolved_interval_conflict_keeps_another_devices_undo_time(settings_two):
+    """Final review 1.33.0 #1: only the interval conflicts; the recovery form brought back B's
+    whole old draft, so choosing "mine" for the interval also put the undo time back to 1."""
+    a, b = settings_two
+    b_form = settings_form(b, "/settings/interval")
+    a_form = settings_form(a, "/settings/interval")
+    post(a, "/settings/interval", {**a_form, "interval_min": "90", "flash_ttl_min": "2"})
+    assert (load_config()["interval_sec"], load_config()["flash_ttl_sec"]) == (5400, 120)
+    location = post(b, "/settings/interval", {**b_form, "interval_min": "120"}).headers["location"]
+    assert "conflict=" in location
+    again = form_of(b.get(location).text, "/settings/interval")
+    assert (again["interval_min"], again["flash_ttl_min"]) == ("120", "2")  # untouched: saved now
+    response = post(b, "/settings/interval", {**again, "resolve_interval": "mine"})
+    assert "conflict=" not in response.headers["location"]
+    assert (load_config()["interval_sec"], load_config()["flash_ttl_sec"]) == (7200, 120)
+
+
+def test_a_topic_recovery_form_shows_untouched_fields_as_saved_now(two):
+    """The same rule on every form: a recovery form keeps the owner's draft only for what they
+    changed or what conflicts."""
+    a, b = two
+    b_form = panel(b)
+    save(a, panel(a) | {"title": "Name from A", "check_interval_min": "20"})
+    location = save(b, {**b_form, "title": "Name from B"}).headers["location"]
+    again = form_of(b.get(location).text, "ed-t1")
+    assert (again["title"], again["check_interval_min"]) == ("Name from B", "20")
+    save(b, {**again, "resolve_title": "mine"})
+    assert (topic()["title"], topic()["check_interval_min"]) == ("Name from B", 20)
+
+
+def test_a_site_recovery_form_shows_untouched_fields_as_saved_now(sites):
+    a, b = sites
+    b_card = card(b)
+    save_card(a, {**card(a), "login_path": "/login-a.php", "topic_path": "/a/{id}"})
+    location = save_card(b, {**b_card, "login_path": "/login-b.php"}).headers["location"]
+    again = form_of(b.get(location).text, "ed-site-rutor")
+    assert (again["login_path"], again["topic_path"]) == ("/login-b.php", "/a/{id}")
+    save_card(b, {**again, "resolve_login_path": "mine"})
+    assert (site()["login_path"], site()["topic_path"]) == ("/login-b.php", "/a/{id}")
+
+
 def test_the_language_chosen_on_both_sides_is_a_conflict(settings_two):
     a, b = settings_two
     b_form = settings_form(b, "/settings/language")
