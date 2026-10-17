@@ -613,6 +613,49 @@ def test_the_newer_of_the_two_updates_comes_first(install, monkeypatch):
     assert text.index("terminal steps 2") < text.index("web steps")
 
 
+def test_a_network_device_reads_the_update_logs_without_folders_outside_the_install(install, monkeypatch):
+    # 1.33.1 review: the logs kept every path outside the install (an external --source archive
+    # names the account's folders) and /updates/log gave the same text to every signed-in device.
+    # A network device now gets them without such paths; this computer keeps the full diagnostics.
+    from helpers import open_network
+
+    root = install[0]
+    outside = ["D:\\Users\\owner\\Downloads\\tow-1.33.1.tar.gz", "/home/owner/Downloads/SHA256SUMS"]
+    lines = [
+        f"backing up {root}\\data",
+        f"the source archive {outside[0]} cannot be opened",
+        f"checked against {outside[1]}: no match",
+        "fetching https://example.invalid/a?token=synthetic-secret",
+        "rolled back",
+    ]
+    _terminal_run(root, "20261017-101500-abcdef12", "\n".join(lines) + "\n", {"code": 1})
+    job = web_update.start("1.22.21")
+    web_log = f"unpacking {outside[0]}\nstarting <TOW>/app/scripts/tow\n"
+    (root / "runtime" / "web-update" / job["id"] / "update.log").write_text(web_log, encoding="utf-8")
+
+    local = _log_page()
+    assert all(path in local for path in outside)  # this computer: the whole diagnostics
+    assert "backing up <TOW>\\data" in local
+
+    open_network(monkeypatch, token="t" * 32)
+    lan = TestClient(app, client=("192.168.1.7", 50000), base_url="http://192.168.1.2:8787")
+    signed = lan.post("/login", data={"password": "t" * 32}, headers={"Origin": "http://192.168.1.2:8787"})
+    assert signed.status_code in (200, 303)
+    answer = lan.get("/updates/log", headers={"Accept-Language": "ru"})
+    assert answer.status_code == 200
+    network = answer.json()["text"]
+    for path in outside:
+        assert path not in network
+    assert "Downloads" not in network
+    assert "owner" not in network
+    assert "synthetic-secret" not in network
+    assert str(root) not in network
+    assert "backing up <TOW>\\data" in network  # inside the install: said as <TOW>, kept
+    assert "starting <TOW>/app/scripts/tow" in network
+    assert "the source archive … cannot be opened" in network  # the sentence stays, line by line
+    assert len(network.splitlines()) == len(local.splitlines())
+
+
 def test_without_a_terminal_update_the_log_is_as_before(install, monkeypatch):
     job = web_update.start("1.22.21")
     (install[0] / "runtime" / "web-update" / job["id"] / "update.log").write_bytes(b"web steps\n")

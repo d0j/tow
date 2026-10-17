@@ -92,8 +92,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Closing the window of an update ("Update TOW.cmd", `update-tow`, `deploy.ps1`) no longer stops the update
   halfway: it runs in its own process, which stops TOW, switches the code, starts TOW again or rolls back by
   itself; the window only shows its progress. Settings → **Update log** shows the latest such update too, with
-  when it started and how it ended. A `--source`, `--sums` or `--uv` path given relative to the folder you run the
-  update from still means the file there.
+  when it started and how it ended (a device on the network sees both logs without folders outside the TOW
+  folder, such as where a downloaded archive lies). A `--source`, `--sums` or `--uv` path given relative to the
+  folder you run the update from still means the file there.
 - TOW's own uv no longer reads the account's or the computer's `uv.toml`: an index, a mirror, a cache or a
   Python preference set there for other projects could break TOW's setup and updates. An install now has its own
   `runtime/uv.toml`; settings of yours (`native-tls`, an index) go below its marked line and are kept.
