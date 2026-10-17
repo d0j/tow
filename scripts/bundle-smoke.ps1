@@ -128,9 +128,15 @@ try {
     $config = Join-Path $root 'config.yaml'
     $text = (Get-Content -LiteralPath $config -Raw) -replace '(?m)^port:.*$', "port: $Port"
     [IO.File]::WriteAllText($config, $text, [Text.UTF8Encoding]::new($false))
-    $limit = [int][regex]::Match((Get-Content -LiteralPath (Join-Path $root 'app\scripts\tow-start.cmd') -Raw), 'TOW_ROOT:~(\d+),1').Groups[1].Value
+    $startText = Get-Content -LiteralPath (Join-Path $root 'app\scripts\tow-start.cmd') -Raw
+    $limit = [int][regex]::Match($startText, 'TOW_ROOT:~(\d+),1').Groups[1].Value
     if (-not $limit) { throw 'bundle-smoke: no folder limit in app\scripts\tow-start.cmd' }
-    Step "the install folder has $($root.Length) characters; the limit is $limit"
+    # Without Windows long paths a longer folder than this gets the start file's warning (docs/PORTABLE.md 3).
+    $warnAt = [int][regex]::Match($startText, 'TOW_ROOT:~(\d+),1%"=="" set "TOW_LONG=1"').Groups[1].Value
+    if (-not $warnAt) { throw 'bundle-smoke: no long-path warning length in app\scripts\tow-start.cmd' }
+    $longPathsOn = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -ErrorAction SilentlyContinue).LongPathsEnabled -eq 1
+    $expectWarning = (-not $longPathsOn) -and $root.Length -gt $warnAt
+    Step "the install folder has $($root.Length) characters; the limit is $limit (without long paths $warnAt; long paths on: $longPathsOn)"
     New-Item -ItemType Directory -Path $sentinel | Out-Null
     $env:TEMP = $sentinel; $env:TMP = $sentinel
 
@@ -161,6 +167,9 @@ try {
     $code = $LASTEXITCODE
     $watch.Stop()
     Write-Host $output
+    if (($output -match 'Windows long paths are off') -ne $expectWarning) {
+        throw "bundle-smoke: the long-path warning (expected: $expectWarning) was wrong for a $($root.Length)-character folder"
+    }
     if ($code -ne 0) { throw "Start TOW.cmd exited with $code" }
     if ($output -match 'internet') { throw 'the first start needed the internet' }
     Step ("first start took {0:n0} s" -f $watch.Elapsed.TotalSeconds)

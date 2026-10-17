@@ -157,8 +157,17 @@ def test_the_substitutes_say_what_they_stand_for():
     for step in checked:
         assert "LongPathsEnabled is $value in this new process, not 0" in step["run"]
     longpaths = _runs(jobs["longpaths"])
-    assert "-RootLength 172" in longpaths
+    # Without long paths the limit is the start file's warning length (110), not 172: Python's own
+    # modules lie up to 115 characters below the folder, past 260 from a folder of 172.
+    assert "-Offline -Move -RootLength 110" in longpaths
+    assert "-Offline -RootLength 111" in longpaths
+    assert "-RootLength 172" not in longpaths
     assert "-RootLength 173 -ExpectTooLong" in longpaths
+    start = (Path(__file__).resolve().parents[1] / "scripts" / "tow-start.cmd").read_text(encoding="utf-8")
+    assert 'if not defined TOW_READY if not "%TOW_ROOT:~110,1%"=="" set "TOW_LONG=1"' in start
+    smoke = (Path(__file__).resolve().parents[1] / "scripts" / "bundle-smoke.ps1").read_text(encoding="utf-8")
+    assert """'TOW_ROOT:~(\\d+),1%"=="" set "TOW_LONG=1"'""" in smoke  # the warning length read from it
+    assert "($output -match 'Windows long paths are off') -ne $expectWarning" in smoke
     assert "--root-length 120" in longpaths
     # D05, D07, TC-17 on macOS.
     macos = _runs(jobs["macos"])
