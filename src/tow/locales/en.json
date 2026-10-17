@@ -2424,7 +2424,8 @@
     "message": {
       "subject_result": "{subject} — {result}",
       "stale": "The list of messages changed meanwhile. It is shown anew.",
-      "not_saved": "Could not save that the messages are read. Try again."
+      "not_saved": "Could not save that the messages are read. Try again.",
+      "rate_limited": "Too many requests from this device. Try again in a few seconds."
     },
     "check": {
       "not_confirmed": "check not confirmed",
