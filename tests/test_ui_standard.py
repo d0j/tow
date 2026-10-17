@@ -662,3 +662,14 @@ def test_a_wrapped_summary_pill_is_centred():
     assert rule, "the wrapped pill's rule"
     assert "text-align: center" in rule.group(1)
     assert "text-align: end" not in rule.group(1)
+
+
+def test_an_empty_rule_field_stays_one_row():
+    """WebKit grew an empty one-row rule field for only part of its wrapped example (46 px of 53
+    at 320 px) and the example scrolled (1.33.1 QA-13); every engine now keeps it on one row and
+    ends it with an ellipsis (measured: 44 px, nothing to scroll, in WebKit and Chromium)."""
+    rules = [body for selector, body in _rules(CSS) if selector == "textarea::placeholder"]
+    assert rules
+    body = " ".join(rules)
+    for part in ("white-space: nowrap", "overflow: hidden", "text-overflow: ellipsis"):
+        assert part in body

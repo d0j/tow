@@ -55,6 +55,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - In **Settings**, two open messenger or torrent client cards stand side by side only from 1280 px wide: at
   1200 px a long field, such as the Discord webhook, was narrower than its size.
 - A status pill in **Settings** that wraps on a phone has its lines centred, as every pill's text is.
+- An empty rule field shows its example on one line, ending with "…", in every browser: some browsers made it
+  scroll or cut it on a narrow phone.
 
 ### Security
 
