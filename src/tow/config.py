@@ -13,7 +13,7 @@ import yaml
 
 from tow.errors import TowError
 from tow.paths import config_path
-from tow.store import atomic_write_text
+from tow.store import atomic_write_text, persistence_lock
 from tow.yaml_guard import SAFE_LOADER, YamlLimitError, validate_graph
 from tow.yaml_guard import dump as dump_yaml
 from tow.yaml_guard import load as load_yaml
@@ -53,7 +53,14 @@ def _file_key(path: Path) -> tuple[str, int, int, int]:
 def _config_text(path: Path) -> str:
     """config.yaml as text: a file saved in another encoding (Notepad's "ANSI") is named so."""
     try:
-        return read_yaml_text(path)
+        try:
+            return read_yaml_text(path)
+        except PermissionError:
+            # Windows refuses to open the file while a save replaces it; a save holds the
+            # persistence lock through its replace, so under the lock it is whole again. A file
+            # this account cannot read stays refused.
+            with persistence_lock():
+                return read_yaml_text(path)
     except UnicodeDecodeError as exc:
         raise ConfigError("config_error.encoding") from exc
 
