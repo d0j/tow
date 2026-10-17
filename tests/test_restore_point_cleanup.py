@@ -142,6 +142,19 @@ def test_update_cleanup_flag_is_typed_not_untrusted_text(install, bad):
         web_update.status()
 
 
+@pytest.mark.parametrize("bad", [[], {}, 1, None])
+def test_a_finished_job_of_the_wrong_status_type_is_no_finished_job(install, bad):
+    """Re-check 1.33.0 #5: the messages' reconciliation reads the job without status(); a status
+    of the wrong type is a record that cannot be read (None), never a TypeError and a 500."""
+    runtime, _calls, _backend = install
+    web_update.start("1.22.21")
+    path = runtime / "runtime" / "web-update" / "job.json"
+    job = json.loads(path.read_text())
+    job["status"] = bad
+    path.write_text(json.dumps(job), encoding="utf-8")
+    assert web_update.finished_job() is None
+
+
 def test_legacy_update_without_cleanup_flag_remains_readable(install):
     runtime, _calls, _backend = install
     web_update.start("1.22.21")

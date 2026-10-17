@@ -1175,7 +1175,12 @@ def reconcile_update(job: Mapping[str, Any] | None, *, now: float | None = None)
     if not isinstance(job, Mapping):
         return False
     job_id, outcome = job.get("id"), job.get("status")
-    if not isinstance(job_id, str) or not _HEX32.fullmatch(job_id) or outcome not in _TERMINAL_UPDATES:
+    if (
+        not isinstance(job_id, str)
+        or not _HEX32.fullmatch(job_id)
+        or not isinstance(outcome, str)  # [] or {}: no outcome, never a TypeError
+        or outcome not in _TERMINAL_UPDATES
+    ):
         return False
     finished = job.get("finished_at")
     moment = time.time() if now is None else now
