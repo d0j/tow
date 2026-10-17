@@ -614,6 +614,9 @@ class Smoke:
             lengths.extend((len(shown) + 1 + len(name), shown + "\\" + name) for name in (*folders, *files))
         for length, path in sorted(lengths, reverse=True)[:5]:
             say(f"   {length} {path}")
+        say(f"   the root's permissions: {permissions.windows_acl(self.root)}")
+        code, _output = self.tow("permissions", capture=True)  # its report is printed above
+        say(f"   tow permissions exited {code}")
         grants = [f"*{sid}:(OI)(CI)F" for sid in (permissions.user_sid(), "S-1-5-18", "S-1-5-32-544")]
         done = subprocess.run(
             ["icacls", str(self.root), "/inheritance:r", "/grant:r", *grants, "/C"],
@@ -623,6 +626,7 @@ class Smoke:
             check=False,
         )
         say(f"   icacls exited {done.returncode}: {(done.stdout + done.stderr).strip()[-1500:]}")
+        say(f"   after it: {permissions.windows_acl(self.root)}")
 
     def stop_and_report(self, failed: bool) -> None:
         if (self.root / "app" / "scripts").is_dir() and self.health() is not None:
