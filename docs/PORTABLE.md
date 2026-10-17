@@ -217,7 +217,7 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   a file (under `irm | iex` an exit would close the owner's window); it is ASCII (irm decodes a release asset in
   any code page). `TOW_INSTALL_SOURCE` / `TOW_INSTALL_SUMS` install from local files (tests).
 - `install.sh` takes uv `-unknown-linux-gnu` on glibc, `-musl` elsewhere (x86_64 and aarch64; 32-bit ARM is
-  refused, 1b), `-apple-darwin` on macOS; `--desktop` (Linux) writes `/applications/tow.desktop`
+  refused, 1b), `-apple-darwin` on macOS; `--desktop` (Linux) writes `$XDG_DATA_HOME/applications/tow.desktop`
   (the only write outside the folder besides autostart, both on request).
 
 ## 1b. Supported systems: the dependency contract (1.33.1)
