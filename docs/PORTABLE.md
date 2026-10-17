@@ -529,9 +529,10 @@ timeouts and response limits. Archive installs verify SHA256SUMS; git installs u
 These establish integrity and transport/repository trust, **not an independent publisher signature**. Keep
 the configured origin trusted; installing from an arbitrary URL or branch is not a web option.
 
-Export without overwrite atomically publishes prepared bytes (Windows rename; POSIX hard link) and refuses an
-occupied name even if another writer creates it during preparation. POSIX destinations without hard-link support
-fail safely rather than using a replacement fallback; choose a supported local filesystem. Unreadable/foreign
+Export without overwrite atomically publishes prepared bytes (Windows rename; POSIX hard link, or on a file system
+without hard links such as exFAT the system's rename that refuses an existing name: renameat2 on Linux, renamex_np on
+macOS) and refuses an occupied name even if another writer creates it during preparation. A POSIX destination that
+supports neither fails safely rather than using a replacing or copying fallback; choose a supported filesystem. Unreadable/foreign
 restore archives are preserved during rotation. Failure to delete an old copy retains the verified new copy
 and reports a cleanup warning.
 

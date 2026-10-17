@@ -46,6 +46,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On a Windows that is not in English, the watchdog's message after the computer was off says whether it was
   restarted or powered off: TOW reads the kind Windows itself records for the shutdown, and stays neutral when that
   record is missing or unclear.
+- On Linux and macOS, `tow export` to a drive without hard links (an exFAT or FAT USB stick, some network shares)
+  works: the finished file is put in place by the system's own rename that never replaces an existing file, instead of
+  failing. A drive that offers neither still refuses, as before.
 
 ## [1.33.0] — 2026-10-17
 

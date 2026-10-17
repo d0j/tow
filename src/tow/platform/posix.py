@@ -16,6 +16,7 @@ The functions take the system through small module-level seams (``_read``, ``_ru
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import os
 import posixpath
@@ -116,6 +117,49 @@ def _set_parent_death_signal(sig: int) -> bool:
         return int(libc.prctl(1, int(sig), 0, 0, 0)) == 0  # PR_SET_PDEATHSIG = 1
     except AttributeError, OSError, TypeError, ValueError:
         return False
+
+
+def _hard_link(source: Path, destination: Path) -> None:
+    os.link(source, destination)
+
+
+# What os.link answers where a file system keeps no hard links; what a rename that never replaces
+# answers where the file system (EINVAL, ENOTSUP) or the C library (ENOSYS: none here) cannot.
+_NO_HARD_LINKS = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOSYS})
+_NO_NATIVE_RENAME = frozenset({errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOSYS})
+_AT_FDCWD = -100  # linux/fcntl.h
+_RENAME_NOREPLACE = 1  # linux/fs.h
+_RENAME_EXCL = 0x00000004  # macOS sys/stdio.h
+
+
+def _rename_no_replace(source: str, destination: str, system: str) -> int:
+    """Rename ``source`` to ``destination`` unless that name exists, by the C library's own call
+    (never a guessed syscall number): 0 when renamed, else the errno (ENOSYS: no such call)."""
+    import ctypes
+
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        if system == "linux":
+            call = libc.renameat2
+            call.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
+            arguments: tuple[Any, ...] = (
+                _AT_FDCWD,
+                os.fsencode(source),
+                _AT_FDCWD,
+                os.fsencode(destination),
+                _RENAME_NOREPLACE,
+            )
+        else:
+            call = libc.renamex_np
+            call.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint)
+            arguments = (os.fsencode(source), os.fsencode(destination), _RENAME_EXCL)
+        call.restype = ctypes.c_int
+    except AttributeError, OSError, TypeError:
+        return errno.ENOSYS
+    ctypes.set_errno(0)
+    if call(*arguments) == 0:
+        return 0
+    return ctypes.get_errno() or errno.EIO
 
 
 def _parent_pid() -> int:
@@ -321,8 +365,27 @@ class PosixBackend:
         self._home = home
 
     def publish_exclusive(self, source: Path, destination: Path) -> None:
-        """Publish complete bytes without replacement; unsupported filesystems fail closed."""
-        os.link(source, destination)
+        """Publish the complete, flushed ``source`` as ``destination`` without ever replacing it:
+        a hard link, or where the file system has none (exFAT, FAT, SMB without unix extensions,
+        some FUSE) the system's own rename that refuses an existing name - renameat2
+        RENAME_NOREPLACE on Linux, renamex_np RENAME_EXCL on macOS - which moves ``source``.
+        An existing destination (a link too) raises FileExistsError; a file system or C library
+        that offers neither fails closed with the link's error; any other error is raised."""
+        try:
+            _hard_link(source, destination)
+            return
+        except OSError as error:
+            if error.errno not in _NO_HARD_LINKS:
+                raise
+            refused = error
+        code = _rename_no_replace(os.fspath(source), os.fspath(destination), self.name)
+        if code == 0:
+            return
+        if code == errno.EEXIST:
+            raise FileExistsError(code, os.strerror(code), os.fspath(destination))
+        if code in _NO_NATIVE_RENAME:
+            raise refused
+        raise OSError(code, os.strerror(code), os.fspath(destination))
 
     @property
     def home(self) -> str:
