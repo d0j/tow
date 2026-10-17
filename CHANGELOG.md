@@ -20,6 +20,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Windows: TOW limits its folder to your account again when another account's rule sits on the folder itself
+  (a copy an interrupted earlier attempt left, or one added by hand), and a file deep inside that refuses the
+  change no longer stops it half way. Before, every start warned that other accounts can change the TOW folder.
 - Windows: reading `config.yaml` at the moment another part of TOW saves it no longer fails with "Permission
   denied"; the read waits for that save.
 - Transmission: a file whose name Windows reserves (`CON`, `aux.txt`, `COM1`…) is matched again. Transmission

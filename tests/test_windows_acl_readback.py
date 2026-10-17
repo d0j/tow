@@ -111,6 +111,84 @@ def test_the_backend_reports_what_the_folder_reads_back(monkeypatch, folder):
     assert backend.folder_shared(folder) is None
 
 
+# A folder an interrupted close left (long paths off, CI 2026-10-17): protected, with a copy of
+# the drive's rules as its own - CREATOR OWNER, SYSTEM, Administrators and three for Users.
+COPIED = (
+    f"O:{USER}D:PAI(A;OICIIO;GA;;;CO)(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;CI;DC;;;BU)(A;OICI;0x1200a9;;;BU)(A;CI;LC;;;BU)"
+)
+
+
+class RealIcacls:
+    """What icacls does to the rules: /inheritance:r drops inherited ones (ID), /grant:r replaces
+    the named accounts' grants, /remove:g drops the named accounts' grants."""
+
+    def __init__(self, sddl: str) -> None:
+        self.sddl = sddl
+        self.calls: list[list[str]] = []
+
+    def run(self, args: list[str], timeout: float = 20) -> str:
+        self.calls.append(list(args))
+        owner, flags, aces = re.fullmatch(r"O:(.+?)D:([A-Z]*)(.*)", self.sddl).groups()  # type: ignore[union-attr]
+        rules = re.findall(r"\(([^)]*)\)", aces)
+        named = [arg.lstrip("*").split(":")[0] for arg in args if arg.startswith("*")]
+        if "/inheritance:r" in args:
+            flags = "P" + flags.replace("P", "")
+            rules = [rule for rule in rules if "ID" not in rule.split(";")[1]]
+        if "/grant:r" in args:
+            rules = [rule for rule in rules if windows.sid_text(rule.split(";")[5]) not in named]
+            rules += [f"A;OICI;FA;;;{sid}" for sid in named]
+        if "/remove:g" in args:
+            rules = [rule for rule in rules if windows.sid_text(rule.split(";")[5]) not in named]
+        self.sddl = f"O:{owner}D:{flags}" + "".join(f"({rule})" for rule in rules)
+        return ""
+
+
+def test_a_close_removes_rules_another_account_has_on_the_folder_itself(monkeypatch, folder):
+    # Before: /inheritance:r /grant:r kept Users' own rules (a copy an interrupted close had
+    # left), so every start said "other accounts can change the TOW folder" for ever.
+    icacls = RealIcacls(COPIED)
+    monkeypatch.setattr(windows, "user_sid", lambda: USER)
+    monkeypatch.setattr(windows, "folder_security", lambda _path: icacls.sddl)
+    monkeypatch.setattr(windows, "_run", icacls.run)
+    assert windows.make_private(folder) is True
+    assert [call[2] for call in icacls.calls] == ["/inheritance:r", "/remove:g"]
+    assert icacls.calls[0][-2:] == ["/C", "/Q"]  # a file below that refuses does not stop it half way
+    assert icacls.calls[1][3:] == ["*S-1-5-32-545", "/C", "/Q"]  # Users' three rules, by name once
+    assert windows.folder_shared(folder) is False
+    assert "CO)" in icacls.sddl  # CREATOR OWNER stays: it gives nobody else anything
+
+
+def test_each_other_account_is_removed_on_its_own_so_an_unknown_one_blocks_nobody(monkeypatch, folder):
+    # icacls refuses a whole /remove naming a SID Windows cannot map (a deleted account): one
+    # call per account, so Users still goes and only the unknown one stays (read back: open).
+    orphan = "S-1-5-21-9-9-9-4242"
+    icacls = RealIcacls(COPIED.replace("(A;CI;LC;;;BU)", f"(A;OICI;0x1301bf;;;{orphan})(A;CI;LC;;;BU)"))
+    original = icacls.run
+
+    def refuses_orphans(args, timeout=20):
+        if "/remove:g" in args and f"*{orphan}" in args:
+            icacls.calls.append(list(args))
+            return ""  # ERROR_NONE_MAPPED: nothing changed
+        return original(args, timeout)
+
+    monkeypatch.setattr(windows, "user_sid", lambda: USER)
+    monkeypatch.setattr(windows, "folder_security", lambda _path: icacls.sddl)
+    monkeypatch.setattr(windows, "_run", refuses_orphans)
+    assert windows.make_private(folder) is False
+    assert [call[3] for call in icacls.calls[1:]] == ["*S-1-5-32-545", f"*{orphan}"]
+    assert "BU)" not in icacls.sddl
+    assert orphan in icacls.sddl
+
+
+def test_a_close_that_leaves_nobody_else_runs_icacls_once(monkeypatch, folder):
+    icacls = RealIcacls(OPEN.replace("O:BA", f"O:{USER}"))
+    monkeypatch.setattr(windows, "user_sid", lambda: USER)
+    monkeypatch.setattr(windows, "folder_security", lambda _path: icacls.sddl)
+    monkeypatch.setattr(windows, "_run", icacls.run)
+    assert windows.make_private(folder) is True
+    assert len(icacls.calls) == 1
+
+
 # --- hand_over (tow permissions fix) -----------------------------------------------------------
 
 

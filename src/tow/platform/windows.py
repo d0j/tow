@@ -793,9 +793,27 @@ def _icacls() -> str:
 
 def _close(path: Path, account: str) -> None:
     """``account``, SYSTEM and Administrators get full control of ``path``, nothing inherited;
-    what the folder holds inherits that."""
+    what the folder holds inherits that. /C: a file below that refuses the change does not stop
+    it half way (that left the folder protected with a copy of what it had inherited). Rules
+    given to another account on the folder itself - such a copy, or one added by hand - outlive
+    /inheritance:r and are removed by name."""
     grants = [f"*{sid}:(OI)(CI)F" for sid in (account, _SYSTEM_SID, _ADMINISTRATORS_SID)]
-    _run([_icacls(), str(path), "/inheritance:r", "/grant:r", *grants, "/Q"], timeout=120)
+    _run([_icacls(), str(path), "/inheritance:r", "/grant:r", *grants, "/C", "/Q"], timeout=120)
+    sddl = folder_security(path)
+    # One account at a time: icacls refuses a whole call naming an account Windows no longer
+    # knows (a deleted one's SID), and that one stays (read back as open).
+    for sid in _other_trustees(sddl, account) if sddl is not None else []:
+        _run([_icacls(), str(path), "/remove:g", f"*{sid}", "/C", "/Q"], timeout=120)
+
+
+def _other_trustees(sddl: str, user: str) -> list[str]:
+    """The accounts other than ``user``, SYSTEM and Administrators an allow rule lets in, as
+    ``S-1-…`` text, in the order of the rules."""
+    match = _SDDL.fullmatch(sddl)
+    aces = _aces(match.group("aces") or "") if match else None
+    allowed = _PRIVATE_TRUSTEES | {sid_text(user)}
+    found = [sid_text(ace[5]) for ace in aces or [] if ace[0] in _ALLOW_ACES]
+    return list(dict.fromkeys(sid for sid in found if sid not in allowed))
 
 
 # --- handing a folder back to its owner (tow permissions fix) -----------------------------------
