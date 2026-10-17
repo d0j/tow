@@ -33,6 +33,7 @@ FOUNDATION = (
     "tow.plugins",  # the scan the client and messenger registries share
     "tow.ratelimit",
     "tow.records",
+    "tow.scrub",  # the words any device may read
     "tow.torrent",
     "tow.yaml_guard",
 )
