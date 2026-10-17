@@ -161,6 +161,33 @@ def test_a_kind_of_shutdown_windows_words_in_another_language_is_not_guessed(act
     assert text == t("pulse.shutdown.shut_down_or_restarted", "ru", via=via, at=pulse.clock(T0)).replace("  ", " ")
 
 
+@pytest.mark.parametrize(
+    ("words", "power_action", "kind"),
+    [
+        ("перезапуск", "restart", "restarted"),  # a Russian Windows: the recorded kind tells it
+        ("выключение питания", "power_off", "powered_off"),
+        ("перезапуск", None, "shut_down_or_restarted"),  # no Kernel-Power record: neither
+        ("restart", "restart", "restarted"),
+        ("restart", "power_off", "shut_down_or_restarted"),  # the records disagree: neither
+        ("power off", "unclear", "shut_down_or_restarted"),
+        ("power off", "sleep", "shut_down_or_restarted"),  # a kind this reading does not know
+    ],
+)
+def test_the_kind_kernel_power_recorded_comes_first(words, power_action, kind):
+    event = _shutdown(r"C:\X\explorer.exe (PC)", action=words)
+    if power_action is not None:
+        event["power_action"] = power_action
+    via = t("pulse.via.start_menu", "ru")
+    expected = t(f"pulse.shutdown.{kind}", "ru", via=via, at=pulse.clock(T0)).replace("  ", " ")
+    assert pulse.describe_shutdown([event], "ru") == expected
+
+
+def test_an_update_restart_keeps_its_attribution_with_the_recorded_kind():
+    event = _shutdown(r"C:\WINDOWS\servicing\TrustedInstaller.exe (PC)", action="перезапуск")
+    event.update(reason="Операционная система: обновление (запланировано)", power_action="restart")
+    assert pulse.describe_shutdown([event], "ru") == t("pulse.shutdown.update", "ru", at=pulse.clock(T0))
+
+
 @pytest.mark.parametrize("action", ["power off", "Shutdown", "shutdown"])
 def test_an_english_power_off_is_still_said(action):
     text = pulse.describe_shutdown([_shutdown(r"C:\X\explorer.exe (PC)", action=action)], "en")

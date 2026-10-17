@@ -86,16 +86,19 @@ _VIA = {
 }
 
 
-def _shutdown_kind(action: str) -> str:
-    """Event 1074 names the kind in the language of Windows: English "restart", "power off" or
-    "shutdown" are told apart; any other word says neither (a restart is never taken for a
-    power-off on a Windows in another language)."""
-    words = action.casefold()
-    if "restart" in words:
-        return "restarted"
-    if "power off" in words or "shutdown" in words:
-        return "powered_off"
-    return "shut_down_or_restarted"
+def _shutdown_kind(event: dict[str, Any]) -> str:
+    """How Windows went down: first the kind Kernel-Power recorded for this shutdown
+    (``power_action``, tow.platform); else event 1074's own word, which is in the language of
+    Windows: English "restart", "power off" or "shutdown" are told apart, any other word says
+    neither (a restart is never taken for a power-off on a Windows in another language). When
+    the two disagree, or the records are unclear, neither is said."""
+    words = str(event.get("action") or "").casefold()
+    said = "restarted" if "restart" in words else "powered_off" if "power off" in words or "shutdown" in words else None
+    power = event.get("power_action")
+    recorded = {"restart": "restarted", "power_off": "powered_off"}.get(str(power)) if power else None
+    if (power and recorded is None) or (recorded and said and recorded != said):
+        return "shut_down_or_restarted"
+    return recorded or said or "shut_down_or_restarted"
 
 
 def describe_shutdown(events: list[dict[str, Any]], lang: str | None = None) -> str:
@@ -110,7 +113,7 @@ def describe_shutdown(events: list[dict[str, Any]], lang: str | None = None) -> 
         return t("pulse.shutdown.crash", lang, at=clock(last["ts"]))
     if _by_update(last):
         return t("pulse.shutdown.update", lang, at=clock(last["ts"]))
-    action = _shutdown_kind(str(last["action"]))
+    action = _shutdown_kind(last)
     process = str(last["process"]).split(" (")[0]
     name = Path(process.replace("\\", "/")).name if process else ""
     via_key = _VIA.get(name.lower())

@@ -156,19 +156,60 @@ def logon_time() -> float | None:
 
 
 def shutdown_events(since_ts: float, until_ts: float) -> list[dict[str, Any]]:
-    """Shutdown records of the System event log between two moments, oldest first."""
+    """Shutdown records of the System event log between two moments, oldest first: 1074 (who
+    shut Windows down, with the kind Kernel-Power recorded for it, ``power_action``), 41 and
+    6008 (it went down without one)."""
     since = datetime.fromtimestamp(since_ts, UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     until = datetime.fromtimestamp(until_ts, UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     query = (
-        "*[System[(EventID=1074 or EventID=41 or EventID=6008)"
+        "*[System[(EventID=1074 or EventID=41 or EventID=6008"
+        f" or (EventID=109 and Provider[@Name='{_KERNEL_POWER}']))"
         f" and TimeCreated[@SystemTime>='{since}' and @SystemTime<='{until}']]]"
     )
-    raw = _run([windows_program("wevtutil.exe"), "qe", "System", f"/q:{query}", "/c:20", "/rd:true", "/f:xml"])
-    return parse_events(raw)
+    raw = _run([windows_program("wevtutil.exe"), "qe", "System", f"/q:{query}", "/c:40", "/rd:true", "/f:xml"])
+    return with_power_actions(parse_events(raw))
+
+
+# Kernel-Power event 109 (version 0) says how Windows went down, ShutdownActionType a POWER_ACTION:
+# on a Windows 11 PC every 1074 "restart" was followed by a 5 and every "power off" by a 6, 0 to
+# 77 s later. Other codes (4, a shutdown, was never seen) and other versions say nothing here.
+_KERNEL_POWER = "Microsoft-Windows-Kernel-Power"
+_KERNEL_POWER_GUID = "{331c3b3a-2005-44c2-ac5e-77220c37d6b4}"
+_POWER_ACTIONS = {"5": "restart", "6": "power_off"}
+_SHUTDOWN_SEQUENCE_SEC = 120
+
+
+def _power_action(provider: str, guid: str, version: str, data: dict[str, str]) -> str | None:
+    """The kind a Kernel-Power 109 record names, or None when it is not one this reading knows."""
+    if provider != _KERNEL_POWER or (guid and guid.casefold() != _KERNEL_POWER_GUID) or version not in {"", "0"}:
+        return None
+    return _POWER_ACTIONS.get(data.get("ShutdownActionType", "").strip())
+
+
+def with_power_actions(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """``events`` without the Kernel-Power 109 records, each attached to the 1074 of its shutdown:
+    the record just before it (no crash or other record between) and at most two minutes
+    earlier. That 1074 gets ``power_action`` ("restart", "power_off"; "unclear" when two of its
+    109 records disagree); a 109 that belongs to no 1074, or names no known kind, adds nothing -
+    it never becomes the last record and never replaces who shut Windows down."""
+    kept: list[dict[str, Any]] = []
+    for event in events:
+        if event["id"] != 109:
+            kept.append(event)
+            continue
+        owner = kept[-1] if kept else None
+        action = event.get("power_action")
+        if action is None or owner is None or owner["id"] != 1074:
+            continue
+        if not 0 <= event["ts"] - owner["ts"] <= _SHUTDOWN_SEQUENCE_SEC:
+            continue
+        owner["power_action"] = action if owner.get("power_action", action) == action else "unclear"
+    return kept
 
 
 def parse_events(raw: str) -> list[dict[str, Any]]:
-    """wevtutil's XML records as {id, ts, process, reason, action}, oldest first."""
+    """wevtutil's XML records as {id, ts, process, reason, action}, oldest first; a Kernel-Power
+    109 record also carries the kind it names (``power_action``, None when not known)."""
     try:
         root = ET.fromstring(f"<events>{raw}</events>")
     except ET.ParseError:
@@ -187,15 +228,22 @@ def parse_events(raw: str) -> list[dict[str, Any]]:
         except ValueError:
             continue
         data = {item.get("Name") or "": item.text or "" for item in event.iter(f"{_EVENT_NS}Data")}
-        events.append(
-            {
-                "id": event_id,
-                "ts": ts,
-                "process": data.get("param1", ""),
-                "reason": data.get("param3", ""),
-                "action": data.get("param5", ""),
-            }
-        )
+        record: dict[str, Any] = {
+            "id": event_id,
+            "ts": ts,
+            "process": data.get("param1", ""),
+            "reason": data.get("param3", ""),
+            "action": data.get("param5", ""),
+        }
+        if event_id == 109:
+            provider = system.find(f"{_EVENT_NS}Provider")
+            record["power_action"] = _power_action(
+                str(provider.get("Name") or "") if provider is not None else "",
+                str(provider.get("Guid") or "") if provider is not None else "",
+                (system.findtext(f"{_EVENT_NS}Version") or "").strip(),
+                data,
+            )
+        events.append(record)
     return sorted(events, key=lambda item: item["ts"])
 
 
