@@ -230,6 +230,8 @@ def candidate_release(source: Path, folder: Path, version: str) -> None:
         for member in src:
             name = member.name.split("/", 1)
             member.name = f"tow-{version}" + (f"/{name[1]}" if len(name) > 1 else "")
+            # A pax "path" (a long or non-ASCII name read back) wins over member.name when written.
+            member.pax_headers.pop("path", None)
             extracted = src.extractfile(member) if member.isfile() else None
             data = extracted.read() if extracted is not None else None
             if data is not None and member.name == f"tow-{version}/pyproject.toml":

@@ -65,6 +65,8 @@ def release(source: Path, folder: Path, *, good: bool) -> None:
         for member in src:
             name = member.name.split("/", 1)
             member.name = f"tow-{VERSION}" + (f"/{name[1]}" if len(name) > 1 else "")
+            # A pax "path" (a long or non-ASCII name read back) wins over member.name when written.
+            member.pax_headers.pop("path", None)
             data = src.extractfile(member).read() if member.isfile() else None
             if data is not None and member.name == f"tow-{VERSION}/pyproject.toml":
                 text = data.decode("utf-8")

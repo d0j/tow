@@ -78,6 +78,35 @@ def test_an_archive_without_the_package_is_refused(smoke, tmp_path):
         smoke.make_broken(source, tmp_path / "broken.tar.gz")
 
 
+def test_a_candidate_of_the_broken_copy_keeps_one_top_folder(smoke, tmp_path):
+    # Before: the broken copy wrote a path longer than 100 characters (or not ASCII) as a pax
+    # "path" header, which tarfile prefers to a renamed member's name, so the candidate release
+    # kept those files under "tow/" and update.py refused it ("more than one top folder").
+    from test_update import updater
+
+    deep = "tests/" + "d" * 120 + "/Тест.py"
+    source = _archive(tmp_path / "tow-source.tar.gz", {**FILES, deep: b"x\n"})
+    broken = smoke.make_broken(source, tmp_path / "broken.tar.gz")
+    smoke.candidate_release(broken, tmp_path / "release", "1.99.1")
+    built = tmp_path / "release" / "tow-source.tar.gz"
+    with tarfile.open(built, "r:gz") as tar:
+        names = tar.getnames()
+    assert {name.split("/", 1)[0] for name in names} == {"tow-1.99.1"}
+    assert f"tow-1.99.1/{deep}" in names
+    assert updater.unpack(built, tmp_path / "unpacked").name == "tow-1.99.1"
+    # scripts/web-update-smoke.py renames the candidate the same way
+    spec = importlib.util.spec_from_file_location(
+        "web_update_smoke_under_test", SCRIPT.with_name("web-update-smoke.py")
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    web = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(web)
+    web.release(broken, tmp_path / "web", good=True)
+    with tarfile.open(tmp_path / "web" / "tow-source.tar.gz", "r:gz") as tar:
+        assert {name.split("/", 1)[0] for name in tar.getnames()} == {f"tow-{web.VERSION}"}
+
+
 def test_the_previous_release_is_checked_against_its_sums(smoke, tmp_path):
     (tmp_path / "install.sh").write_bytes(b"#!/bin/sh\n")
     digest = smoke.sha256(tmp_path / "install.sh")
