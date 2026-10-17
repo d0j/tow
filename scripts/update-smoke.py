@@ -388,9 +388,12 @@ class Smoke:
         say(f"the previous release answers as {version}")
         if WINDOWS:
             permissions = _script("permissions-smoke.py", "permissions_smoke")
-            if permissions.check(self.root):
-                say("the previous release's first start left the install open:")
-                self.explain_open_root(permissions, repair=False)
+            problems = permissions.check(self.root)
+            if problems:
+                # Not a failure yet: the previous release's code did this; the check at the end is
+                # of this commit's. Asking icacls what TOW asks shows why.
+                say(f"the previous release's first start left the install open: {problems}")
+                self.explain_open_root(permissions)
         return version
 
     def update_command(self, ref: str) -> list[str]:
@@ -625,15 +628,18 @@ class Smoke:
         say(f"   tow permissions exited {code}")
         if not repair:
             return
+        # Exactly what TOW runs (tow.platform.windows._close), its errors not hidden.
         grants = [f"*{sid}:(OI)(CI)F" for sid in (permissions.user_sid(), "S-1-5-18", "S-1-5-32-544")]
         done = subprocess.run(
-            ["icacls", str(self.root), "/inheritance:r", "/grant:r", *grants, "/C"],
+            ["icacls", str(self.root), "/inheritance:r", "/grant:r", *grants],
             capture_output=True,
             text=True,
             errors="replace",
             check=False,
         )
-        say(f"   icacls exited {done.returncode}: {(done.stdout + done.stderr).strip()[-1500:]}")
+        lines = (done.stdout + done.stderr).strip().splitlines()
+        failures = [line for line in lines if not line.startswith("processed file:")]
+        say(f"   icacls exited {done.returncode}: {' | '.join(failures)[-2000:]}")
         say(f"   after it: {permissions.windows_acl(self.root)}")
 
     def stop_and_report(self, failed: bool) -> None:
