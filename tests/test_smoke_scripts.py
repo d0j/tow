@@ -212,6 +212,9 @@ def test_the_nonadmin_smoke_parses_and_stays_ascii():
     assert "-join [char[]](0x0422, 0x0435, 0x0441, 0x0442)" in text
     assert "if (-not $env:GITHUB_ACTIONS)" in text  # never creates an account outside CI
     assert "Remove-LocalUser" in text
+    # A new account's profile may lack AppData: GetFolderPath answered "" and stopped the run.
+    assert "[Environment]::GetFolderPath($Name, [Environment+SpecialFolderOption]::Create)" in text
+    assert "CurrentVersion\\ProfileList\\$($report.sid)" in text
     program = shutil.which("pwsh")
     if program is None:
         pytest.skip("no pwsh on this machine")

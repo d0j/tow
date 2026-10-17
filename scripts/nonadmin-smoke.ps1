@@ -50,11 +50,27 @@ if ($Inner) {
         $report.steps += "identity $($report.sid), administrator: $($report.admin)"
 
         # The account's own folders, from its token (a process started with -Credential may carry
-        # the starting account's environment, whose folders this account cannot open).
-        $local = [Environment]::GetFolderPath('LocalApplicationData')
+        # the starting account's environment, whose folders this account cannot open). A new
+        # account's profile may not have them yet, and GetFolderPath then answers "" unless asked
+        # to create them; without a path the profile folder comes from the ProfileList.
+        $profileKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$($report.sid)"
+        $profilePath = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath -ErrorAction SilentlyContinue).ProfileImagePath
+        $report.profile_list = "$profilePath"
+        function Get-OwnFolder([string]$Name, [string]$Relative) {
+            $path = [Environment]::GetFolderPath($Name, [Environment+SpecialFolderOption]::Create)
+            if (-not $path) {
+                if (-not $profilePath) { throw "the account has no $Name folder and no ProfileList entry" }
+                $path = $profilePath
+                if ($Relative) { $path = Join-Path $profilePath $Relative }
+                $path = (New-Item -ItemType Directory -Force -Path $path).FullName
+            }
+            return $path
+        }
+        $local = Get-OwnFolder 'LocalApplicationData' 'AppData\Local'
         $env:LOCALAPPDATA = $local
-        $env:APPDATA = [Environment]::GetFolderPath('ApplicationData')
-        $env:USERPROFILE = [Environment]::GetFolderPath('UserProfile')
+        $env:APPDATA = Get-OwnFolder 'ApplicationData' 'AppData\Roaming'
+        $env:USERPROFILE = Get-OwnFolder 'UserProfile' ''
+        $report.steps += "folders: LOCALAPPDATA $local, USERPROFILE $env:USERPROFILE"
         $env:TEMP = (New-Item -ItemType Directory -Force -Path (Join-Path $local 'Temp')).FullName
         $env:TMP = $env:TEMP
         $report.profile = $env:USERPROFILE
@@ -109,7 +125,7 @@ if ($Inner) {
         $report.stopped = ($LASTEXITCODE -eq 0)
         $report.ok = $true
     } catch {
-        $report.error = "$_"
+        $report.error = "$_ (line $($_.InvocationInfo.ScriptLineNumber))"
         try { & cmd.exe /d /c call "`"$(Join-Path $report.root 'app\scripts\tow.cmd')`"" stop } catch { }
     }
     $report | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $Result -Encoding UTF8
