@@ -592,10 +592,16 @@ def test_the_settings_page_follows_its_backup_inventory(monkeypatch, clock):
 
 
 def test_the_history_page_follows_the_names_it_shows(clock):
+    """A History line names its topic by its title now: a rename changes the window it draws (the
+    revision is the digest of that window, so it follows the names its lines show)."""
+    from tow.log import log_event
+
     _seed()
+    log_event("topic_pause", topic_id="t1")
     client = TestClient(app)
     before = _revs(client, page="/history")
     _seed(_topic("t1", "Renamed"), _topic("t2", "Show B"))
+    clock.tick()
     assert _revs(client, page="/history")["page"] != before["page"]
 
 

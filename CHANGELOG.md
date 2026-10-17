@@ -15,6 +15,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An open **Settings** page shows and removes the red "Saved passwords and tokens cannot be opened" note by
   itself when the master key stops or starts matching (for example after `tow keys` on another device), instead
   of only after a reload.
+- An open **History** page no longer asks TOW for its lines again after each routine log line it does not show
+  (a site checked, or a line its filter leaves out); all open History tabs with the same filter share one reading
+  of the log.
 
 ### Security
 

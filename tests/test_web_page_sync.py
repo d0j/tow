@@ -571,6 +571,68 @@ def test_history_lines_are_keyed_by_their_events_and_follow_the_filters(clock):
     assert len(every["entries"]) == 3
 
 
+@pytest.mark.parametrize("group", ["", "errors"])
+def test_a_log_line_no_history_filter_shows_changes_no_history_revision(group, clock):
+    """The History revision is the digest of the window its filters draw: a routine line that
+    no group shows (a site checked) or that this filter does not take leaves it as it was, so no
+    open History tab asks for its lines again; a line it shows changes it."""
+    _seed()
+    log_event("check_fail", topic_id="t2", error="qBittorrent: connection refused", error_class="qbit")
+    client = TestClient(app, headers=ORIGIN)
+    params = {"group": group} if group else {}
+    before = _page_rev(client, "/history", **params)
+    log_event("tracker_checked", tracker="rutor")  # in no History group
+    if group:
+        log_event("topic_pause", topic_id="t1")  # History shows it, this filter does not
+    clock.tick()
+    assert _page_rev(client, "/history", **params) == before
+    log_event("check_fail", topic_id="t1", error="qBittorrent: connection refused", error_class="qbit")
+    clock.tick()
+    now = _page_rev(client, "/history", **params)
+    assert now != before
+    found = client.get("/page/fragments", params={"page": "/history", "rev": now, **params}).json()
+    assert found["rev"] == now
+    assert len(found["entries"]) == 2
+
+
+def test_the_history_window_is_read_once_per_change_for_every_tab_of_its_filters(monkeypatch, clock):
+    """Every open History tab with the same filters shares one reading of the log per change:
+    the poll's revision and the lines /page/fragments hands out are that one window."""
+    _seed()
+    log_event("check_fail", topic_id="t2", error="qBittorrent: connection refused", error_class="qbit")
+    calls: list[str] = []
+    plain = services.history_events
+
+    def counted(**kwargs):
+        calls.append(kwargs.get("group", ""))
+        return plain(**kwargs)
+
+    monkeypatch.setattr(services, "history_events", counted)
+    tabs = [TestClient(app, headers=ORIGIN) for _ in range(3)]
+    revs = {_page_rev(tab, "/history", group="errors") for tab in tabs}
+    assert len(revs) == 1
+    (rev,) = revs
+    for tab in tabs:
+        found = tab.get("/page/fragments", params={"page": "/history", "group": "errors", "rev": rev}).json()
+        assert found["rev"] == rev
+    assert calls == ["errors"]
+    log_event("check_fail", topic_id="t1", error="qBittorrent: connection refused", error_class="qbit")
+    clock.tick()
+    for tab in tabs:
+        assert _page_rev(tab, "/history", group="errors") != rev
+    assert calls == ["errors", "errors"]
+
+
+def test_the_history_windows_kept_are_bounded(monkeypatch, clock):
+    """Each search is a variant of its own: the windows kept for them are bounded in number."""
+    _seed()
+    log_event("check_fail", topic_id="t2", error="qBittorrent: connection refused", error_class="qbit")
+    client = TestClient(app, headers=ORIGIN)
+    for index in range(sync.HISTORY_VARIANTS + 5):
+        _page_rev(client, "/history", q=f"Show {index}")
+    assert sync.AREAS_MEMO.history_variants() <= sync.HISTORY_VARIANTS
+
+
 def test_the_history_limit_note_is_always_drawn_and_hidden_below_the_limit(monkeypatch):
     """pages.js shows the "newest N" note once live merges fill the list to its limit and hides it
     below: the page must carry it from the start, hidden while fewer lines are shown."""
