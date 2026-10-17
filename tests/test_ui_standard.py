@@ -676,13 +676,13 @@ def test_an_empty_rule_field_stays_one_row():
 
 
 def test_a_client_cards_one_line_title_has_room_for_its_descenders():
-    """The client card's title is one line cut with an ellipsis (overflow hidden): its line box
-    was 20 px for 23 px of glyphs, and WebKit clipped the tail of "q" (1.33.1 QA-15). Its line
-    height holds them (1.5 of .98rem: 23.5 px)."""
+    """The client card's title is one line cut with an ellipsis. With overflow hidden on both axes
+    WebKit clipped the tail of "q" (scroll 23 > client 20, 1.33.1 QA-15; a taller line box did
+    not help: WebKit's ink grew with it). It is cut sideways only (measured in WebKit and
+    Chromium: scroll = client height, the ellipsis kept); hidden stays for a browser without clip."""
     rules = [body for selector, body in _rules(CSS) if selector == ".client-card > summary h2"]
     assert rules
-    body = " ".join(rules)
-    assert "overflow: hidden" in body
-    line = re.search(r"line-height: ([\d.]+);", body)
-    assert line, "a line height of its own"
-    assert float(line.group(1)) * 0.98 * 16 >= 23
+    body = " ".join(" ".join(rules).split())
+    assert "overflow: hidden; overflow: clip visible;" in body
+    assert "text-overflow: ellipsis" in body
+    assert "line-height" not in body
