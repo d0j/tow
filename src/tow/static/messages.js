@@ -420,6 +420,7 @@
     soon = null;
     blockedUntil = 0;
     window.clearTimeout(retryTimer);
+    owed.clear();
     saying.forEach((timer) => window.clearTimeout(timer));
     saying.clear();
     ["announce", "announce-alert"].forEach((name) => {
@@ -749,9 +750,16 @@
   };
   // Too many requests (429): nothing is asked before its Retry-After (5 s without one); then the page
   // asks for the list once by itself. Until a list is taken refresh() answers false, so sync.js keeps
-  // the messages area unapplied and offers it again.
+  // the messages area unapplied and offers it again. A hidden tab sends no such retry (as sync.js's
+  // poll asks nothing while hidden): it waits until the tab is shown again and goes with that
+  // moment's own refresh.
   let blockedUntil = 0;
   let retryTimer = 0;
+  const owed = new Set(); // the retries a hidden tab keeps for when it is shown
+  const whenShown = (fn) => {
+    if (document.hidden) owed.add(fn);
+    else fn();
+  };
   const retryAfterMs = (response) => Math.max(1, Number(response.headers?.get?.("Retry-After")) || 5) * 1000;
   const limited = (response) => {
     const wait = retryAfterMs(response);
@@ -759,7 +767,7 @@
     window.clearTimeout(retryTimer);
     retryTimer = window.setTimeout(() => {
       retryTimer = 0;
-      refresh();
+      whenShown(refresh);
     }, wait);
   };
   const ask = () => {
@@ -813,8 +821,9 @@
   };
   const failed = (text) => center.show({ kind: "err", text: text || t("js.messages.not_saved") });
   // Read or clear up to the newest entry this page shows: an entry that arrived since stays.
-  // A read or clear refused for too many requests (429) is sent once more after its Retry-After, up
-  // to the same entry (``cursor``, taken when it was asked): never one a refresh showed meanwhile.
+  // A read or clear refused for too many requests (429) is sent once more after its Retry-After (a
+  // hidden tab: once shown), up to the same entry (``cursor``, taken when it was asked): never one a
+  // refresh showed meanwhile.
   const mark = (path, { cursor = shared.cursor, again = false } = {}) => {
     if (typeof fetch !== "function" || !cursor) return Promise.resolve();
     const mine = session;
@@ -834,7 +843,8 @@
           return;
         }
         if (response.status === 429 && !again) {
-          window.setTimeout(() => { if (mine === session) mark(path, { cursor, again: true }); }, retryAfterMs(response));
+          const retry = () => { if (mine === session) mark(path, { cursor, again: true }); };
+          window.setTimeout(() => { if (mine === session) whenShown(retry); }, retryAfterMs(response));
           return;
         }
         if (response.status === 409) {
@@ -899,9 +909,13 @@
     }
     center.release("hidden");
     // Shown again: the list as it is now - asked by sync.js's poll when it runs (it asks at once and
-    // names the messages area when the list changed), by this page otherwise.
+    // names the messages area when the list changed), by this page otherwise; a retry kept while
+    // hidden goes now, the list's one with that refresh (one request).
+    const due = [...owed];
+    owed.clear();
     const sync = window.towSync?.client;
     if (!sync || sync.stopped?.()) refresh();
+    due.forEach((fn) => fn());
   });
   if (document.hidden) center.hold("hidden");
   // Signing out ends this tab's history with the session.
