@@ -116,3 +116,7 @@ interval_sec: 3600
 #     login_hosts: [https://tracker.example]
 #     login_path: /login.php
 #     download_path: /dl.php?t={id}
+#     # A mirror that fails fail_threshold times in a row rests for cooldown_sec seconds (the
+#     # others keep working). Default 3 and 3600 (an hour); Rutor's built-in settings use 1800.
+#     fail_threshold: 3
+#     cooldown_sec: 3600
