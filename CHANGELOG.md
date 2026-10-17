@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.33.0] — 2026-10-17
+
 ### Changed
 
 - **Recent messages** are the same on every signed-in browser and computer: the list shows what TOW did and
