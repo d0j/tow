@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from helpers import shown
+from log_kinds import scan as scan_logged_kinds
 
 from tow import i18n
 
@@ -1172,48 +1173,18 @@ def _read_all(paths: list[Path]) -> str:
 # --- every event the code logs has a label --------------------------------------------------
 
 
-def _strings(node: ast.AST) -> set[str]:
-    """The texts an expression can be: a literal, both sides of ``a if c else b``, ``"x_" + ...``."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return {node.value}
-    if isinstance(node, ast.IfExp):
-        return _strings(node.body) | _strings(node.orelse)
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return {a + b for a in _strings(node.left) for b in _strings(node.right)}
-    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
-        return set().union(*(_strings(item) for item in node.elts))
-    return set()
-
-
 def _call_name(node: ast.Call) -> str | None:
     func = node.func
     return func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
 
 
 def _logged_kinds() -> dict[str, str]:
-    """Every event kind the code can write to the log, with where: literal ``log_event`` /
-    ``_record`` / ``run.record`` kinds, the kinds a loop logs, ``_change_clients`` events and the
-    reconcile events tow.progress collects."""
-    found: dict[str, str] = {}
-    for path in SRC.rglob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            where = f"{path.name}:{getattr(node, 'lineno', 0)}"
-            kinds: set[str] = set()
-            if isinstance(node, ast.Call) and node.args:
-                name = _call_name(node)
-                if name in ("log_event", "_record", "record"):
-                    kinds = _strings(node.args[0])
-                elif name == "_change_clients" and len(node.args) > 2:
-                    kinds = _strings(node.args[2])
-                elif name == "append" and ast.unparse(node.func) == "events.append":
-                    kinds = _strings(node.args[0])
-            elif isinstance(node, ast.For) and ast.unparse(node.target) in ("kind", "event_kind"):
-                kinds = _strings(node.iter)
-            elif isinstance(node, ast.Assign) and any(ast.unparse(t) == "event_name" for t in node.targets):
-                kinds = _strings(node.value)
-            for kind in kinds:
-                found.setdefault(kind, where)
-    return found
+    """Every event kind the code can write to the log, with where (tests/log_kinds.py, which
+    also follows append_event, record_event, writers passed as values and Undo's restore events;
+    the old scan here missed 12 kinds: 1.33.1 QA-05)."""
+    scanned = scan_logged_kinds()
+    assert scanned.unresolved == []
+    return {kind: where[0] for kind, where in scanned.kinds.items()}
 
 
 def test_the_kind_scanner_sees_the_known_kinds():
@@ -1222,7 +1193,10 @@ def test_the_kind_scanner_sees_the_known_kinds():
         assert kind in kinds
     for kind in ("bot_delivery_succeeded", "settings_client_add", "revision_updated", "client_restored"):
         assert kind in kinds
-    assert len(kinds) > 80
+    # written by append_event, record_event, a writer passed as a value and Undo's restore event
+    for kind in ("protection_failed", "settings_update_result", "settings_access_undo", "settings_portable_restore"):
+        assert kind in kinds
+    assert len(kinds) > 110
 
 
 def test_every_logged_event_kind_has_a_label():
