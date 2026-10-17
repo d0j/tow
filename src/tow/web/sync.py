@@ -56,7 +56,6 @@ from tow import __version__, access, i18n
 from tow.auth import SESSION_COOKIE
 from tow.clock import local_zone, parse_timestamp
 from tow.config import flash_ttl, interval_sec_of
-from tow.records import shown_title
 from tow.store import SecretStoreError
 from tow.web import _context, check_jobs, page_sync, services
 
@@ -68,6 +67,10 @@ REV_HEX = 32  # 128 bits of the SHA-256
 AREAS = ("topics", "jobs", "header", "attention", "timers", "messages", "undo", "config", "version", "release", "page")
 PAGES = ("/", "/sites", "/settings", "/history")
 RING_SIZE = 16
+# History's windows kept for its open filters (each search is a variant of its own): the newest
+# lines drawn once per change for every tab with those filters, bounded in number and size.
+HISTORY_VARIANTS = 32
+HISTORY_BYTES = 16 * 1024 * 1024
 MAX_IDS = 200
 ROWS_BYTE_CAP = 1024 * 1024  # row HTML per /topics/rows answer; the rest is "deferred"
 MAX_HAVE_CHARS = 1024
@@ -392,6 +395,13 @@ class _Memo:
     computed: Computed
 
 
+HISTORY_AREA = "page:/history"
+
+
+def _window_bytes(entries: Any) -> int:
+    return sum(len(entry.get("html") or "") for entry in entries) if isinstance(entries, list) else 0
+
+
 class Areas:
     """The areas' projections and revisions, computed once per change of what they are built
     from (or at their deadline) for every request with the same context."""
@@ -438,7 +448,23 @@ class Areas:
                 self._memo.move_to_end(memo_key)
                 while len(self._memo) > 256:
                     self._memo.popitem(last=False)
+                if name == HISTORY_AREA:
+                    self._bound_history()
             return computed
+
+    def _bound_history(self) -> None:
+        """At most ``HISTORY_VARIANTS`` History windows of at most ``HISTORY_BYTES`` together, the
+        least recently computed going first (its tabs draw it again at their next poll)."""
+        kept = [(memo_key, memo) for memo_key, memo in self._memo.items() if memo_key[0] == HISTORY_AREA]
+        size = sum(_window_bytes(memo.computed.extra) for _, memo in kept)
+        while kept and (len(kept) > HISTORY_VARIANTS or size > HISTORY_BYTES) and len(kept) > 1:
+            memo_key, memo = kept.pop(0)
+            size -= _window_bytes(memo.computed.extra)
+            del self._memo[memo_key]
+
+    def history_variants(self) -> int:
+        with self._lock:
+            return sum(1 for memo_key in self._memo if memo_key[0] == HISTORY_AREA)
 
     def remember_rows(self, ctx: Any, rev: str, rows: dict[str, str]) -> None:
         with self._lock:
@@ -709,8 +735,10 @@ def _page(
     """Sites and Settings: the digests of the fragments the page draws (``page_sync``), drawn from
     this sample for this viewer - a write that changes nothing they show (a routine check's times,
     the supervisor's plan) changes no revision. ``extra``: the fragments themselves, so that
-    ``/page/fragments`` hands out exactly the revision named. History: its log, the names it
-    writes and its filters."""
+    ``/page/fragments`` hands out exactly the revision named. History: the window its filters draw
+    - each line's key and digest, as drawn for this viewer -, read once per change of the log,
+    the state or the config for every tab with those filters; ``extra``: those lines, which
+    ``/page/fragments`` hands out. A routine line no filter shows changes no revision."""
     if page == "/":
         value: Any = {"page": "/"}  # Home: the topics area
         return Computed(value, page_revision(who, page, value), None)
@@ -732,19 +760,23 @@ def _page(
     key = sample.key("log", "config", "state")
 
     def build_history() -> Computed:
-        names = {str(topic.get("id")): shown_title(topic) for topic in sample.state.get("topics") or []}
-        value = {
-            "log": sample.digests.get("log", ""),
-            "names": names,
-            "sites": {
-                str(name): (spec or {}).get("title") if isinstance(spec, Mapping) else None
-                for name, spec in (sample.config.get("trackers") or {}).items()
-            },
-            "day": _today(now),
-        }
-        return Computed(value, page_revision(who, page, value, shown), _next_midnight(now))
+        from tow.log import index_event_titles
 
-    return AREAS_MEMO.get("page:/history", (who.lang, who.local, shown["group"], shown["q"]), key, now, build_history)
+        with sample.seeded():
+            events = services.history_events(
+                group=shown["group"],
+                text=shown["q"],
+                limit=page_sync.HISTORY_LIMIT,
+                title_index=index_event_titles(sample.state.get("topics") or []),
+                lock_live=False,  # a snapshot: the checker appending meanwhile is never waited for
+            )
+            rows = page_sync.history_rows(events, sample.state, sample.config, local=who.local)
+            entries = page_sync.history_entries(page_sync.page_request(request, "/history"), rows)
+        value = {"entries": [[entry["id"], entry["hash"]] for entry in entries]}
+        # A date label ("20:31" today) is another one tomorrow: drawn again at midnight.
+        return Computed(value, page_revision(who, page, value, shown), _next_midnight(now), extra=entries)
+
+    return AREAS_MEMO.get(HISTORY_AREA, (who.lang, who.local, shown["group"], shown["q"]), key, now, build_history)
 
 
 def annotated_page(request: Request, page: str, html: str) -> str:
@@ -775,23 +807,11 @@ def page_fragments(request: Request, page: str) -> dict[str, Any]:
 
 def history_fragments(request: Request, filters: Mapping[str, str]) -> dict[str, Any]:
     """History's newest lines (at most ``page_sync.HISTORY_LIMIT``) as its filters choose them,
-    each with its key and digest, and the revision of the sample they go with. Raises
-    ``Unavailable``."""
-    from tow.log import index_event_titles
-
+    each with its key and digest: exactly the window the revision is the digest of (``_page``).
+    Raises ``Unavailable``."""
     sample = SAMPLER.current()
-    who = viewer(request)
-    computed = _page(sample, who, "/history", time.time(), request, filters)
-    with sample.seeded():
-        events = services.history_events(
-            group=filters["group"],
-            text=filters["q"],
-            limit=page_sync.HISTORY_LIMIT,
-            title_index=index_event_titles(sample.state.get("topics") or []),
-            lock_live=False,  # a snapshot: the checker appending meanwhile is never waited for
-        )
-        rows = page_sync.history_rows(events, sample.state, sample.config, local=who.local)
-        entries = page_sync.history_entries(page_sync.page_request(request, "/history"), rows)
+    computed = _page(sample, viewer(request), "/history", time.time(), request, filters)
+    entries: list[dict[str, str]] = computed.extra
     return {"ok": True, "page": "/history", "rev": computed.rev, "entries": entries, "limit": page_sync.HISTORY_LIMIT}
 
 
