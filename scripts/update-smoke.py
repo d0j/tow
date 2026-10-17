@@ -596,9 +596,33 @@ class Smoke:
         say(f"   moved to {moved}: it answers as {self.version()}")
 
     def check_permissions(self) -> None:
-        problems = _script("permissions-smoke.py", "permissions_smoke").check(self.root)
+        permissions = _script("permissions-smoke.py", "permissions_smoke")
+        problems = permissions.check(self.root)
+        if problems and WINDOWS:
+            self.explain_open_root(permissions)
         expect(not problems, f"the install's permissions: {problems}")
         say("   the root, data/, keys/ and keys/master.key are private")
+
+    def explain_open_root(self, permissions) -> None:
+        """Why TOW could not close the root (Windows): the longest paths below it, and what icacls
+        answers when asked what TOW asks at every start (the root closed for this account,
+        SYSTEM and Administrators, passed on to what it holds)."""
+        base = "\\\\?\\" + str(self.root)
+        lengths = []
+        for current, folders, files in os.walk(base):
+            shown = str(self.root) + current[len(base) :]
+            lengths.extend((len(shown) + 1 + len(name), shown + "\\" + name) for name in (*folders, *files))
+        for length, path in sorted(lengths, reverse=True)[:5]:
+            say(f"   {length} {path}")
+        grants = [f"*{sid}:(OI)(CI)F" for sid in (permissions.user_sid(), "S-1-5-18", "S-1-5-32-544")]
+        done = subprocess.run(
+            ["icacls", str(self.root), "/inheritance:r", "/grant:r", *grants, "/C"],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            check=False,
+        )
+        say(f"   icacls exited {done.returncode}: {(done.stdout + done.stderr).strip()[-1500:]}")
 
     def stop_and_report(self, failed: bool) -> None:
         if (self.root / "app" / "scripts").is_dir() and self.health() is not None:
