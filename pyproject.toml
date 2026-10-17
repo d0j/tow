@@ -1,7 +1,7 @@
 [project]
 name = "tow"
 version = "1.33.0"
-description = "Torrent topic watcher: follows forum tracker topics that replace their torrent in place and hands each new revision to your torrent client."
+description = "Torrent topic watcher: follows topics on torrent sites that replace their .torrent in place and adds every new version to your torrent client."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
