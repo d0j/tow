@@ -1269,7 +1269,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 :is(.client-card, .protection-card) > summary { list-style: none; cursor: pointer; align-items: center; }
 :is(.client-card, .protection-card) > summary::-webkit-details-marker { display: none; }
 .settings-page-compact :is(.client-card, .protection-card):not([open]) > summary { border-bottom: 0; padding-bottom: 0; }
-.client-card > summary h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Its line box holds the glyphs (1.5: 23.5 px for 23): overflow hidden clipped the tail of "q"
+   in WebKit at 20 px. The summary is taller anyway (1.75rem). */
+.client-card > summary h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.5; }
 .card-meta { margin-left: var(--sp-2); color: var(--mut); font-size: 12px; font-weight: 400; }
 /* A connection's order number keeps its label on one line beside the address; the three limits
    share their line. */
