@@ -590,24 +590,26 @@ def _hourly() -> None:
         handle.write("interval_sec: 3600\n")
 
 
-def test_a_week_of_hourly_checks_after_a_manual_one(tmp_path, monkeypatch):
+def test_two_days_of_hourly_checks_after_a_manual_one(tmp_path, monkeypatch):
     # 1.21: the cadence came from health.at_ts when there was no auto_at_ts yet; a manual check
     # first, then a progress pass every 30 minutes moved it, and no scheduled check ever ran.
+    # Two days of minute ticks include two nights' copies: a week of them proved nothing more and
+    # took most of this module's time.
     _hourly()
     clock = Clock()
     world = StateWorld(clock, {"at_ts": int(T0 - 10)}, monkeypatch)  # a manual check, no scheduled one yet
     sup = Supervisor(world.deps(), python="py", home=tmp_path / "logs")
-    week = 7 * 24 * 3600
-    for _ in range(week // 60):
+    days = 2
+    for _ in range(days * 24 * 60):
         sup.tick()
         clock.advance(60)
 
     starts = [child.at - 1000.0 for child in world.checks()]  # monotonic, from the start
-    assert len(starts) == 168
+    assert len(starts) == days * 24
     assert starts[0] == 120  # two minutes after start
     # an hour apart (one tick later when the night copy was running at that moment)
     assert all(3600 <= b - a <= 3660 for a, b in pairwise(starts))
-    assert len([child for child in world.jobs() if "--progress-only" in child.argv]) > 300
+    assert len([child for child in world.jobs() if "--progress-only" in child.argv]) > days * 40
 
 
 def test_checks_start_on_their_plan_not_a_tick_later_each_time(tmp_path, monkeypatch):
