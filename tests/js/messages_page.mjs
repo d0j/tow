@@ -30,9 +30,9 @@ export const fakeServer = (items = []) => {
       cursor: server.items[0]?.cursor || "", revision: `r${server.revision}`,
     };
   };
-  const answer = (status, data, etag = "") => Promise.resolve({
+  const answer = (status, data, etag = "", retryAfter = null) => Promise.resolve({
     status, ok: status >= 200 && status < 300,
-    headers: { get: (name) => (name.toLowerCase() === "etag" ? etag : null) },
+    headers: { get: (name) => ({ etag, "retry-after": retryAfter })[name.toLowerCase()] ?? null },
     json: () => Promise.resolve(data),
   });
   server.change = (mutate) => { mutate(server.items); server.revision += 1; };
@@ -40,7 +40,7 @@ export const fakeServer = (items = []) => {
     const body = options.body ? Object.fromEntries(new URLSearchParams(String(options.body))) : null;
     server.requests.push({ url, method: options.method || "GET", body, headers: options.headers || {} });
     if (server.offline) return Promise.reject(new TypeError("offline"));
-    if (server.fail) return answer(server.fail.status, server.fail.data || {});
+    if (server.fail) return answer(server.fail.status, server.fail.data || {}, "", server.fail.retryAfter ?? null);
     if (url === "/messages.json") {
       const etag = `"r${server.revision}"`;
       if (options.headers?.["If-None-Match"] === etag) return answer(304, null, etag);
@@ -310,6 +310,44 @@ verdict.refreshSaysWhetherTheListIsCurrent = true;
   assert.equal(count(), before + 1);
 }
 verdict.oneRequestForTheListAtOnce = true;
+
+// Too many requests (429, Retry-After): the list is not the server's now (false: sync.js keeps the
+// messages area unapplied), nothing is asked before Retry-After, then the page asks once by itself.
+// A read or clear answered 429 is sent once more after Retry-After; only a second refusal is said.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", subject: "Show A", text: "Check failed", at: 1800000100 }]);
+  const live = page({ storage: memoryStorage(), server });
+  await settle();
+  const gets = () => server.requests.filter((request) => request.url === "/messages.json").length;
+  server.change((list) => list.unshift({ id: "e2", cursor: "c2", kind: "ok", subject: "Show B", text: "New file", at: 1800000200, read: false }));
+  server.fail = { status: 429, data: { ok: false, error: "rate_limited" }, retryAfter: "3" };
+  const before = gets();
+  assert.equal(await live.window.towMessages.refresh(), false);
+  assert.equal(gets(), before + 1);
+  assert.equal(await live.window.towMessages.refresh(), false); // within Retry-After: not asked
+  assert.equal(gets(), before + 1);
+  server.fail = null;
+  live.timers.advance(2900);
+  await settle();
+  assert.equal(gets(), before + 1);
+  live.timers.advance(200);
+  await settle();
+  assert.equal(gets(), before + 2); // asked once by itself
+  assert.deepEqual(live.window.towMessages.shared().items.map((item) => item.id), ["e2", "e1"]);
+  assert.equal(await live.window.towMessages.refresh(), true);
+  // Read: refused once (429), sent again after Retry-After, said nothing.
+  server.fail = { status: 429, data: { ok: false, error: "Too many requests." }, retryAfter: "2" };
+  live.menu.open = true;
+  await settle();
+  server.fail = null;
+  assert.equal(server.requests.filter((request) => request.url === "/messages/read").length, 1);
+  live.timers.advance(2100);
+  await settle();
+  assert.equal(server.requests.filter((request) => request.url === "/messages/read").length, 2);
+  assert.equal(live.$("#msg-host #flash"), null);
+  assert.equal(live.window.towMessages.shared().unread, 0);
+}
+verdict.rateLimitedWaitsForRetryAfter = true;
 
 // The per-tab history of 1.32 and older: removed with one notice, never sent anywhere; a reload
 // says nothing again.
