@@ -15,7 +15,8 @@ What it asserts: the server classifies B's peer as the network - pages go to the
 JSON is refused, a wrong password is refused, each sign-in is its own session (signing one out
 leaves the other), this-computer-only actions are refused - while A's 127.0.0.1 needs no
 password; and an error that names private paths and a link's keys reaches B scrubbed: no path
-and no key on any surface, the paths still shown on this computer, the keys to no one.
+and no key on any surface, while this computer is shown every word of it (Home's rows are, by
+design) - so the planted error is known to be there.
 
 Only the namespaces, the veth pair and processes of the install are touched; everything is
 removed at the end (also after a failure), unless --keep. Standard library only.
@@ -51,7 +52,7 @@ SURFACES = (
     "/log.json",
     "/settings",
 )
-# The planted error: paths this computer may show and keys a link must never show.
+# The planted error: paths and a link's keys - this computer may see them, the network never.
 PATH_MARKERS = ("e01.mkv", "/home/owner-netns")
 KEY_MARKERS = ("SECRETUK", "SECRETPK")
 PLANTED_ERROR = (
@@ -218,8 +219,6 @@ def judge(network: dict[str, Any], local: dict[str, Any]) -> list[str]:
     shown = {marker for seen in (local.get("surfaces") or {}).values() for marker in seen["markers"]}
     if not shown & set(PATH_MARKERS):
         problems.append("this computer is not shown the planted error's paths: the error was not planted")
-    if shown & set(KEY_MARKERS):
-        problems.append(f"a link's keys are shown to this computer: {sorted(shown & set(KEY_MARKERS))}")
     return problems
 
 
@@ -355,7 +354,7 @@ class Smoke:
         problems = judge(network, local)
         expect(not problems, "; ".join(problems))
         say(f"B ({ADDRESS_B}) is the network: sign-in required, sessions of their own, scrubbed texts")
-        say("A's 127.0.0.1 is this computer: no password, the paths shown, no link keys")
+        say("A's 127.0.0.1 is this computer: no password, the error's words shown")
         code, _ = self.in_a("stop")
         expect(code == 0, f"tow stop in {self.stacks.a} exited with {code}")
 

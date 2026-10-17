@@ -259,7 +259,7 @@ def _netns_views():
 
 def test_the_netns_smoke_passes_only_two_views_told_apart():
     """D01: the network sees the sign-in page, its own sessions and no path or key; this computer
-    sees the paths and no key."""
+    sees the planted error."""
     smoke = _script("netns-smoke.py")
     network, local = _netns_views()
     assert smoke.judge(network, local) == []
@@ -281,7 +281,10 @@ def test_the_netns_smoke_passes_only_two_views_told_apart():
     assert any("was not planted" in problem for problem in smoke.judge(network, unplanted))
     _, keys = _netns_views()
     keys["surfaces"]["/"]["markers"] = ["e01.mkv", "SECRETUK"]
-    assert any("keys are shown" in problem for problem in smoke.judge(network, keys))
+    assert smoke.judge(network, keys) == []  # this computer sees every word of a row's error
+    changed, _ = _netns_views()
+    changed["surfaces"]["/log.json"]["markers"] = ["SECRETPK"]
+    assert any("must not" in problem for problem in smoke.judge(changed, local))
 
 
 def test_the_netns_smoke_runs_its_programs_as_this_account_with_a_minimal_environment(monkeypatch):
