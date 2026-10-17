@@ -20,7 +20,7 @@ from tow.config import interval_sec_of, whole_number
 from tow.store_transaction import StoreTransaction
 from tow.web import edit_base, services, settings_merge
 from tow.web.messages import flash_redirect, use_subject
-from tow.web.site_store import save_secrets_with_undo, save_together
+from tow.web.site_store import SIGN_IN_PASSWORD, is_sign_in_password, save_secrets_with_undo, save_together
 from tow.web.text import t
 
 router = APIRouter()
@@ -137,6 +137,8 @@ def settings_client(
 
     _name_client(client_id)
     target = _clients_target(client_id)
+    if is_sign_in_password(password):
+        return flash_redirect(target, SIGN_IN_PASSWORD, "err")
     cfg = services.load_config()
     try:
         configuration = client_configuration(cfg, client_id or None)

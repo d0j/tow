@@ -22,7 +22,7 @@ from tow.trackers import GenericHttpTracker, load_trackers, match_tracker
 from tow.web import check_jobs, services
 from tow.web.check_actions import enqueue_check
 from tow.web.messages import home_redirect
-from tow.web.site_store import restore_unverified_password, save_tracker_login
+from tow.web.site_store import SIGN_IN_PASSWORD, is_sign_in_password, restore_unverified_password, save_tracker_login
 from tow.web.text import t
 from tow.web.views import row_class, topic_check_row
 
@@ -68,6 +68,8 @@ def topics_tracker_login(tid: str, username: str = Form(""), password: str = For
         return home_redirect("web.topics.needs_auth", "warn", credential_topic=tid)
     if not username.strip() or not password.strip():
         return home_redirect("web.topics.enter_login", "warn", credential_topic=tid)
+    if is_sign_in_password(password):
+        return home_redirect(SIGN_IN_PASSWORD, "err", credential_topic=tid)
     try:
         with services.persistence_lock():
             if tracker.name not in (services.load_config().get("trackers") or {}):

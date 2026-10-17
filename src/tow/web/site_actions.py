@@ -34,7 +34,7 @@ from tow.web.site_form import (
     unresolved_note,
     valid_site_name,
 )
-from tow.web.site_store import commit_site_stores, save_together, with_login
+from tow.web.site_store import SIGN_IN_PASSWORD, commit_site_stores, is_sign_in_password, save_together, with_login
 from tow.web.text import t
 from tow.web.views import add_refused_redirect, keep_site_edit
 
@@ -90,6 +90,8 @@ def _refused(form: NewSite, refusal: FieldRefused) -> RedirectResponse:
 def add_site(form: NewSite) -> RedirectResponse:
     """A new site (its mirrors are probed after the answer); for a site that exists, only the
     login typed with it is saved (the caller holds the persistence lock)."""
+    if is_sign_in_password(form.password):
+        return _refused(form, FieldRefused(t(SIGN_IN_PASSWORD), "password"))
     try:
         guessed = _guessed(form.from_url)
         try:
@@ -191,6 +193,8 @@ def edit_site(
     spec = trackers.get(name)
     if not isinstance(spec, dict):
         return flash_redirect("/sites", "web.sites.no_site", "err")
+    if not form.browser_sign_in() and is_sign_in_password(form.password):
+        return _edit_refused(name, form, SIGN_IN_PASSWORD, field="password", base_raw=base_raw)
     now = _site_now(name, spec)
     base = edit_base.read(site_merge.SITE, name, base_raw, now)
     if base is None:

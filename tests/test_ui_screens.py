@@ -80,7 +80,7 @@ def test_the_sign_in_dialog_names_the_site_and_says_where_the_password_goes(clie
     assert dialog.select_one("p.sub").get_text() == "Сериал А"
     assert "Введите логин и пароль" not in dialog.get_text()
     password = dialog.select_one('input[name="password"]')
-    assert (password["type"], password["autocomplete"]) == ("password", "current-password")
+    assert (password["type"], password["autocomplete"]) == ("password", "new-password")  # never TOW's (QA-01)
     eye = password.find_parent(class_="secret").select_one("button.reveal")
     assert (eye["type"], eye["data-reveal"], eye["aria-controls"]) == ("button", password["id"], password["id"])
     assert eye["aria-pressed"] == "false"
@@ -228,16 +228,17 @@ def test_a_new_sign_in_address_with_browser_sign_in_forgets_the_saved_password(c
     assert "Сохранённый пароль удалён" in page.select_one("#flash").get_text()
 
 
-def test_site_credentials_are_disabled_with_browser_sign_in_and_autofilled_per_site(client):
-    """The fields a chosen browser sign-in hides are disabled with it (app.js, data-enabled-by),
-    and each site's login is its own autofill section: a password manager keeps one per card."""
+def test_site_credentials_are_disabled_with_browser_sign_in_and_never_autofilled(client):
+    """The fields a chosen browser sign-in hides are disabled with it (app.js, data-enabled-by).
+    A site's password asks for a new one and its user name is not a login: a browser filled the
+    saved TOW sign-in into them (1.33.1 QA-01)."""
     page = BeautifulSoup(client.get("/sites?open=rutor").text, "html.parser")
     group = page.select_one("#ed-site-rutor .password-group")
     assert (group["data-enabled-by"], group["data-enabled-when"]) == ("site-browser-rutor", "unchecked")
-    assert page.select_one("#site-user-rutor")["autocomplete"] == "section-site-rutor username"
-    assert page.select_one("#site-pass-rutor")["autocomplete"] == "section-site-rutor current-password"
-    assert page.select_one("#site-user")["autocomplete"] == "section-new-site username"
-    assert page.select_one("#site-pass")["autocomplete"] == "section-new-site current-password"
+    assert page.select_one("#site-user-rutor")["autocomplete"] == "off"
+    assert page.select_one("#site-pass-rutor")["autocomplete"] == "new-password"
+    assert page.select_one("#site-user")["autocomplete"] == "off"
+    assert page.select_one("#site-pass")["autocomplete"] == "new-password"
 
 
 def test_a_sign_in_target_on_a_site_without_a_sign_in_page_opens_advanced(client):

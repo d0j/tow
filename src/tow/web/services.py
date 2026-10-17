@@ -25,7 +25,7 @@ from threading import BoundedSemaphore
 from typing import Any
 
 from tow.access import credential as network_credential
-from tow.access import set_session_cookie, sign_out, sign_out_everywhere
+from tow.access import is_sign_in_secret, set_session_cookie, sign_out, sign_out_everywhere
 from tow.adopt import adopt_topic
 from tow.browser_auth import browser_auth
 from tow.check import (
@@ -193,6 +193,7 @@ __all__ = [
     "guess_topic_title",
     "history_events",
     "install_id",
+    "is_sign_in_secret",
     "list_restore_points",
     "list_snapshots",
     "load_config",

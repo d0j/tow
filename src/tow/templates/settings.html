@@ -99,7 +99,7 @@
                   {% if 'username' in c.fields %}
                   <div class="field">
                     <label for="q_user-{{ c.form_id }}">{{ c.labels.username }}</label>
-                    <input id="q_user-{{ c.form_id }}" name="username" value="{{ cd.get('username', c.user) }}" class="w-m" autocomplete="section-{{ c.form_id }} username" autocapitalize="off" spellcheck="false">
+                    <input id="q_user-{{ c.form_id }}" name="username" value="{{ cd.get('username', c.user) }}" class="w-m" autocomplete="off" autocapitalize="off" spellcheck="false">
                   </div>
                   {% endif %}
                   <div class="field">
@@ -107,7 +107,7 @@
                         (never TOW's own password, never a "new" one to generate). "Saved" only
                         when a password is saved: there is nothing to keep otherwise. #}
                     <label for="q_pass-{{ c.form_id }}">{{ c.labels.password }}{% if c.pass_set %}{{ saved_hint('q_pass-' ~ c.form_id ~ '-saved') }}{% endif %}</label>
-                    <span class="secret"><input id="q_pass-{{ c.form_id }}" name="password" type="password" class="w-m" autocomplete="section-{{ c.form_id }} current-password"{% if c.pass_set %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="q_pass-{{ c.form_id }}-saved client-keep-{{ c.form_id }}"{% endif %}>{{ reveal('q_pass-' ~ c.form_id, c.labels.password) }}</span>
+                    <span class="secret"><input id="q_pass-{{ c.form_id }}" name="password" type="password" class="w-m" autocomplete="new-password"{% if c.pass_set %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="q_pass-{{ c.form_id }}-saved client-keep-{{ c.form_id }}"{% endif %}>{{ reveal('q_pass-' ~ c.form_id, c.labels.password) }}</span>
                   </div>
                 </div>
                 {% if c.pass_set %}{{ keep_note('client-keep-' ~ c.form_id) }}{% endif %}
@@ -234,7 +234,7 @@
                   <label for="{{ field_id }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %}{% if f.kind == 'secret' and f.saved %}{{ saved_hint(field_id ~ '-saved') }}{% endif %}</label>
                   {% if f.kind == 'secret' %}
                   {#- A token, a webhook or a key: not a password to remember or to generate. #}
-                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password" class="w-{{ f.width }}" value="{{ f.suggestion }}"{% if f.suggestion %} data-sync-volatile{% endif %}{% if f.saved %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="{{ field_id }}-saved {{ keep_id }}"{% elif example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">{{ reveal(field_id, f.label) }}</span>
+                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password" class="w-{{ f.width }}" value="{{ f.suggestion }}"{% if f.suggestion %} data-sync-volatile{% endif %}{% if f.saved %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="{{ field_id }}-saved {{ keep_id }}"{% elif example %} placeholder="{{ example }}"{% endif %} autocomplete="new-password" spellcheck="false" autocapitalize="off" autocorrect="off">{{ reveal(field_id, f.label) }}</span>
                   {% else %}
                   <input id="{{ field_id }}" name="{{ f.name }}" class="w-{{ f.width }}" value="{{ nd.get(f.name, f.value or f.suggestion) }}"{% if f.suggestion and not f.value %} data-sync-volatile{% endif %}{% if example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
                   {% endif %}

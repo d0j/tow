@@ -14,7 +14,7 @@ from tow.config import as_bool, interval_sec_of
 from tow.web import edit_base, services, settings_merge
 from tow.web.messages import flash_redirect
 from tow.web.site_form import internal_host, unresolved_note
-from tow.web.site_store import save_secrets_with_undo
+from tow.web.site_store import SIGN_IN_PASSWORD, is_sign_in_password, save_secrets_with_undo
 from tow.web.text import t
 
 router = APIRouter()
@@ -81,11 +81,13 @@ def _save_notifier(kind: str, form: dict[str, str]) -> RedirectResponse:
 
     if kind not in notifiers.kinds():
         return _unknown_notifier()
+    spec = settings_merge.notifier_spec(kind)
+    if is_sign_in_password(*(str(form.get(name) or "") for name in sorted(spec.secret))):
+        return _notifier_redirect(t(SIGN_IN_PASSWORD), kind, "err")
     s = services.load_secrets()
     title = notifiers.kinds()[kind].TITLE
     # The card's fields are one group (a token belongs to its chat): changed here and on another
     # device since the card was rendered is a conflict; unchanged here keeps what is saved now.
-    spec = settings_merge.notifier_spec(kind)
     now = settings_merge.notifier_now(kind, s)
     got = edit_base.read(spec, kind, form.get("base", ""), now)
     if got is None:
