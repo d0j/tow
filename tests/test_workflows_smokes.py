@@ -230,3 +230,25 @@ def test_real_runs_qbittorrent_on_windows_with_cyrillic_windows_paths_and_the_na
     assert "tests/integration/test_real_probes.py" in _runs(probes)
     # The variables that let real-system tests through the guard stay in real.yml / autostart.yml.
     assert "TOW_REAL_" not in _flow("smokes")[0]
+
+
+def test_real_records_the_client_spellings_of_reserved_names_and_checks_tows_keys():
+    """B36: on Linux (qBittorrent, Transmission) and Windows (qBittorrent) the spellings are
+    recorded as an artifact, then TOW's keys are checked against that record; both run (and the
+    record is kept) also when an earlier client test failed."""
+    _text, flow = _flow("real")
+    for job_id, artifact in (("clients", "client-names-linux"), ("clients-windows", "client-names-windows")):
+        steps = flow["jobs"][job_id]["steps"]
+        record = next(i for i, step in enumerate(steps) if "-k test_record_the_spellings" in step.get("run", ""))
+        keys = next(i for i, step in enumerate(steps) if "-k test_tow_keys_agree" in step.get("run", ""))
+        upload = next(i for i, step in enumerate(steps) if step.get("with", {}).get("name") == artifact)
+        assert record < keys < upload, job_id
+        folder = "${{ runner.temp }}/client-names"
+        assert steps[record]["env"] == {"TOW_REAL_CLIENT_NAMES_OUT": folder}, job_id
+        assert steps[keys]["env"] == {"TOW_REAL_CLIENT_NAMES": "1", "TOW_REAL_CLIENT_NAMES_DIR": folder}, job_id
+        assert steps[record]["if"] == steps[keys]["if"] == "${{ !cancelled() }}", job_id
+        assert steps[upload]["if"] == "always()", job_id
+        assert steps[upload]["with"]["path"] == folder, job_id
+        assert "tests/integration/test_real_client_names.py" in steps[record]["run"], job_id
+        assert all(steps[i]["timeout-minutes"] <= 15 for i in (record, keys)), job_id
+    assert "TOW_REAL_TRANSMISSION" in flow["jobs"]["clients"]["env"]
