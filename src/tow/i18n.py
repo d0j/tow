@@ -10,6 +10,8 @@
 - Adding a language = copying ``en.json`` to ``<code>.json`` and translating it; nothing else.
   A regional variant is ``pt-BR.json`` (any case: ``pt-br`` in config.yaml finds it).
 - A damaged language file never breaks TOW: it is skipped with a warning (English: the keys show).
+  A file that cannot be read for a moment (held by an antivirus, half written) is read again a few
+  seconds later; a file read once stays as it was read until ``reload()``.
 - Code and templates never hold user-facing text, only keys: ``t("home.add.title")``,
   ``t("settings.clients.count", n=3)`` for plurals, ``t("x.y", name=title)`` for values.
 - A plugin (a messenger, a torrent client) keeps its texts under its own section
@@ -27,6 +29,8 @@ import json
 import logging
 import math
 import re
+import threading
+import time
 from collections.abc import Callable
 from contextvars import ContextVar
 from datetime import datetime
@@ -143,17 +147,76 @@ def _files() -> dict[str, Path]:
     return found
 
 
-@functools.cache
-def _read(code: str) -> tuple[dict[str, Any], dict[str, Any], bool]:
+_Catalog = tuple[dict[str, Any], dict[str, Any], bool]
+_UNUSABLE: _Catalog = ({}, {}, False)
+# A file that could not be read (held by an antivirus or another program, or half written) is
+# read again on the first lookup RETRY_SEC after the failed try, never more often: a file that
+# stays broken costs one read per window, not one per text. A file read once stays as it was read.
+RETRY_SEC = 5.0
+_clock = time.monotonic
+_KEPT: dict[str, _Catalog] = {}
+_UNREAD: dict[str, tuple[float, str]] = {}  # code -> (when it was tried, why it failed)
+_READING = threading.Lock()
+
+
+def _read(code: str) -> _Catalog:
     """(flat texts, meta, usable) of one language file; a damaged file is (``{}``, ``{}``, False)."""
-    path = _files().get(code.lower())
+    code = code.lower()
+    kept = _KEPT.get(code)
+    if kept is not None:
+        return kept
+    unread = _UNREAD.get(code)
+    if unread is not None and _clock() - unread[0] < RETRY_SEC:
+        return _UNUSABLE
+    # Read without the lock, as functools.cache computes: two threads may both read a file once.
+    catalog, failure = _read_file(code, told=unread[1] if unread else None)
+    with _READING:
+        if failure is None:
+            catalog = _KEPT.setdefault(code, catalog)
+            _UNREAD.pop(code, None)
+        else:
+            _UNREAD[code] = (_clock(), failure)
+    if unread is not None and failure is None:
+        _read_again()
+    return catalog
+
+
+def _read_again() -> None:
+    """A file that failed before was read now: what was built without it is built again."""
+    _VERSION[0] += 1
+    _available.cache_clear()
+    _lookup.cache_clear()
+    _prefixed.cache_clear()
+
+
+def _retry_due() -> None:
+    """Try the files that could not be read, once their window is over (nothing to do normally)."""
+    if not _UNREAD:
+        return
+    now = _clock()
+    for code, (tried, _why) in list(_UNREAD.items()):
+        if now - tried >= RETRY_SEC:
+            _read(code)
+
+
+def _read_file(code: str, *, told: str | None) -> tuple[_Catalog, str | None]:
+    """(catalog, why it could not be read now or None). A missing or damaged file is a catalog
+    (unusable, kept); only a read that failed - the file held or half written - is tried again.
+    The warning of a failed read is said once, not at every try."""
+    path = _files().get(code)
     if path is None:
-        return {}, {}, False
+        return _UNUSABLE, None
     try:
         tree = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError) as exc:
-        _LOG.warning("language file %s cannot be read, skipped: %s", path.name, type(exc).__name__)
-        return {}, {}, False
+        why = type(exc).__name__
+        if why != told:
+            _LOG.warning("language file %s cannot be read, skipped: %s", path.name, why)
+        return _UNUSABLE, why
+    return _parsed(path, tree), None
+
+
+def _parsed(path: Path, tree: Any) -> _Catalog:
     if not isinstance(tree, dict):
         _LOG.warning("language file %s is not a JSON object, skipped", path.name)
         return {}, {}, False
@@ -168,7 +231,7 @@ def _read(code: str) -> tuple[dict[str, Any], dict[str, Any], bool]:
 
 def _load(code: str) -> tuple[dict[str, Any], dict[str, Any]]:
     """(flat texts, meta) of one language: everything of a language lives in one file."""
-    texts, meta, _usable = _read(canonical(code) or code)
+    texts, meta, _usable = _read(canonical(code) or code)  # canonical() tries unread files again
     return texts, meta
 
 
@@ -184,18 +247,25 @@ def reload() -> None:
     """Forget loaded catalogs (tests, or after editing a language file)."""
     _VERSION[0] += 1
     _files.cache_clear()
-    _read.cache_clear()
-    available.cache_clear()
+    with _READING:
+        _KEPT.clear()
+        _UNREAD.clear()
+    _available.cache_clear()
     _lookup.cache_clear()
     _prefixed.cache_clear()
 
 
-@functools.cache
 def available() -> tuple[tuple[str, str, str], ...]:
     """(code, English name, native name) of every usable language, English first.
 
     English is always there: with its file damaged, TOW shows the keys rather than nothing.
     """
+    _retry_due()
+    return _available()
+
+
+@functools.cache
+def _available() -> tuple[tuple[str, str, str], ...]:
     found = []
     for path in _files().values():
         _texts, meta, usable = _read(path.stem.lower())
@@ -217,6 +287,7 @@ def _lookup() -> dict[str, str]:
 
 def canonical(code: str | None) -> str | None:
     """The code as its file spells it (``PT-br`` -> ``pt-BR``), or None when there is no such language."""
+    _retry_due()
     return _lookup().get(str(code or "").strip().lower())
 
 

@@ -637,6 +637,94 @@ def test_damaged_english_shows_the_keys_and_never_crashes(locales):
     assert TestClient(app).get("/settings").status_code == 200
 
 
+class _Clock:
+    """i18n's monotonic clock, moved by hand."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+def _deny_catalog_reads(patch, locales, opened: list[str]):
+    """Every read of a file in ``locales`` fails, as while an antivirus holds it; ``opened`` counts the tries."""
+    real_open = Path.open
+
+    def held(self, *args, **kwargs):
+        if self.parent == locales:
+            opened.append(self.name)
+            raise PermissionError("held by another program")
+        return real_open(self, *args, **kwargs)
+
+    patch.setattr(Path, "open", held)
+
+
+def test_a_catalog_that_could_not_be_read_for_a_moment_is_read_again(locales, monkeypatch, caplog):
+    """Before: the first read failed (an antivirus held the files at start) and the empty result
+    stayed cached: keys and English only, until TOW restarted."""
+    clock = _Clock()
+    monkeypatch.setattr(i18n, "_clock", clock)
+    opened: list[str] = []
+    with monkeypatch.context() as held:
+        _deny_catalog_reads(held, locales, opened)
+        assert i18n.translate("common.save", "ru") == "common.save"
+        assert i18n.translate("common.save", "en") == "common.save"
+        assert i18n.canonical("ru") is None
+        tries = len(opened)
+        assert tries
+        for _ in range(50):  # within the window: no disk read per text
+            i18n.translate("common.save", "ru")
+        assert len(opened) == tries
+    assert "ru.json" in caplog.text
+    version = i18n.version()
+    clock.now += i18n.RETRY_SEC - 0.1
+    assert i18n.translate("common.save", "ru") == "common.save"  # not yet
+    clock.now += 0.2
+    assert i18n.translate("common.save", "ru") == "Сохранить"  # no reload()
+    assert i18n.translate("common.save", "en") == "Save"
+    assert i18n.canonical("RU") == "ru"
+    assert i18n.codes() == ["en", "ru"]
+    assert i18n.version() != version  # caches built from texts (the page scripts' texts) are rebuilt
+    assert i18n.texts_with_prefix("js.confirm.", "ru")["js.confirm.cancel"] != "js.confirm.cancel"
+
+
+def test_a_catalog_read_once_is_kept_and_a_broken_one_warns_once(locales, monkeypatch, caplog):
+    clock = _Clock()
+    monkeypatch.setattr(i18n, "_clock", clock)
+    assert i18n.translate("common.save", "ru") == "Сохранить"
+    opened: list[str] = []
+    with monkeypatch.context() as held:
+        _deny_catalog_reads(held, locales, opened)
+        clock.now += 10 * i18n.RETRY_SEC
+        assert i18n.translate("common.save", "ru") == "Сохранить"  # read once: kept, never read again
+    assert opened == []
+    (locales / "de.json").write_text('{"_meta": {"name": "German"}, "common": {', encoding="utf-8")  # cut off
+    i18n.reload()
+    caplog.clear()
+    for _ in range(3):
+        clock.now += 2 * i18n.RETRY_SEC
+        assert i18n.translate("common.save", "de") == "Save"
+    assert caplog.text.count("de.json") == 1  # tried again, said once
+    (locales / "de.json").write_text(
+        json.dumps({"_meta": {"name": "German"}, "common": {"save": "Speichern"}}), encoding="utf-8"
+    )  # written to its end
+    clock.now += 2 * i18n.RETRY_SEC
+    assert i18n.translate("common.save", "de") == "Speichern"
+    assert "de" in i18n.codes()
+
+
+def test_a_missing_language_stays_absent(locales, monkeypatch):
+    clock = _Clock()
+    monkeypatch.setattr(i18n, "_clock", clock)
+    assert i18n.canonical("xx") is None
+    (locales / "xx.json").write_text(json.dumps({"_meta": {"name": "X"}}), encoding="utf-8")
+    clock.now += 10 * i18n.RETRY_SEC
+    assert i18n.canonical("xx") is None  # a new file is found by reload(), as before
+    i18n.reload()
+    assert i18n.canonical("xx") == "xx"
+
+
 def test_meta_gaps_fall_back_with_a_warning(locales, caplog):
     (locales / "de.json").write_text(
         json.dumps({"_meta": {"name": "German", "plural": "celtic"}, "common": {"save": "Speichern"}}),
