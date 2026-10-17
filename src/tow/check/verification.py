@@ -633,11 +633,14 @@ def _finished(
     row.pop("skipped", None)
     for key in ("error", "error_record", "error_class"):
         row.pop(key, None)
+    # The kind comes from state.json: only the one TOW writes there is taken (an edited or foreign
+    # state never puts its own string into the log as a kind).
     run.record(
-        str(
-            waiting.get("completion_event")
-            or ("client_selection_updated" if waiting.get("selection_update") else "client_added")
-        ),
+        "client_started"
+        if waiting.get("completion_event") == "client_started"
+        else "client_selection_updated"
+        if waiting.get("selection_update")
+        else "client_added",
         operation_id=new_operation_id("client-confirm"),
         component="client",
         integration_id=client_id,

@@ -1433,6 +1433,24 @@ def test_successful_manual_repair_preserves_the_original_added_notification(worl
     assert "verification_pending" not in load_state()["topics"][0]
 
 
+def test_a_completion_event_read_from_the_state_is_only_a_known_kind(world):
+    """The log kind of a confirmed add comes from state.json: an edited or foreign state could put
+    any string into the log as a kind. Only "client_started" is taken; anything else is the
+    default (1.33.1 QA-06)."""
+    from tow.log import read_events
+
+    client, _tracker, _sent = world
+    _run()
+    disk = load_state()
+    disk["topics"][0]["verification_pending"]["completion_event"] = "forged_kind"
+    save_state(disk)
+    client.torrents[H].update(state="downloading", progress=0.4)
+    assert _run(space_only=True)["added"]
+    kinds = [event.get("kind") for event in read_events()]
+    assert "forged_kind" not in kinds
+    assert "client_added" in kinds
+
+
 def test_redeferred_manual_repair_retains_space_recovery_intent(world):
     client, _tracker, _sent = world
     _run()
