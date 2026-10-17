@@ -76,6 +76,14 @@ def test_a_running_update_is_followed_every_two_seconds_only_while_seen_and_read
     )
 
 
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_page_not_reloaded_after_an_update_says_to_reload_not_that_it_is_the_latest():
+    # 1.33.1 QA O-2: "You have the latest version" beside "Reload the page" on a 1.33.0 page.
+    verdict = _verdict("update_status_page_version.mjs")
+    assert verdict == dict.fromkeys(("oldPageSaysReload", "currentPageUnchanged", "otherAnswersUnchanged"), True)
+
+
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_update_notice_and_disabled_check_status():

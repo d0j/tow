@@ -135,8 +135,13 @@
       notes.href = data.url;
     }
     if (status) {
+      // "The latest version" is the server's; a page drawn by an older TOW (not reloaded after an
+      // update) says to reload it instead, as the card beside it does.
+      const running = /^\d+\.\d+\.\d+$/.test(data.current || "") ? data.current : "";
+      const stale = Boolean(running && /^\d+\.\d+\.\d+$/.test(pageVersion) && pageVersion !== running);
+      const latestWords = stale ? t("js.releases.reload_to_use", { version: running }) : t("js.releases.current");
       let said = available ? t("js.releases.available", { version: data.latest }) :
-        (data.ok ? t(data.comparable === false ? "js.releases.unknown_build" : "js.releases.current") : t("js.releases.unavailable"));
+        (data.ok ? (data.comparable === false ? t("js.releases.unknown_build") : latestWords) : t("js.releases.unavailable"));
       if (available && !data.ok) said += " · " + t("js.releases.stale");
       let pieces = [said, ...stamps([stamp(data.checked_at, "js.releases.checked", data.checked_at_label, data.checked_at_time)])];
       // U1: automatic checks off and nothing ever checked - the unticked box above says it all; a
