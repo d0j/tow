@@ -5,6 +5,7 @@ import math
 import os
 import re
 import threading
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,7 @@ import yaml
 
 from tow.errors import TowError
 from tow.paths import config_path
-from tow.store import atomic_write_text, persistence_lock
+from tow.store import atomic_write_text
 from tow.yaml_guard import SAFE_LOADER, YamlLimitError, validate_graph
 from tow.yaml_guard import dump as dump_yaml
 from tow.yaml_guard import load as load_yaml
@@ -50,17 +51,24 @@ def _file_key(path: Path) -> tuple[str, int, int, int]:
     return (str(path), stat.st_mtime_ns, stat.st_size, stat.st_ino)
 
 
+# Windows refuses to open config.yaml for the instant a save replaces it (a sharing violation, or
+# the old file waiting to be deleted). A read tries again after these pauses (0.4 s in all), then
+# says what it met: a file this account cannot read stays refused.
+_BUSY_READ_PAUSES = (0.01, 0.03, 0.06, 0.1, 0.2)
+
+
 def _config_text(path: Path) -> str:
-    """config.yaml as text: a file saved in another encoding (Notepad's "ANSI") is named so."""
+    """config.yaml as text: a file saved in another encoding (Notepad's "ANSI") is named so.
+
+    Only reads: no lock is taken (the persistence lock runs the recovery steps, which a dry run
+    or a page's poll must never do), so a busy file is read again after a short pause instead."""
     try:
-        try:
-            return read_yaml_text(path)
-        except PermissionError:
-            # Windows refuses to open the file while a save replaces it; a save holds the
-            # persistence lock through its replace, so under the lock it is whole again. A file
-            # this account cannot read stays refused.
-            with persistence_lock():
+        for pause in _BUSY_READ_PAUSES:
+            try:
                 return read_yaml_text(path)
+            except PermissionError:
+                time.sleep(pause)
+        return read_yaml_text(path)
     except UnicodeDecodeError as exc:
         raise ConfigError("config_error.encoding") from exc
 

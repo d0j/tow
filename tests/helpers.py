@@ -208,3 +208,50 @@ def wait_for_check_job(client: Any, job: str, *, timeout: float = 10.0) -> dict[
         if time.monotonic() > deadline:
             raise AssertionError(f"background check {job} still running after {timeout} s")
         time.sleep(0.02)
+
+
+_RECOVERED: list[str] = []
+
+
+def _record_recovery() -> None:
+    _RECOVERED.append("recovery")
+
+
+@contextmanager
+def read_only_under_a_busy_config(monkeypatch: Any, *, busy_reads: int = 1) -> Iterator[list[str]]:
+    """config.yaml refuses its first ``busy_reads`` opens (Windows, while a save replaces it), and a
+    restore's recovery waits (its marker is in the data folder). The body must only read: on exit
+    the persistence lock file was never opened (it is gone before, and opening it makes it) and the
+    recovery never ran. Yields the reads made of config.yaml."""
+    import pathlib
+
+    from tow import config
+    from tow.paths import data_dir
+    from tow.storage import locks
+
+    marker = data_dir() / ".tow-night-restore.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("{}", encoding="utf-8")
+    lock_file = data_dir() / locks._LOCK_FILE_NAME
+    lock_file.unlink(missing_ok=True)
+    recovered = _RECOVERED
+    recovered.clear()
+    # Every recovery step (kept with its marker) only records that it ran.
+    steps = tuple((__name__, "_record_recovery", gate) for _module, _name, gate in locks.RECOVERY_STEPS)
+    monkeypatch.setattr(locks, "RECOVERY_STEPS", steps)
+    monkeypatch.setattr(config, "_cache", None)
+    monkeypatch.setattr(config, "_validated_cache", None)
+    reads: list[str] = []
+    real_read = config.read_yaml_text
+
+    def read(target: pathlib.Path) -> str:
+        reads.append(str(target))
+        if len(reads) <= busy_reads:
+            raise PermissionError(13, "The process cannot access the file", str(target))
+        return real_read(target)
+
+    monkeypatch.setattr(config, "read_yaml_text", read)
+    yield reads
+    assert not lock_file.exists(), "a read opened the persistence lock for writing"
+    assert recovered == [], "a read ran the recovery"
+    assert marker.exists()
