@@ -1073,26 +1073,39 @@ class Feed:
         """Read (or clear) everything up to the displayed entry ``cursor`` names, for every device:
         an atomic read-modify-write of data/ui.json under its own lock. Markers only move
         forward in append order; an event appended after the displayed one stays unread and
-        uncleared. MarkerRefused for a cursor that is not displayed (or while the log's files
-        keep moving); OSError when the markers cannot be saved."""
+        uncleared.
+
+        The log is read again under the lock, after every marker saved so far: a marker another
+        device saved meanwhile - perhaps in a file a rotation brought in since this page's list
+        - is ranked in that newer window, never taken for an older one. A saved marker the
+        window cannot place while a log file could not be read may be newer: the request is
+        refused, never a guess.
+
+        MarkerRefused for a cursor that is not displayed now, while the log's files keep moving
+        or for a saved marker that cannot be proven older; OSError when the markers cannot be
+        saved."""
         pos = decode_cursor(cursor)
-        if not self._build():
-            raise MarkerRefused(cursor)
-        snapshot = self._snapshot
-        assert snapshot is not None
-        displayed = {entry["pos"] for entry in snapshot.projection.entries}
-        if pos is None or pos not in displayed:
+        if pos is None:
             raise MarkerRefused(cursor)
         with ui_state_lock():
-            current = load_markers()
+            if not self._build():
+                raise MarkerRefused(cursor)
+            snapshot = self._snapshot
+            assert snapshot is not None
             window = snapshot.window
             target = window.rank(pos)
-            if target is None:
+            if target is None or pos not in {entry["pos"] for entry in snapshot.projection.entries}:
                 raise MarkerRefused(cursor)
+            current = load_markers()
 
             def forward(old: Pos | None) -> Pos:
+                if old is None:
+                    return pos
                 rank = window.rank(old)
-                return old if old is not None and rank is not None and rank >= target else pos
+                if rank is None and not window.readable:
+                    raise MarkerRefused(cursor)  # perhaps in the file that could not be read
+                # None: its log is gone (replaced) - the window read now is newer than it.
+                return old if rank is not None and rank >= target else pos
 
             read = forward(current.read)
             cleared = forward(current.cleared) if clear else current.cleared
