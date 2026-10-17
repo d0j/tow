@@ -1,5 +1,6 @@
 // The header clock's tooltip names why the last attempt failed in the page's words, never the
-// error class ("Last attempt: error"): from the page first, then from each /health.json answer.
+// error class ("Last attempt: error"): from the page first, then from each answer of the page's poll
+// (sync.js: /sync.json's health).
 // Runs the checked-in app.js with a tiny DOM and fake timers; prints a JSON verdict.
 import { createRequire } from "node:module";
 
@@ -35,13 +36,14 @@ const window = {
   location: { assign() {}, origin: "http://127.0.0.1", href: "http://127.0.0.1/" },
   addEventListener() {},
 };
+const polls = [];
+window.towSync = { onPoll: (fn) => polls.push(fn), health: () => answer, now() {} };
 const answer = { ok: true, next_from_ts: (now - 60 * 1000) / 1000, interval_sec: 43200, check_ok: false,
   check_error: "tracker", check_error_text: "сайт недоступен" };
 Object.assign(globalThis, {
   window, document, location: window.location, console, URL, URLSearchParams, FormData: class {},
   setInterval: window.setInterval, setTimeout: window.setTimeout, clearInterval: window.clearInterval,
   Date: { now: () => now },
-  fetch: async () => ({ ok: true, json: async () => answer }),
 });
 require("../../src/tow/static/app.js");
 const fromPage = clock.title;
@@ -60,4 +62,5 @@ const advance = async (ms) => {
   now = end;
 };
 await advance(20 * 1000);
+polls.forEach((fn) => fn(null, true)); // the poll answers
 console.log(JSON.stringify({ fromPage, afterPoll: clock.title }));

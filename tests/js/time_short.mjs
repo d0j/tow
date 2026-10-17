@@ -39,12 +39,15 @@ const load = (lang, zone, extra = [], health = {}) => {
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     localStorage: { getItem: () => null, setItem() {} },
     performance: { now: () => 0 },
-    fetch: (url) => Promise.resolve({ ok: true, json: async () => (String(url) === "/health.json" ? { ok: true, ...health } : {}) }),
+    fetch: () => Promise.resolve({ ok: true, json: async () => ({}) }),
     setTimeout: (fn, ms) => { timers.push(ms); return timers.length; }, clearTimeout() {}, setInterval: () => 0, clearInterval() {},
   };
-  context.window = { ...context, addEventListener() {}, confirm: () => true };
+  const polls = [];
+  // sync.js's poll: each answer hands /health.json's words (tz_now among them) to the page's readers.
+  const towSync = { onPoll: (fn) => polls.push(fn), health: () => ({ ok: true, ...health }), now() {} };
+  context.window = { ...context, towSync, addEventListener() {}, confirm: () => true };
   vm.runInNewContext(source, context);
-  return { document, time: context.window.towTime, timers };
+  return { document, time: context.window.towTime, timers, answer: () => polls.forEach((fn) => fn(null, true)) };
 };
 
 const verdict = {};
@@ -147,14 +150,13 @@ verdict.namedZoneHasEachMomentsOffset = true;
 }
 verdict.withoutTheNameEveryTimeIsWrittenAgainWithItsOwnOffset = true;
 
-// "Today" by TOW's offset now, which changes twice a year: when the tab is shown again the page asks
-// /health.json (its signed-in poll) for it. 18:45 UTC is 21:02 at +02:17, but already the 17th at
+// "Today" by TOW's offset now, which changes twice a year: each answer of the page's poll (sync.js,
+// which asks at once when the tab is shown again) brings it. 18:45 UTC is 21:02 at +02:17, but already the 17th at
 // +06:00: a time of the 16th written "21:00" becomes dated.
 {
   const page = load("en", odd, [["time", { datetime: "2026-10-16T21:00:00+02:17", "data-short": "", title: "x" }, "21:00"]], { tz_now: 360 });
   const node = page.document.root.querySelector("time[data-short]");
-  page.document.dispatch(page.document.body, "visibilitychange");
-  for (let n = 0; n < 8; n++) await new Promise((resolve) => setImmediate(resolve));
+  page.answer();
   assert.equal(node.textContent, "16 Oct, 21:00");
   assert.equal(page.time.short(NOW - 1800000), "00:15"); // its own times now by the new offset
 }

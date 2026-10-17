@@ -1,5 +1,6 @@
-// The header countdown and the personal timers share one /health.json poll.
-// Runs the checked-in app.js with a tiny DOM and fake timers; prints a JSON verdict.
+// The header countdown and the personal timers share one poll: sync.js's, whose every answer hands
+// both what /health.json said; the page asks nothing of its own (no /health.json), also not while a
+// check is overdue. Runs the checked-in app.js with a tiny DOM and fake timers; prints a JSON verdict.
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -38,17 +39,20 @@ const window = {
   location: { assign() {}, origin: "http://127.0.0.1", href: "http://127.0.0.1/" },
   addEventListener() {},
 };
+const polls = [];
+window.towSync = {
+  onPoll: (fn) => polls.push(fn), now() {},
+  health: () => ({
+    ok: true, now_ts: now / 1000, next_from_ts: (now - 13 * 3600 * 1000) / 1000, interval_sec: 43200, check_ok: true,
+    topic_timers: { t1: { state: "scheduled", next_at: now / 1000 + 3600, minutes: 10 } },
+  }),
+};
+const answer = (ok) => polls.forEach((fn) => fn(null, ok));
 Object.assign(globalThis, {
   window, document, location: window.location, URL, URLSearchParams, FormData: class {},
   setInterval: window.setInterval, setTimeout: window.setTimeout, clearInterval: window.clearInterval,
   Date: { now: () => now },
-  fetch: async (url) => {
-    fetches.push({ url: String(url), at: now });
-    return { ok: true, json: async () => ({
-      ok: true, now_ts: now / 1000, next_from_ts: (now - 13 * 3600 * 1000) / 1000, interval_sec: 43200, check_ok: true,
-      topic_timers: { t1: { state: "scheduled", next_at: now / 1000 + 3600, minutes: 10 } },
-    }) };
-  },
+  fetch: async (url) => { fetches.push({ url: String(url), at: now }); return { ok: false, json: async () => ({}) }; },
 });
 require("../../src/tow/static/app.js");
 
@@ -65,19 +69,14 @@ const advance = async (ms) => {
   }
   now = end;
 };
-const polls = () => fetches.filter((f) => f.url.includes("/health.json"));
-const start = now;
-await advance(75 * 1000);
-const firstMinute = polls().map((f) => (f.at - start) / 1000);
+await advance(10 * 60 * 1000); // overdue all along: the page asks nothing itself
+const ownRequests = fetches.length;
+answer(true); // one answer of the page's poll
 const timerUpdated = timerNode.dataset.timerState === "scheduled" && value.textContent === "01:00:00";
-document.hidden = true;
-(listeners.visibilitychange || []).forEach((fn) => fn());
-const beforeHidden = polls().length;
-await advance(10 * 60 * 1000);
-const whileHidden = polls().length - beforeHidden;
-document.hidden = false;
-(listeners.visibilitychange || []).forEach((fn) => fn());
-await new Promise((r) => setImmediate(r));
+const clockShown = clock.textContent;
 // The timer's meaning is its tooltip and hidden words, never an aria-label rewritten each second.
 const timerWords = words.textContent === `${timerNode.title} ` && !("aria-label" in timerNode.attributes);
-console.log(JSON.stringify({ firstMinute, timerUpdated, timerWords, clock: clock.textContent, whileHidden, onShow: polls().length - beforeHidden }));
+answer(false); // a failed answer: no new deadline, the timer is not running as far as the page knows
+await advance(1000);
+const failedStops = timerNode.dataset.timerState === "stopped";
+console.log(JSON.stringify({ readers: polls.length, ownRequests, timerUpdated, timerWords, clock: clockShown, failedStops }));
