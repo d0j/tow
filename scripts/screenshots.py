@@ -6,8 +6,9 @@ dark and light, 1200 px wide at scale 2.
 The install is a new folder in the temp folder (TOW_ROOT), with config.example.yaml, a fresh
 master key and synthetic topics, history and health only - never a real install, never port
 8787. Its update checks are off and the browser reaches nothing but the install, so taking the
-pictures asks no one on the internet. `tow serve` runs on --port and is stopped at the end; the
-folder is removed unless --keep.
+pictures asks no one on the internet. Its own first message (the master key it made) is marked
+read, so the header shows no unread badge. `tow serve` runs on --port and is stopped at the end;
+the folder is removed unless --keep.
 Writes docs/images/home-{en,ru}-{dark,light}.png. Playwright needs a Chromium it already has
 (`playwright install chromium` downloads one); without it the script says so and exits 2.
 """
@@ -199,6 +200,16 @@ def shoot(base: str, out: Path, env: dict[str, str]) -> list[Path]:
                 )
                 page = context.new_page()
                 page.goto(base + "/", wait_until="networkidle")
+                # The install's own first message (its master key made by `tow keys ensure`) is
+                # read: the header shows no unread badge the owner would not see either.
+                page.evaluate(
+                    """async () => {
+                      const feed = await (await fetch('/messages.json', {cache: 'no-store'})).json();
+                      const cursor = feed.items && feed.items.length ? feed.items[0].cursor : '';
+                      if (cursor) await fetch('/messages/read', {method: 'POST', body: new URLSearchParams({cursor})});
+                    }"""
+                )
+                page.reload(wait_until="networkidle")
                 page.add_style_tag(
                     content="*, *::before, *::after { transition: none !important; caret-color: transparent; }"
                 )
