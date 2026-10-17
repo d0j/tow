@@ -30,6 +30,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   a link's secret query to a device on the network, as everywhere else; and no device, this computer included, is
   shown the credentials in a link of such an error. Your configured folders still show as before.
 
+### Added
+
+- `config.yaml` can set how often open pages may ask TOW what changed: `web: {rate_burst: 40, rate_per_sec: 4}`
+  (each tab of this computer and each signed-in device on its own). A wrong value is named when TOW starts.
+
 ## [1.33.0] — 2026-10-17
 
 ### Changed

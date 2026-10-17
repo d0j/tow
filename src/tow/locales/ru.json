@@ -161,6 +161,8 @@
     "syntax": "Не удаётся прочитать config.yaml: ошибка в записи YAML в строке {line}, позиция {column}.",
     "encoding": "Не удаётся прочитать config.yaml: файл сохранён не в кодировке UTF-8. Откройте его в текстовом редакторе и сохраните в UTF-8 (в Блокноте: «Сохранить как», «Кодировка: UTF-8»).",
     "whole_number": "config.yaml: {key} должно быть целым числом от {low} до {high}",
+    "number": "config.yaml: {key} должно быть числом от {low} до {high}",
+    "web": "config.yaml: в web допустимы только rate_burst и rate_per_sec",
     "true_false": "config.yaml: {key} должно быть true или false",
     "folder_list": "config.yaml: {key} должно быть списком папок",
     "folder": "config.yaml: {key} должно быть путём к папке",

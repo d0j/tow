@@ -23,6 +23,12 @@
 bind: 127.0.0.1
 allow_lan: false
 port: 8787
+# How often each open page may ask TOW what changed (every tab of this PC and every signed-in
+# device on its own): a burst of rate_burst requests (10..1000), refilled at rate_per_sec a second
+# (0.5..50). Raise them only if a large Home or many open tabs are told to wait.
+# web:
+#   rate_burst: 40
+#   rate_per_sec: 4
 # How long a message after an action ("Saved") and its Undo stay, seconds. Settings offers 1..30
 # minutes; this file accepts 1..86400, and TOW uses at least 15 and at most 3600.
 flash_ttl_sec: 60

@@ -485,3 +485,40 @@ def test_the_example_config_states_when_release_discovery_runs():
     assert releases.CHECK_INTERVAL == 12 * 3600
     assert releases.FAILURE_INTERVAL == 3600
     assert "at most once per 12 hours, an hour after a failed one" in text
+
+
+@pytest.mark.parametrize(
+    ("web", "code", "key"),
+    [
+        ("web: 5", "config_error.web", None),
+        ("web: {rate: 3}", "config_error.web", None),
+        ("web: {rate_burst: 9}", "config_error.whole_number", "web.rate_burst"),
+        ("web: {rate_burst: 1001}", "config_error.whole_number", "web.rate_burst"),
+        ("web: {rate_burst: true}", "config_error.whole_number", "web.rate_burst"),
+        ("web: {rate_burst: 12.5}", "config_error.whole_number", "web.rate_burst"),
+        ("web: {rate_per_sec: 0.4}", "config_error.number", "web.rate_per_sec"),
+        ("web: {rate_per_sec: 51}", "config_error.number", "web.rate_per_sec"),
+        ("web: {rate_per_sec: .nan}", "config_error.number", "web.rate_per_sec"),
+        ("web: {rate_per_sec: .inf}", "config_error.number", "web.rate_per_sec"),
+        ("web: {rate_per_sec: false}", "config_error.number", "web.rate_per_sec"),
+        ("web: {rate_per_sec: fast}", "config_error.number", "web.rate_per_sec"),
+    ],
+)
+def test_the_web_rate_settings_are_checked(web, code, key):
+    """1.33.1 A02: web.rate_burst (a whole number 10..1000) and web.rate_per_sec (a finite number
+    0.5..50) are named when wrong, never taken as something else."""
+    from tow.config import ConfigError
+
+    _write(f"{web}\n")
+    with pytest.raises(ConfigError) as caught:
+        load_config()
+    assert caught.value.code == code
+    if key:
+        assert caught.value.params["key"] == key
+
+
+def test_the_web_rate_settings_are_optional_and_kept():
+    _write("web: {rate_burst: 10, rate_per_sec: 0.5}\n")
+    assert load_config()["web"] == {"rate_burst": 10, "rate_per_sec": 0.5}
+    _write("port: 8790\n")
+    assert "web" not in load_config()

@@ -80,7 +80,8 @@ STORE_LIMIT = 256 * 1024 * 1024
 SMALL_LIMIT = 4 * 1024 * 1024
 RETRY_AFTER_SEC = 2
 # A rate per session (a device on the network) or per tab of this computer: a burst for a Home
-# of 2,000 topics refreshed in ten batches, then a few requests a second.
+# of 2,000 topics refreshed in ten batches, then a few requests a second. config.yaml may set
+# others (``web.rate_burst``, ``web.rate_per_sec``: ``rate_policy``).
 RATE_BURST = 40.0
 RATE_PER_SEC = 4.0
 MAX_BUCKETS = 1024
@@ -161,6 +162,10 @@ class Sampler:
         with self._lock:
             self._sample = None
             self._seen.clear()
+
+    def latest(self) -> Sample | None:
+        """The last sample taken, as it is (no reading, no lock): None before the first."""
+        return self._sample
 
     def _fresh(self, sample: Sample | None) -> bool:
         return (
@@ -1054,22 +1059,48 @@ def rate_key(request: Request) -> str:
     return "local:" + (tab if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", tab) else "")
 
 
-def take_token(key: str, *, now: float | None = None) -> float:
-    """0 when the request may go on, else the seconds until it may (a token bucket per ``key``)."""
+def rate_policy(cfg: Mapping[str, Any] | None) -> tuple[float, float]:
+    """(burst, refill a second) of config.yaml's ``web`` (validated by ``tow.config``), each the
+    default when it is not set or not a policy."""
+    web = cfg.get("web") if isinstance(cfg, Mapping) else None
+    web = web if isinstance(web, Mapping) else {}
+
+    def number(name: str, default: float) -> float:
+        value = web.get(name)
+        if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value) or value <= 0:
+            return default
+        return float(value)
+
+    return number("rate_burst", RATE_BURST), number("rate_per_sec", RATE_PER_SEC)
+
+
+def _policy() -> tuple[float, float]:
+    """The rate of the config the poll last sampled: no lock and no read of its own (the defaults
+    before the first sample)."""
+    sample = SAMPLER.latest()
+    return rate_policy(sample.config if sample is not None else None)
+
+
+def take_token(key: str, *, now: float | None = None, policy: tuple[float, float] | None = None) -> float:
+    """0 when the request may go on, else the seconds until it may (a token bucket per ``key``).
+    ``policy``: (burst, refill a second), else the configured one (``_policy``). A bucket keeps
+    its tokens when the policy changes: a larger burst is earned at the rate, never granted at
+    once, and a smaller one cuts what is there."""
+    burst, per_sec = policy or _policy()
     moment = time.monotonic() if now is None else now
     with _BUCKETS_LOCK:
         bucket = _BUCKETS.get(key)
         if bucket is None:
-            bucket = _BUCKETS[key] = _Bucket(RATE_BURST, moment)
+            bucket = _BUCKETS[key] = _Bucket(burst, moment)
             while len(_BUCKETS) > MAX_BUCKETS:
                 _BUCKETS.popitem(last=False)
         _BUCKETS.move_to_end(key)
-        bucket.tokens = min(RATE_BURST, bucket.tokens + max(0.0, moment - bucket.at) * RATE_PER_SEC)
+        bucket.tokens = min(burst, bucket.tokens + max(0.0, moment - bucket.at) * per_sec)
         bucket.at = moment
         if bucket.tokens >= 1:
             bucket.tokens -= 1
             return 0.0
-        return max(1.0, math.ceil((1 - bucket.tokens) / RATE_PER_SEC))
+        return max(1.0, math.ceil((1 - bucket.tokens) / per_sec))
 
 
 # --------------------------------------------------------------------------- recovery, outside the poll
