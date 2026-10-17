@@ -179,7 +179,7 @@ def test_the_substitutes_say_what_they_stand_for():
     smoke = (Path(__file__).resolve().parents[1] / "scripts" / "bundle-smoke.ps1").read_text(encoding="utf-8")
     assert """'TOW_ROOT:~(\\d+),1%"=="" set "TOW_LONG=1"'""" in smoke  # the warning length read from it
     assert "($output -match 'Windows long paths are off') -ne $expectWarning" in smoke
-    assert "--root-length 120" in longpaths
+    assert "--root-length 110" in longpaths  # the update at the same long-paths-off limit
     # D05, D07, TC-17 on macOS.
     macos = _runs(jobs["macos"])
     assert "scripts/macos-smoke.sh rosetta" in macos
