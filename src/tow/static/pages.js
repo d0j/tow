@@ -182,27 +182,41 @@
   // applied whole (a newer revision's too: the server drew all of it from one sample). The area
   // counts as applied once they are on the page (``ack``); what waits for the owner is applied again
   // when ``settle`` finds it free.
-  const createPageSync = ({ fetchFragments, apply, ack = () => {}, signedOut = () => {}, retry = () => {} }) => {
+  // A request that failed (offline, an error, no answer in 10 s) is asked again by ``settle`` - after
+  // every successful poll, also a 304 that brings the area no more - 5, 10, 20, 40, then every 60 s
+  // after the failure, never sooner; a newer revision is asked for at once.
+  const BACKOFF_MS = [5000, 10000, 20000, 40000, 60000];
+  const createPageSync = ({ fetchFragments, apply, ack = () => {}, signedOut = () => {}, retry = () => {}, now = () => Date.now() }) => {
     let generation = 0;
+    let asking = 0; // the generation whose request is on its way
     let last = null; // {body, result}
+    let failed = null; // {payload, failures, at}
     const page = async (payload) => {
       if (!payload || typeof payload.rev !== "string" || !HASH.test(payload.rev)) return false;
       generation += 1;
       const mine = generation;
+      const before = failed?.payload.rev === payload.rev ? failed.failures : 0;
+      asking = mine;
       let answer = null;
       try {
         answer = await fetchFragments(payload.rev);
       } catch {
         answer = null;
       }
+      if (asking === mine) asking = 0;
       if (mine !== generation) return false;
       if (answer?.status === 401 || answer?.status === 403) {
         generation += 1;
+        failed = null;
         signedOut(answer.status);
         return false;
       }
       const body = answer?.status === 200 ? answer.body : null;
-      if (!body || body.ok !== true || typeof body.rev !== "string") return false; // the next poll asks again
+      if (!body || body.ok !== true || typeof body.rev !== "string") {
+        failed = { payload, failures: before + 1, at: now() + BACKOFF_MS[Math.min(before + 1, BACKOFF_MS.length) - 1] };
+        return false;
+      }
+      failed = null;
       const result = apply(body);
       last = { body, result };
       ack(body.rev);
@@ -210,14 +224,19 @@
       return true;
     };
     const settle = () => {
-      if (!last || !(last.result?.waiting?.length || last.result?.kept?.length)) return false;
+      let did = false;
+      if (failed && !asking && now() >= failed.at) {
+        page(failed.payload).catch(() => {});
+        did = true;
+      }
+      if (!last || !(last.result?.waiting?.length || last.result?.kept?.length)) return did;
       last = { body: last.body, result: apply(last.body) };
       return true;
     };
     return {
       page,
       settle,
-      cancel: () => { generation += 1; last = null; },
+      cancel: () => { generation += 1; asking = 0; last = null; failed = null; },
       waiting: () => [...(last?.result?.waiting || []), ...(last?.result?.kept || [])],
     };
   };
@@ -517,15 +536,15 @@
 
   const sync = window.towSync;
   const pageSync = createPageSync({
-    fetchFragments: async (rev) => {
+    // 10 s at most, its body included (sync.js's request): a slower one is given up and asked again.
+    fetchFragments: (rev) => {
       const params = new URLSearchParams({ page: list.page, rev });
       Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
-      const response = await fetch(`/page/fragments?${params}`, {
+      return sync.request(`/page/fragments?${params}`, {
         cache: "no-store",
         credentials: "same-origin",
         headers: { Accept: "application/json" },
       });
-      return { status: response.status, body: response.status === 200 ? await response.json().catch(() => null) : null };
     },
     apply: (body) => (list.page === "/history" ? applyHistory(body) : applySlots(body)),
     ack: (rev) => sync.client?.ack?.("page", rev),

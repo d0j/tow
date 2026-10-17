@@ -17,7 +17,7 @@ const flush = async () => { for (let i = 0; i < 30; i += 1) await Promise.resolv
 const REV = (n) => String(n).repeat(32).slice(0, 32);
 
 // The page: rows as plain objects {id, hash, html, note}; the server: rows by id (hash, html).
-const harness = ({ page = [], server = {}, answer = null } = {}) => {
+const harness = ({ page = [], server = {}, answer = null, now = undefined } = {}) => {
   let rows = page.map((id) => ({ id: `row-${id}`, dataset: { rowHash: `h-${id}` }, html: `old ${id}`, note: "" }));
   const guarded = new Set();
   const requests = [];
@@ -60,6 +60,7 @@ const harness = ({ page = [], server = {}, answer = null } = {}) => {
     ack: (rev) => acks.push(rev),
     retry: () => { retries += 1; },
     emptied: (has) => emptied.push(has),
+    ...(now ? { now } : {}),
   });
   return {
     sync, requests, acks, emptied, guarded,
@@ -160,6 +161,39 @@ verdict.protectionCheckedBeforeApply = true;
   assert.deepEqual(failing.acks, [REV(1)]);
 }
 verdict.staleDiscardedFailedRetried = true;
+
+// The rows whose first request failed are asked again by ``settle`` (after every successful poll,
+// also a 304 that brings the area no more) for the same revision - 5, 10, 20 s… after the failure,
+// never sooner - and the revision is applied once they are all there.
+{
+  let clock = 0;
+  let fail = true;
+  const server = { a: { hash: "h-a2", html: "a changed" }, b: { hash: "h-b", html: "b" } };
+  const test = harness({
+    page: ["a", "b"], server, now: () => clock,
+    answer: (ids, rev) => (fail ? { status: 500, body: null } : { status: 200, body: { ok: true, rev, order: ["a", "b"], rows: ids.map((id) => ({ id, html: server[id].html, hash: server[id].hash })), missing: [], deferred: [] } }),
+  });
+  assert.equal(await test.sync.topics({ rev: REV(1), full: false, order: ["a", "b"], changed: ["a"], removed: [] }), false);
+  assert.deepEqual(test.acks, []);
+  await test.sync.settle(); // too soon
+  assert.equal(test.requests.length, 1);
+  clock = 5000;
+  await test.sync.settle(); // fails again: next in 10 s
+  assert.equal(test.requests.length, 2);
+  assert.deepEqual(test.requests[1], { ids: ["a"], rev: REV(1) });
+  fail = false;
+  clock = 14000;
+  await test.sync.settle();
+  assert.equal(test.requests.length, 2);
+  clock = 15000;
+  await test.sync.settle();
+  assert.equal(test.row("a").html, "a changed");
+  assert.deepEqual(test.acks, [REV(1)]);
+  clock = 100000;
+  await test.sync.settle(); // nothing left to ask
+  assert.equal(test.requests.length, 3);
+}
+verdict.failedRowsAskedAgainBySettle = true;
 
 // A newer topics area while an older one is still being fetched: the older answer is not used.
 {

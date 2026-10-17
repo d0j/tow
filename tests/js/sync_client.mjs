@@ -128,6 +128,56 @@ verdict.deltaHaveEtagAndNotModified = true;
 }
 verdict.failedReaderRetried = true;
 
+// An area its reader could not apply is kept and offered to it again after later successful polls -
+// also when every later answer is 304 Not Modified (the same request: the server sends it no more) -
+// 5, 10, 20, 40, then every 60 s, never more often. A reader that answers with a promise applies
+// the area only once that promise says so (anything but false).
+{
+  const test = harness({ answer: () => ({ status: 304 }) });
+  const calls = [];
+  let throwsLeft = 3;
+  test.client.on("undo", () => {
+    calls.push(test.clock.now());
+    if (throwsLeft > 0) {
+      throwsLeft -= 1;
+      throw new Error("synthetic");
+    }
+  });
+  const asked = [];
+  let accepted = false;
+  test.client.on("messages", () => { asked.push(test.clock.now()); return Promise.resolve(accepted); });
+  test.queue.push(async () => ({ status: 200, etag: 'W/"a"', body: { ok: true, now_ts: 1, rev: {}, areas: { undo: { rev: REV(3), undo: null }, messages: { rev: REV(6) } } } }));
+  test.client.start();
+  await test.run(2600);
+  const first = calls[0];
+  assert.equal(test.client.applied("undo"), "");
+  assert.equal(test.client.applied("messages"), "");
+  await test.run(5000 + 10000 + 20000);
+  assert.deepEqual(calls.map((at) => at - first), [0, 5000, 15000, 35000]);
+  assert.equal(test.client.applied("undo"), REV(3));
+  assert.ok(test.sent.slice(1).every((request) => request.etag === 'W/"a"')); // every later answer: 304
+  assert.deepEqual(asked.slice(0, 3).map((at) => at - first), [0, 5000, 15000]);
+  accepted = true;
+  await test.run(40000); // its fourth try (35 s) failed too: the fifth is 40 s later
+  assert.equal(test.client.applied("messages"), REV(6));
+  const offered = asked.length;
+  await test.run(120000);
+  assert.equal(calls.length, 4); // applied: never offered again
+  assert.equal(asked.length, offered);
+  assert.ok(test.sent.at(-1).url.includes(`messages%3A${REV(6)}`), test.sent.at(-1).url);
+  // Always failing: offered at most once a minute.
+  const always = harness({ answer: () => ({ status: 304 }) });
+  const tries = [];
+  always.client.on("undo", () => { tries.push(always.clock.now()); throw new Error("synthetic"); });
+  always.queue.push(async () => ({ status: 200, body: { ok: true, now_ts: 1, rev: {}, areas: { undo: { rev: REV(7), undo: null } } } }));
+  always.client.start();
+  await always.run(2600 + 600000);
+  const gaps = tries.map((at, i) => (i ? (at - tries[i - 1]) / 1000 : 0)).slice(1);
+  assert.deepEqual(gaps.slice(0, 5), [5, 10, 20, 40, 60]);
+  assert.ok(gaps.every((gap) => gap <= 60 && gap >= 5), String(gaps));
+}
+verdict.unappliedOfferedAgainThrough304 = true;
+
 // Failures wait 5, 10, 20, 40, 60, 60 s (jitter at 0.5 = none); one success goes back to 5 s.
 {
   let failing = true;

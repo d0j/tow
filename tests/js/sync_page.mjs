@@ -65,6 +65,7 @@ const undos = [];
 const posted = [];
 const scrolled = [];
 let reloads = 0;
+let rowsHang = false; // /topics/rows never answers
 let refreshed = [];
 const built = new Map();
 const realCreate = document.createElement;
@@ -100,6 +101,7 @@ const context = {
   fetch: async (url, init = {}) => {
     sent.push({ url: String(url), init });
     if (String(url).startsWith("/sync.json")) return syncAnswers.shift()?.() || respond(304);
+    if (String(url) === "/topics/rows" && rowsHang) return new Promise(() => {});
     if (String(url) === "/topics/rows") return rowAnswers.shift()?.(JSON.parse(init.body)) || respond(500);
     return respond(404);
   },
@@ -250,6 +252,29 @@ verdict.rowInsertedAnchorKept = true;
   document.activeElement = document.body;
 }
 verdict.focusKeptFieldProtects = true;
+
+// ---- a /topics/rows request that never answers is given up after 10 s; every later answer is 304
+// (the server sends the area no more), yet the row is asked for again and put in, and the area is
+// applied (named in ``have``).
+{
+  const late = build(document, ["div", { class: "row-wrap", id: "row-a", "data-q": "a" }, ["details", { class: "row-edit" }, ["summary", {}, "a late"]]]);
+  built.set("<a-late>", late);
+  const rev = REV(5).replace(/5/g, "e");
+  answer({ topics: { rev, full: false, order: ["n", "a", "b"], changed: ["a"], removed: [] } });
+  rowsHang = true;
+  await run(5000);
+  assert.ok(sent.some((r) => r.url === "/topics/rows" && JSON.parse(r.init.body).rev === rev));
+  assert.notEqual(document.getElementById("row-a"), late);
+  rowsHang = false;
+  const good = ({ ids, rev: asked }) => respond(200, { ok: true, rev: asked, order: ["n", "a", "b"], rows: ids.filter((id) => id === "a").map((id) => ({ id, html: "<a-late>", hash: "h5-a" })), missing: [], deferred: [] });
+  rowAnswers.push(good, good, good);
+  await run(30000);
+  assert.equal(document.getElementById("row-a"), late);
+  await run(5000);
+  assert.ok(sent.filter((r) => r.url.startsWith("/sync.json")).at(-1).url.includes(`topics%3A${rev}`), "applied: named in have");
+  rowAnswers.length = 0;
+}
+verdict.hungRowsGivenUpAndAskedAgain = true;
 
 // ---- the version: 5 s later an idle page reloads; activity in those 5 s cancels it and says why
 const before = reloads;

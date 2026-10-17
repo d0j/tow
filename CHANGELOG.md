@@ -16,7 +16,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   topic added, paused, renamed or removed elsewhere, a scheduled check's result and a check started in another tab,
   and the header its sites, torrent client and messenger, without a reload. A row you are working in is never
   replaced, moved or hidden by a filter: it says that it was changed or removed elsewhere and follows once you are
-  done. A hidden tab asks nothing and asks at once when shown again.
+  done. A hidden tab asks nothing and asks at once when shown again; a request that fails or gets no answer is
+  asked again (at least once a minute), so a page never stays behind until it is reloaded.
 - The Undo of the last change appears and goes in every tab and on every device at once, counting the time it
   really has left; a device that may not undo it is not offered it. The theme follows a change made elsewhere
   (Auto stays each device's own); another language or a new TOW version reloads an open page once nothing is being

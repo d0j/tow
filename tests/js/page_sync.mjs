@@ -203,4 +203,50 @@ const frag = (id, hash = `h-${id}`) => ({ id, hash, html: `<div id="${id}"></div
   verdict.pageAreaAppliedFromItsRevision = true;
 }
 
+// The page area's first request fails (offline, an error, too slow): ``settle`` - after every
+// successful poll, also a 304 that brings the area no more - asks for the same revision again, 5,
+// 10, 20 s… after the failure, never sooner, and applies it once it comes.
+{
+  let clock = 0;
+  const acks = [];
+  const asked = [];
+  let answers = [];
+  const sync = createPageSync({
+    fetchFragments: async (rev) => {
+      asked.push([clock, rev]);
+      const next = answers.shift();
+      if (next instanceof Error) throw next;
+      return next;
+    },
+    apply: () => ({ waiting: [], kept: [] }),
+    ack: (rev) => acks.push(rev),
+    now: () => clock,
+  });
+  answers = [new Error("offline")];
+  assert.equal(await sync.page({ rev: REV(1) }), false);
+  sync.settle(); // too soon
+  await flush();
+  assert.equal(asked.length, 1);
+  clock = 5000;
+  answers = [{ status: 500, body: null }];
+  sync.settle();
+  await flush();
+  assert.equal(asked.length, 2);
+  clock = 14000;
+  sync.settle(); // the second failure waits 10 s
+  await flush();
+  assert.equal(asked.length, 2);
+  clock = 15000;
+  answers = [{ status: 200, body: { ok: true, rev: REV(1), fragments: [] } }];
+  sync.settle();
+  await flush();
+  assert.deepEqual(plain(asked.map(([, rev]) => rev)), [REV(1), REV(1), REV(1)]);
+  assert.deepEqual(plain(acks), [REV(1)]);
+  clock = 100000;
+  sync.settle(); // applied: nothing asked again
+  await flush();
+  assert.equal(asked.length, 3);
+  verdict.failedPageAskedAgainBySettle = true;
+}
+
 console.log(JSON.stringify(verdict));
