@@ -7,6 +7,7 @@ The system is faked at the module seams (ctypes, subprocess, the posix ``_read``
 from __future__ import annotations
 
 import ctypes
+import errno as errno_module
 import json
 import os
 import signal
@@ -1491,3 +1492,130 @@ def test_only_a_long_full_path_on_windows_gets_the_extended_form():
             deep = "/srv/tv/" + _DEEP.replace("\\", "/")
             assert platform.long_path(deep) == platform.Path(deep)  # as this host writes it
             assert platform.ordinary_path(deep) == platform.Path(deep)
+
+
+# --- exclusive publication without hard links (exFAT, FAT, SMB, some FUSE) -----------------------
+
+
+def _no_hard_links(monkeypatch, code=errno_module.EPERM):
+    def refuse(_source, _destination):
+        raise OSError(code, "no hard links here")
+
+    monkeypatch.setattr(posix, "_hard_link", refuse)
+
+
+def _renaming(monkeypatch, answer=None):
+    """A native rename that never replaces, on the real files (or ``answer`` as its errno)."""
+    calls: list[tuple[str, str, str]] = []
+
+    def rename(source, destination, system):
+        calls.append((source, destination, system))
+        if answer is not None:
+            return answer
+        if os.path.lexists(destination):
+            return errno_module.EEXIST
+        os.rename(source, destination)
+        return 0
+
+    monkeypatch.setattr(posix, "_rename_no_replace", rename)
+    return calls
+
+
+@pytest.mark.parametrize("name", ["linux", "macos"])
+@pytest.mark.parametrize("code", [errno_module.EPERM, errno_module.ENOTSUP, errno_module.ENOSYS])
+def test_without_hard_links_the_native_rename_publishes(tmp_path, monkeypatch, name, code):
+    _no_hard_links(monkeypatch, code)
+    calls = _renaming(monkeypatch)
+    source, destination = tmp_path / ".x.tmp", tmp_path / "export.towx"
+    source.write_bytes(b"complete bytes")
+    PosixBackend(name).publish_exclusive(source, destination)
+    assert destination.read_bytes() == b"complete bytes"
+    assert calls == [(str(source), str(destination), name)]
+
+
+def test_the_native_rename_never_replaces_an_existing_name(tmp_path, monkeypatch):
+    _no_hard_links(monkeypatch)
+    _renaming(monkeypatch)
+    source, destination = tmp_path / ".x.tmp", tmp_path / "export.towx"
+    source.write_bytes(b"new")
+    destination.write_bytes(b"someone else's")
+    with pytest.raises(FileExistsError):
+        PosixBackend("linux").publish_exclusive(source, destination)
+    assert destination.read_bytes() == b"someone else's"
+    assert source.read_bytes() == b"new"
+
+
+@pytest.mark.parametrize("unsupported", [errno_module.EINVAL, errno_module.ENOTSUP, errno_module.ENOSYS])
+def test_a_file_system_without_either_fails_closed_with_the_links_error(tmp_path, monkeypatch, unsupported):
+    _no_hard_links(monkeypatch)
+    _renaming(monkeypatch, unsupported)
+    with pytest.raises(OSError, match="no hard links here") as raised:
+        PosixBackend("linux").publish_exclusive(tmp_path / "a", tmp_path / "b")
+    assert raised.value.errno == errno_module.EPERM
+    assert not (tmp_path / "b").exists()
+
+
+def test_a_real_io_error_of_the_rename_is_raised_as_it_is(tmp_path, monkeypatch):
+    _no_hard_links(monkeypatch)
+    _renaming(monkeypatch, errno_module.EIO)
+    with pytest.raises(OSError, match="b") as raised:
+        PosixBackend("linux").publish_exclusive(tmp_path / "a", tmp_path / "b")
+    assert raised.value.errno == errno_module.EIO
+
+
+def test_a_taken_name_never_reaches_the_rename(tmp_path, monkeypatch):
+    calls = _renaming(monkeypatch)
+
+    def exists(_source, _destination):
+        raise FileExistsError(errno_module.EEXIST, "exists")
+
+    monkeypatch.setattr(posix, "_hard_link", exists)
+    with pytest.raises(FileExistsError):
+        PosixBackend("linux").publish_exclusive(tmp_path / "a", tmp_path / "b")
+    assert calls == []
+
+
+def test_exclusive_create_publishes_complete_bytes_once_without_hard_links(tmp_path, monkeypatch):
+    from tow.storage.atomic import atomic_create_bytes
+
+    _no_hard_links(monkeypatch)
+    _renaming(monkeypatch)
+    target = tmp_path / "out" / "export.towx"
+    with platform.use(PosixBackend("linux")):
+        atomic_create_bytes(target, b"first complete export")
+        with pytest.raises(FileExistsError):  # a second publisher loses, the first stays whole
+            atomic_create_bytes(target, b"second export")
+    assert target.read_bytes() == b"first complete export"
+    assert sorted(path.name for path in target.parent.iterdir()) == ["export.towx"]
+
+
+def test_an_interrupted_publication_leaves_no_destination(tmp_path, monkeypatch):
+    from tow.storage.atomic import atomic_create_bytes
+
+    _no_hard_links(monkeypatch)
+
+    def interrupted(_source, _destination, _system):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(posix, "_rename_no_replace", interrupted)
+    target = tmp_path / "out" / "export.towx"
+    with platform.use(PosixBackend("macos")), pytest.raises(KeyboardInterrupt):
+        atomic_create_bytes(target, b"complete bytes")
+    assert list(target.parent.iterdir()) == []
+
+
+@pytest.mark.skipif(sys.platform not in ("linux", "darwin"), reason="the C library's own rename")
+def test_the_native_rename_of_this_system_refuses_an_existing_name(tmp_path):
+    system = "linux" if sys.platform == "linux" else "macos"
+    source, destination = tmp_path / "prepared", tmp_path / "published"
+    source.write_bytes(b"prepared")
+    assert posix._rename_no_replace(str(source), str(destination), system) == 0
+    assert destination.read_bytes() == b"prepared"
+    assert not source.exists()
+    source.write_bytes(b"late")
+    assert posix._rename_no_replace(str(source), str(destination), system) == errno_module.EEXIST
+    link = tmp_path / "dangling"
+    link.symlink_to(tmp_path / "nowhere")
+    assert posix._rename_no_replace(str(source), str(link), system) == errno_module.EEXIST
+    assert destination.read_bytes() == b"prepared"
+    assert source.read_bytes() == b"late"

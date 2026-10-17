@@ -410,7 +410,8 @@ Stable names other modules build on.
   - `spawn_detached(argv, *, hidden=True, log_path=None, cwd=None, env=None, require_breakaway=False)` → pid
     (outlives the parent; no console window on Windows; own session on POSIX);
   - `publish_exclusive(source, destination)` — publish complete prepared bytes without replacing an occupied
-    name (Windows rename, POSIX hard link; unsupported destinations fail closed);
+    name (Windows rename; POSIX hard link, else renameat2/renamex_np that never replace; unsupported destinations
+    fail closed);
   - `popen_options(*, new_group=False, hidden=True)` — the same flags for a `subprocess.Popen` the caller keeps;
   - `process_alive(pid)`, `terminate(pid, timeout=10.0)` (the whole tree or process group) → bool;
   - `process_command(pid)` → command line or `None` when unknown; read-only, used to identify pre-lease update workers;
