@@ -142,6 +142,29 @@ def test_the_crash_smokes_unrelated_listener_binds_past_time_wait_only_outside_w
     assert calls == [*expected, ("bind", ("127.0.0.1", 18959)), ("listen", 16)]
 
 
+def test_the_permissions_smoke_reads_acls_without_powershell_7s_module_path(monkeypatch, tmp_path):
+    # Before: a PSModulePath inherited from PowerShell 7 (the standard-account smoke runs under
+    # pwsh) made Windows PowerShell load PowerShell 7's Microsoft.PowerShell.Security: Get-Acl failed.
+    import subprocess
+
+    permissions = _script("permissions-smoke.py")
+    seen: dict = {}
+
+    def run(argv, *, env=None, timeout=120):
+        seen.update(argv=argv, env=env)
+        return subprocess.CompletedProcess(
+            argv, 0, stdout='{"owner": "S-1-5-18", "rules": {"sid": "S-1-5-18"}}', stderr=""
+        )
+
+    monkeypatch.setattr(permissions, "_run", run)
+    monkeypatch.setenv("PSModulePath", r"C:\Program Files\PowerShell\7\Modules")
+    acl = permissions.windows_acl(tmp_path)
+    assert seen["argv"][0] == "powershell.exe"
+    assert not {name.upper() for name in seen["env"]} & {"PSMODULEPATH"}
+    assert seen["env"]["TOW_SMOKE_ACL_PATH"] == str(tmp_path)
+    assert acl["rules"] == [{"sid": "S-1-5-18"}]
+
+
 def test_the_permissions_smoke_reads_sids_not_names():
     permissions = _script("permissions-smoke.py")
     user = "S-1-5-21-1-2-3-1001"
