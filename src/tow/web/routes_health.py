@@ -85,13 +85,44 @@ def updates_install(version: str = Form("")) -> Response:
     return JSONResponse(result, status_code=202, headers={"Cache-Control": "no-store"})
 
 
+def _terminal_result(log: dict[str, Any]) -> str:
+    """How an update from a terminal ended, from its exit code (scripts/update.py ``update``)."""
+    code = log.get("code")
+    if log.get("in_job"):
+        return t("releases.log_result_in_job")
+    if code is None:
+        return t("releases.log_result_none")
+    keys = {0: "releases.log_result_ok", 1: "releases.log_result_failed", 2: "releases.log_result_refused"}
+    return t(keys[code]) if code in keys else t("releases.log_result_code", code=code)
+
+
+def _log_time(value: object) -> str:
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        with suppress(OSError, OverflowError, ValueError):
+            return format_ui_timestamp(datetime.fromtimestamp(value, UTC))
+    return "—"
+
+
 @router.get("/updates/log")
 def updates_log() -> Response:
     try:
-        result = services.web_update_log()
+        logs = services.web_update_logs()
     except WebUpdateError as exc:
         return JSONResponse({"ok": False, "error": _said(exc)}, status_code=503)
-    return JSONResponse({"text": result}, headers={"Cache-Control": "no-store"})
+    if not any(log["kind"] == "terminal" for log in logs):
+        text = "".join(log["text"] for log in logs)  # this page's update alone: its log as before
+    else:
+        # The latest update from a terminal too (its own process, X41), newest first, each
+        # under a line that says where it was started, when, and (a terminal one) how it ended.
+        parts = []
+        for log in logs:
+            if log["kind"] == "terminal":
+                head = t("releases.log_terminal", time=_log_time(log["started_at"]), result=_terminal_result(log))
+            else:
+                head = t("releases.log_web", time=_log_time(log["started_at"]))
+            parts.append(f"{head}\n{log['text'].strip(chr(10)) or t('js.releases.log_empty')}")
+        text = "\n\n".join(parts)
+    return JSONResponse({"text": text}, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/healthz", response_model=None)
