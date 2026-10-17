@@ -1,0 +1,392 @@
+name: smokes
+
+# The smokes of a real install that the bundle and installer checks do not run (TOW 1.33.1), as a
+# reusable workflow: installers.yml runs it on its own triggers (pull requests that touch the
+# installers or the updater, weekly, by hand: the wrapper to dispatch, nothing is published), and
+# release.yml on the commit it checked, with the release's own source archive and bundle, before
+# it uploads anything. Every job is bounded, installs into a throwaway folder with a Cyrillic name
+# on its own port (never 8787) and keeps its log as an artifact.
+#
+# Always: the web update of the candidate through Settings (scripts/web-update-smoke.py, TC-02,
+# the candidate's own handoff; the update of a published release is installers.yml's `update`)
+# and, on the three systems, a killed `tow run`, an orphaned web server and a port that is not
+# TOW's, with the permissions of the install (scripts/crash-smoke.py, TC-04 and TC-09).
+# With `extended` (weekly and by hand) also the substitutes of systems no owner's computer here
+# has: Linux on arm64 and an Intel Mac, each asserting the runner's real architecture (TC-07);
+# BusyBox and musl in an Alpine container (D06); a standard account with code page 866 (TC-15);
+# Windows with long paths off (D04); Rosetta (D05); a quarantined program on macOS (D07); and
+# folder names in NFD on macOS (TC-17).
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "The commit to test"
+        required: true
+        type: string
+      release:
+        description: "Test the release's own artifacts (source, windows) instead of building them"
+        required: false
+        type: boolean
+        default: false
+      extended:
+        description: "Also the weekly substitutes (other architectures, BusyBox, standard account, long paths off, Rosetta, Gatekeeper, NFD)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_ARTIFACT: ${{ inputs.release && 'source' || 'smokes-source' }}
+  BUNDLE_ARTIFACT: ${{ inputs.release && 'windows' || 'smokes-bundle' }}
+
+jobs:
+  # The source archive and the bundle of the commit, once (a release brings its own).
+  build:
+    name: smokes build
+    if: ${{ !inputs.release }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      # Pinned to full commit SHAs (the tag in the comment); Dependabot proposes updates.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          save-cache: false
+      - name: Source archive of this commit
+        shell: bash
+        run: git archive --format=tar.gz --prefix=tow/ -o tow-source.tar.gz HEAD
+      - name: Build the bundle
+        shell: pwsh
+        run: uv run --no-project python scripts/build-bundle.py --out dist --source tow-source.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smokes-source
+          path: tow-source.tar.gz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smokes-bundle
+          path: dist/TOW-windows-x64.zip
+          if-no-files-found: error
+
+  web-update:
+    name: web update (Windows)
+    needs: build
+    if: ${{ !cancelled() && (inputs.release || needs.build.result == 'success') }}
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          save-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.SOURCE_ARTIFACT }}
+          path: artifacts
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.BUNDLE_ARTIFACT }}
+          path: artifacts
+      - name: Settings' update of the candidate - a release that fails its checksum, then the release
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/logs"
+          uv run --no-project python scripts/web-update-smoke.py --zip artifacts/TOW-windows-x64.zip \
+            --source artifacts/tow-source.tar.gz --port 18958 2>&1 | tee "$RUNNER_TEMP/logs/web-update.log"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smokes-logs-web-update
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: warn
+
+  crash:
+    name: crash cleanup and permissions (${{ matrix.os }})
+    needs: build
+    if: ${{ !cancelled() && (inputs.release || needs.build.result == 'success') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          save-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.SOURCE_ARTIFACT }}
+          path: artifacts
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: runner.os == 'Windows'
+        with:
+          name: ${{ env.BUNDLE_ARTIFACT }}
+          path: artifacts
+      - name: Killed tow run, orphaned web server, a port that is not TOW's; permissions repaired and refused
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/logs"
+          if [ "$RUNNER_OS" = Windows ]; then set -- --zip artifacts/TOW-windows-x64.zip; else set -- --source "$PWD/artifacts/tow-source.tar.gz"; fi
+          uv run --no-project python scripts/crash-smoke.py "$@" --port 18959 --strict 2>&1 | tee "$RUNNER_TEMP/logs/crash.log"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smokes-logs-crash-${{ matrix.os }}
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: warn
+
+  # TC-07: native runners of the architectures the contract expects to work (docs/PORTABLE.md
+  # 1b), each asserting what it really is; a fresh install.sh, start, status and stop.
+  arch:
+    name: install.sh (${{ matrix.os }}, ${{ matrix.machine }})
+    needs: build
+    if: ${{ !cancelled() && inputs.extended && (inputs.release || needs.build.result == 'success') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04-arm
+            machine: aarch64
+          - os: macos-15-intel
+            machine: x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.SOURCE_ARTIFACT }}
+          path: artifacts
+      - name: The runner is what its label says (not an emulation)
+        env:
+          MACHINE: ${{ matrix.machine }}
+        run: |
+          machine=$(uname -m)
+          echo "uname -m: $machine; RUNNER_ARCH: $RUNNER_ARCH"
+          [ "$machine" = "$MACHINE" ] || { echo "::error::this runner is $machine, not $MACHINE"; exit 1; }
+          if [ "$RUNNER_OS" = macOS ]; then
+            arm=$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)
+            translated=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
+            echo "hw.optional.arm64: $arm; sysctl.proc_translated: $translated"
+            [ "$arm" = 0 ] && [ "$translated" = 0 ] || { echo "::error::an Apple silicon Mac, not an Intel one"; exit 1; }
+          fi
+      - name: Install, start with the start file, check, stop, reinstall, uninstall
+        timeout-minutes: 30
+        run: sh scripts/install-smoke.sh "$PWD/artifacts/tow-source.tar.gz" 18877
+
+  # D06 and the musl row of TC-07: a real BusyBox and musl, in an Alpine container (pinned).
+  alpine:
+    name: BusyBox and musl (alpine)
+    needs: build
+    if: ${{ !cancelled() && inputs.extended && (inputs.release || needs.build.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.SOURCE_ARTIFACT }}
+          path: artifacts
+      - name: install.sh refused on BusyBox, the updater's /proc fallback, then install.sh for musl
+        timeout-minutes: 25
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/logs"
+          docker run --rm -v "$PWD:/src:ro" -v "$PWD/artifacts:/in:ro" \
+            alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0 \
+            sh /src/scripts/alpine-smoke.sh 18961 2>&1 | tee "$RUNNER_TEMP/logs/alpine.log"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smokes-logs-alpine
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: warn
+
+  # TC-15: a standard account (not an administrator) with code page 866 installs, starts, reads
+  # and stops the bundle; the account is created on this disposable runner and removed again.
+  nonadmin:
+    name: standard account, code page 866 (Windows)
+    needs: build
+    if: ${{ !cancelled() && inputs.extended && (inputs.release || needs.build.result == 'success') }}
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.BUNDLE_ARTIFACT }}
+          path: artifacts
+      - name: Install, start, read under chcp 866 and stop as a standard account
+        timeout-minutes: 30
+        shell: pwsh
+        run: ./scripts/nonadmin-smoke.ps1 -Zip artifacts/TOW-windows-x64.zip -Port 18962
+
+  # B14: install.ps1 of this commit on Windows PowerShell 5.1 downloads the latest published
+  # release from GitHub over HTTPS (Net.WebClient, TLS 1.2) into a folder with brackets in its
+  # path, which starts; then it is removed with -Purge.
+  tls:
+    name: install.ps1 over HTTPS (Windows PowerShell 5.1)
+    needs: build
+    if: ${{ !cancelled() && inputs.extended && (inputs.release || needs.build.result == 'success') }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: install.ps1 from GitHub's latest release, started, read, removed
+        timeout-minutes: 20
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP '[x] TOW\TOW'
+          # As on a new computer: no uv or TOW variables of this job.
+          Get-ChildItem env: | Where-Object { $_.Name -like 'UV_*' -or $_.Name -like 'TOW_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }
+          $env:TOW_NO_BROWSER = '1'
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1 -Dir $dir -Port 18967
+          if ($LASTEXITCODE) { throw "install.ps1 exited with $LASTEXITCODE" }
+          $launcher = Join-Path $dir 'app\scripts\tow.cmd'
+          $status = (& cmd.exe /d /c call "`"$launcher`"" status --json) -join "`n" | ConvertFrom-Json
+          if (-not $status.running) { throw "TOW does not run after install.ps1: $status" }
+          $health = Invoke-RestMethod -Uri 'http://127.0.0.1:18967/healthz' -TimeoutSec 10 -NoProxy
+          Write-Host "the latest release, downloaded by Windows PowerShell 5.1, answers as $($health.version)"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File install/install.ps1 -Dir $dir -Uninstall -Yes -Purge
+          if ($LASTEXITCODE) { throw "the uninstall exited with $LASTEXITCODE" }
+          if (Test-Path -LiteralPath $dir) { throw "$dir is still there after -Purge" }
+          exit 0
+
+  # D04: Windows with long paths off - the setting read back, every check in a new process (the
+  # setting is read when a process starts): the folder of the limit starts, one character more is
+  # refused before uv runs, and an archive update fits the updater's staging at a long root.
+  longpaths:
+    name: long paths off (Windows)
+    needs: build
+    if: ${{ !cancelled() && inputs.extended && (inputs.release || needs.build.result == 'success') }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          save-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.SOURCE_ARTIFACT }}
+          path: artifacts
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.BUNDLE_ARTIFACT }}
+          path: artifacts
+      - name: Turn long paths off on this disposable runner
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+          Write-Host "LongPathsEnabled before: $((Get-ItemProperty $key).LongPathsEnabled)"
+          Set-ItemProperty -Path $key -Name LongPathsEnabled -Value 0 -Type DWord
+      - name: The folder of the limit starts offline and moves; one more character is refused before uv
+        timeout-minutes: 20
+        shell: pwsh
+        run: |
+          $value = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem').LongPathsEnabled
+          if ($value -ne 0) { throw "LongPathsEnabled is $value in this new process, not 0" }
+          ./scripts/bundle-smoke.ps1 -Zip artifacts/TOW-windows-x64.zip -Offline -Move -RootLength 172
+          ./scripts/bundle-smoke.ps1 -Zip artifacts/TOW-windows-x64.zip -RootLength 173 -ExpectTooLong
+      - name: The previous release's files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view --json tagName --jq '"previous release: " + .tagName'
+          for name in SHA256SUMS TOW-windows-x64.zip; do
+            gh release download --dir "$RUNNER_TEMP/previous" --pattern "$name"
+          done
+      - name: An archive update at a 120-character root fits the updater's staging
+        timeout-minutes: 30
+        shell: pwsh
+        run: |
+          $value = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem').LongPathsEnabled
+          if ($value -ne 0) { throw "LongPathsEnabled is $value in this new process, not 0" }
+          uv run --no-project python scripts/update-smoke.py --previous "$env:RUNNER_TEMP/previous" --source artifacts/tow-source.tar.gz --root-length 120
+          if ($LASTEXITCODE) { throw "update-smoke.py exited with $LASTEXITCODE" }
+
+  # D05, D07, TC-17 on macOS (Apple silicon): Rosetta's choice of the native uv, a quarantined
+  # program actually launched, and folder names in NFD through install, move and update.
+  macos:
+    name: Rosetta, Gatekeeper, NFD (macOS)
+    needs: build
+    if: ${{ !cancelled() && inputs.extended && (inputs.release || needs.build.result == 'success') }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          save-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.SOURCE_ARTIFACT }}
+          path: artifacts
+      - name: Rosetta - install.sh in a translated shell takes the Apple silicon uv and Python
+        timeout-minutes: 20
+        run: sh scripts/macos-smoke.sh rosetta "$PWD/artifacts/tow-source.tar.gz" 18963
+      - name: Gatekeeper - the program TOW actually launches, quarantined
+        timeout-minutes: 20
+        run: sh scripts/macos-smoke.sh gatekeeper "$PWD/artifacts/tow-source.tar.gz" 18964
+      - name: NFD folder names - install, start, move, start (install-smoke.sh)
+        timeout-minutes: 20
+        env:
+          TOW_SMOKE_NFD: "1"
+        run: sh scripts/install-smoke.sh "$PWD/artifacts/tow-source.tar.gz" 18965
+      - name: The previous release's files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view --json tagName --jq '"previous release: " + .tagName'
+          for name in SHA256SUMS install.sh tow-source.tar.gz; do
+            gh release download --dir "$RUNNER_TEMP/previous" --pattern "$name"
+          done
+      - name: NFD folder names - the update of a published release, its entry files and a move
+        timeout-minutes: 40
+        run: uv run --no-project python scripts/update-smoke.py --previous "$RUNNER_TEMP/previous" --source artifacts/tow-source.tar.gz --nfd --port 18966
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smokes-logs-macos
+          path: ${{ runner.temp }}/macos-smoke
+          if-no-files-found: warn
