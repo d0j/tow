@@ -5,7 +5,8 @@ name: real systems
 # `tow check --apply` against a local site (tests/integration/test_real_clients.py), qBittorrent
 # on Windows too, and how qBittorrent and Transmission spell the file names Windows reserves,
 # recorded as an artifact and checked against TOW's keys (test_real_client_names.py); the
-# native probes of Linux and macOS (tests/integration/test_real_probes.py); and the
+# native probes of Linux and macOS (tests/integration/test_real_probes.py); a save folder's volume
+# and an export's publication on tmpfs, vfat and exFAT (test_real_filesystems.py); and the
 # autostart of each OS - Task Scheduler, launchd, systemd --user - turned on for a throwaway
 # install made the way the owner makes one, started by the OS and turned off again
 # (tests/integration/test_real_autostart.py, in autostart.yml, which release.yml runs for a tag
@@ -33,6 +34,7 @@ on:
       - "src/tow/config.py"
       - "src/tow/store.py"
       - "src/tow/storage/**"
+      - "src/tow/bundle/**"
       - "src/tow/platform/**"
       - "src/tow/paths.py"
       - "src/tow/lifecycle.py"
@@ -412,6 +414,67 @@ jobs:
       - name: Port owner, command line and boot time through the forced fallbacks
         timeout-minutes: 10
         run: uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_probes.py
+
+  # C03 and C04 on real file systems (tests/integration/test_real_filesystems.py): a tmpfs, vfat
+  # and exFAT images through Linux's own drivers and exFAT through FUSE; exFAT and FAT disk images
+  # on macOS (renamex_np). The test mounts, unmounts and mounts each again itself.
+  filesystems:
+    name: file systems (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      TOW_REAL_FILESYSTEMS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          save-cache: false
+      - name: Install Python from .python-version
+        run: uv python install --no-bin --no-registry
+      - name: Sync locked environment
+        run: uv sync --frozen
+      - name: The images (Linux) - vfat, exFAT for the kernel's driver and for exfat-fuse
+        if: runner.os == 'Linux'
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends dosfstools exfatprogs exfat-fuse
+          sudo modprobe vfat
+          sudo modprobe exfat || {
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "linux-modules-extra-$(uname -r)"
+            sudo modprobe exfat
+          }
+          images="$RUNNER_TEMP/fs-images"
+          mkdir -p "$images"
+          for name in vfat exfat exfat-fuse; do truncate -s 64M "$images/$name.img"; done
+          sudo mkfs.vfat -n TOWVFAT "$images/vfat.img"
+          sudo mkfs.exfat -L TOWEXFAT "$images/exfat.img"
+          sudo mkfs.exfat -L TOWFUSE "$images/exfat-fuse.img"
+          uname -r
+          dpkg-query -W dosfstools exfatprogs exfat-fuse
+          echo "TOW_REAL_FS=tmpfs vfat exfat exfat-fuse" >> "$GITHUB_ENV"
+          echo "TOW_REAL_FS_IMAGES=$images" >> "$GITHUB_ENV"
+      - name: The images (macOS) - exFAT and FAT disk images
+        if: runner.os == 'macOS'
+        timeout-minutes: 10
+        run: |
+          images="$RUNNER_TEMP/fs-images"
+          mkdir -p "$images"
+          hdiutil create -size 64m -fs ExFAT -volname TOWEXFAT "$images/exfat.dmg"
+          hdiutil create -size 64m -fs "MS-DOS FAT32" -volname TOWFAT "$images/msdos.dmg"
+          sw_vers
+          echo "TOW_REAL_FS=exfat msdos" >> "$GITHUB_ENV"
+          echo "TOW_REAL_FS_IMAGES=$images" >> "$GITHUB_ENV"
+      - name: Volume identity through unmount and remount; publication without hard links
+        timeout-minutes: 10
+        run: uv run --frozen pytest -q -ra -s -p no:cacheprovider tests/integration/test_real_filesystems.py
 
   # The OS autostart of the three systems (autostart.yml, which release.yml runs for a tag too);
   # the weekly run does not pass on a runner that cannot run it.
