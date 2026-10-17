@@ -131,6 +131,18 @@ SWITCH_BACK_PAUSE = 5.0
 UNIT_NAME = "tow.service"
 AGENT_LABEL = "io.tow"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+BREAKAWAY_FROM_JOB = 0x01000000
+# The update's own process (X41): <TOW>/runtime/update-run/<id>/ holds its copy of this file, its
+# log and its result; the newest RUNS_KEPT finished ones are kept. TOW_UPDATE_HERE=1 runs the update
+# in the calling process instead, as before 1.33.1 (a closed window then cuts it off).
+RUNS = "update-run"
+RUNS_KEPT = 3
+OWNER_POLL = 0.25
+OWNER_RESULT = "result.json"
+OWNER_LOG = "update.log"
+IN_PROCESS = "TOW_UPDATE_HERE"
+# The exit code of an owner that ran in a job it could not leave (``run_owner``): nothing changed.
+OWNER_IN_JOB = 3
 # Test only (scripts/update-smoke.py): with this variable set to N, the process ends as a power
 # cut would once N entries of an archive switch have moved, so the smoke test can check the
 # start files' refusal and the recovery on a real install. Without it nothing happens.
@@ -238,6 +250,14 @@ TEXTS = {
     "newer_data": (
         "the data changed after the update was cut off ({path}): putting back the update snapshot ({snapshot}) would"
         " lose that, so nothing was changed. To go back to TOW {version} and that snapshot anyway, run: {command}"
+    ),
+    "owner": "the update runs in its own process: closing this window no longer stops it (its log: {log})",
+    "owner_failed": (
+        "the update could not start in its own process ({error}): it runs in this window, so keep the window"
+        " open until it ends"
+    ),
+    "owner_left": (
+        "this window no longer follows the update; it goes on by itself (its log: {log}; its result: update-state.json)"
     ),
     "uv_settings_invalid": "the uv settings of {ref} cannot be written ({error}); nothing was updated",
     "uv_config_failed": "uv's settings for this install were not written again: {error}",
@@ -654,6 +674,24 @@ def task_info(raw: str | None) -> dict[str, Any] | None:
     return {"command": command, "enabled": enabled}
 
 
+class Owned:
+    """The owner process as its starter sees it: a child of this process, or one the Windows broker
+    started (only its id is known then)."""
+
+    def __init__(self, child: subprocess.Popen[bytes] | None, pid: int | None = None, system: Any = None):
+        self.child = child
+        self.pid = child.pid if child is not None else pid
+        self.system = system
+
+    def exit_code(self) -> int | None:
+        """None while it runs; its exit code when it ended (1 when the code cannot be known)."""
+        if self.child is not None:
+            return self.child.poll()
+        if self.pid and self.system is not None and self.system.wait_process_exit(self.pid, 0.0):
+            return 1
+        return None
+
+
 class System:
     """Every effect on the machine. Tests replace all of it except git (a throwaway clone)."""
 
@@ -717,8 +755,10 @@ class System:
     @contextlib.contextmanager
     def shielded(self) -> Iterator[None]:
         """Ctrl+C and Ctrl+Break wait while the code is switched: the update finishes or rolls back
-        first. A closed console on Windows still ends this process within seconds, and a kill or a
-        power cut at once: the switch record lets the next run try the recovery. A handler, not
+        first. Run from a terminal, the update has its own process (``run_owner``) with no console,
+        which a closed window does not reach; with TOW_UPDATE_HERE=1, or when no such process could
+        be started, a closed console on Windows still ends this process within seconds. A kill or a
+        power cut ends it at once: the switch record lets the next run try the recovery. A handler, not
         SIG_IGN, so the programs started meanwhile (uv, tow run) keep the default; a uv cut off by
         Ctrl+C fails, and that is rolled back."""
         saved = []
@@ -881,11 +921,12 @@ class System:
                 start_new_session=not self.windows,
             )
 
-    def spawn_broker(self, argv: list[str]) -> None:
+    def spawn_broker(self, argv: list[str]) -> int:
         """Local WMI starts outside the caller's jobs; the child still verifies independence.
 
         The environment travels through stdin, never a command line or an on-disk secret file.
-        No task, service configuration, elevation or remote connection is created.
+        No task, service configuration, elevation or remote connection is created. The new
+        process's id is returned.
         """
         if not self.windows:
             raise OSError("Windows broker unavailable")
@@ -929,6 +970,43 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
             or not 0 < answer["ProcessId"] <= 0xFFFFFFFF
         ):
             raise OSError("Windows broker did not confirm process creation")
+        return int(answer["ProcessId"])
+
+    def spawn_owner(self, argv: list[str]) -> Owned:
+        """The update's own process (``run_owner``), outside this one's console, process group and
+        session, so closing the window, Ctrl+C or a hang-up never reaches it: on Windows a detached
+        process that breaks away from this one's job; when the job denies that, the local broker
+        starts it outside every job (the owner checks it is in none before it changes anything).
+        Its output goes to its log, never to this console."""
+        if not self.windows:
+            return Owned(
+                subprocess.Popen(
+                    argv,
+                    cwd=str(self.root),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    close_fds=True,
+                    start_new_session=True,
+                )
+            )
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0x8) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
+        try:
+            return Owned(
+                subprocess.Popen(
+                    argv,
+                    cwd=str(self.root),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    close_fds=True,
+                    creationflags=flags | BREAKAWAY_FROM_JOB,
+                )
+            )
+        except OSError:
+            if self.updater_independent():
+                raise  # not a job's refusal: nothing a broker would change
+        return Owned(None, self.spawn_broker(argv), self)
 
     def wait_process_exit(self, pid: int, timeout: float) -> bool:
         """Wait for the intermediate parent to disappear; uncertainty refuses the update."""
@@ -1621,6 +1699,9 @@ class ArchiveCode:
             self.work.say("aborted", error=f"{TEST_CUT_SWITCH}={after}: the switch is cut off here (test only)")
             with contextlib.suppress(Exception):
                 sys.stdout.flush()
+            if _owner_result[0] is not None:  # the starter learns the exit code a broker cannot pass on
+                with contextlib.suppress(OSError):
+                    _write_result(_owner_result[0], {"code": TEST_CUT_EXIT})
             os._exit(TEST_CUT_EXIT)
 
     def switch_back(self, previous: str) -> None:
@@ -2446,6 +2527,143 @@ def update(ref: str, *, system: System | None = None, app: Path = APP, **options
         handle.close()
 
 
+# --- the update's own process (X41) ----------------------------------------------------------------
+#
+# Run from a terminal ("Update TOW.cmd", update-tow, deploy.ps1, the command `tow update` prints), this
+# file no longer updates in the terminal's process: closing the window ended that process within
+# seconds, in the middle of the switch. It copies itself to <TOW>/runtime/update-run/<id>/, outside
+# the app/ that the update replaces, and starts that copy with the same base Python as the owner of
+# the whole update (``spawn_owner``): the owner takes .update.lock, makes the snapshot, writes the
+# switch record, rolls back and records the result itself. This process holds nothing; it shows the
+# owner's log until the owner's result is written and ends with the owner's exit code. The web update
+# is unchanged: its worker is already such a process and calls ``update`` directly.
+
+_owner_result: list[Path | None] = [None]
+
+
+def _write_result(path: Path, result: dict[str, Any]) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps(result))
+        _sync(handle)
+    os.replace(temporary, path)
+
+
+def _read_result(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _prune_runs(runs: Path, current: Path) -> None:
+    """Finished owners' folders beyond the newest RUNS_KEPT: one without a result may still run."""
+    finished = sorted(
+        (folder for folder in runs.iterdir() if folder != current and (folder / OWNER_RESULT).is_file()),
+        key=lambda folder: folder.name,
+        reverse=True,
+    )
+    for folder in finished[RUNS_KEPT:]:
+        with contextlib.suppress(OSError):
+            remove_tree(folder)
+
+
+def run_owner(args: argparse.Namespace) -> int:
+    """The update in its own process (``--owner``): this file's copy in runtime/update-run/<id>/,
+    its output in that folder's update.log and its exit code in result.json. On Windows it changes
+    nothing while it is in a job (one that denied the breakaway): closing the window could end it."""
+    folder = HERE.parent
+    app = Path(args.app)
+    if folder.parent.name != RUNS or not same_path(folder.parents[2], app.parent):
+        print(f"update.py --owner runs only as the copy in {app.parent / 'runtime' / RUNS}")
+        return 2
+    result = folder / OWNER_RESULT
+    _owner_result[0] = result
+    with (folder / OWNER_LOG).open("a", encoding="utf-8", errors="backslashreplace", newline="\n") as log:
+        sys.stdout = sys.stderr = log
+        log.reconfigure(line_buffering=True)
+        system = System(app, uv=args.uv)
+        if not system.updater_independent():
+            print("the update's own process is in a job it cannot leave: the update runs in the window instead")
+            _write_result(result, {"code": OWNER_IN_JOB, "in_job": True})
+            return OWNER_IN_JOB
+        code = 2
+        try:
+            code = update(
+                args.ref,
+                system=system,
+                app=app,
+                health_timeout=args.health_timeout,
+                wait_minutes=args.wait_minutes,
+                keep=args.keep,
+                source=args.source.resolve() if args.source else None,
+                sums=args.sums.resolve() if args.sums else None,
+                discard_newer_data=args.discard_newer_data,
+            )
+        finally:
+            _write_result(result, {"code": code})
+    return code
+
+
+def _relay(log: Path, offset: int, decoder: Any) -> int:
+    """What the owner wrote to its log since ``offset``, onto this terminal; the new offset."""
+    try:
+        with log.open("rb") as handle:
+            handle.seek(offset)
+            data = handle.read()
+    except OSError:
+        return offset
+    if data:
+        with contextlib.suppress(OSError, ValueError):  # a closed terminal: the owner goes on
+            sys.stdout.write(decoder.decode(data))
+            sys.stdout.flush()
+    return offset + len(data)
+
+
+def start_owner(argv: list[str], system: System) -> int | None:
+    """Start the owner of the update of ``system.app`` and follow it; its exit code. None: no owner
+    could be started that a closed window cannot end (said), so the caller runs the update itself."""
+    import codecs
+
+    app = system.app
+    texts = _messages(app, app.parent)
+    runs = app.parent / "runtime" / RUNS
+    try:
+        runs.mkdir(parents=True, exist_ok=True)
+        folder = runs / f"{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{os.urandom(4).hex()}"
+        folder.mkdir()
+        durable_copy(HERE, folder / "update.py")
+        _prune_runs(runs, folder)
+        python = str(Path(getattr(sys, "_base_executable", None) or sys.executable).resolve())
+        owner = system.spawn_owner([python, "-I", "-u", str(folder / "update.py"), "--owner", "--app", str(app), *argv])
+    except OSError as exc:
+        print(texts.get("owner_failed", TEXTS["owner_failed"]).replace("{error}", str(exc)), flush=True)
+        return None
+    log, result, offset = folder / OWNER_LOG, folder / OWNER_RESULT, 0
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    print(texts.get("owner", TEXTS["owner"]).replace("{log}", str(log)), flush=True)
+    try:
+        while True:
+            offset = _relay(log, offset, decoder)
+            outcome = _read_result(result)
+            ended = owner.exit_code() if outcome is None else None
+            if outcome is not None or ended is not None:
+                time.sleep(OWNER_POLL)  # the log's last lines, written before the result
+                _relay(log, offset, decoder)
+                outcome = outcome or _read_result(result)
+                break
+            time.sleep(OWNER_POLL)
+    except KeyboardInterrupt:
+        print(texts.get("owner_left", TEXTS["owner_left"]).replace("{log}", str(log)), flush=True)
+        return 1
+    if outcome is not None and outcome.get("in_job") is True:
+        print(texts.get("owner_failed", TEXTS["owner_failed"]).replace("{error}", "job"), flush=True)
+        return None
+    code = outcome.get("code") if outcome is not None else ended
+    return code if type(code) is int else 1
+
+
 def _utf8_output() -> None:
     # Pipes on Windows use the ANSI codepage; -I also ignores PYTHONIOENCODING.
     # Configure both diagnostic streams before parsing or touching the install.
@@ -2479,7 +2697,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="undoing an update that was cut off: put its snapshot back even over data changed after it",
     )
+    # The update's own process (run_owner): started by this file, never by hand.
+    parser.add_argument("--owner", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--app", default=None, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.owner:
+        return run_owner(args) if args.app else 2
+    if os.environ.get(IN_PROCESS) != "1":
+        code = start_owner(list(sys.argv[1:] if argv is None else argv), System(APP, uv=args.uv))
+        if code is not None:
+            return code
     return update(
         args.ref,
         system=System(APP, uv=args.uv),

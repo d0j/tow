@@ -154,6 +154,41 @@ class Environment(unittest.TestCase):
             updater.write_uv_config(root, app)  # TOW's key among the owner's lines
 
 
+class Owner(unittest.TestCase):
+    def test_the_terminal_starts_a_copy_outside_app_and_ends_with_its_code(self):
+        # X41: the update's own process is a copy of this file in runtime/update-run/<id>/, started
+        # with the base Python (this one); the terminal shows its log and takes its exit code.
+        root = Path(tempfile.mkdtemp(prefix="tow-updater-"))
+        self.addCleanup(updater.remove_tree, root)
+        app = root / "app"
+        app.mkdir()
+        seen: list[list[str]] = []
+
+        def spawn_owner(argv: list[str]) -> SimpleNamespace:
+            seen.append(argv)
+            folder = Path(argv[3]).parent
+            (folder / updater.OWNER_LOG).write_text("stopping TOW…\n", encoding="utf-8")
+            (folder / updater.OWNER_RESULT).write_text('{"code": 1}', encoding="utf-8")
+            return SimpleNamespace(exit_code=lambda: 1)
+
+        saved = updater.OWNER_POLL
+        updater.OWNER_POLL = 0.0
+        self.addCleanup(setattr, updater, "OWNER_POLL", saved)
+        system = SimpleNamespace(app=app, root=root, spawn_owner=spawn_owner)
+        with open(os.devnull, "w", encoding="utf-8") as quiet:
+            stdout, sys.stdout = sys.stdout, quiet
+            try:
+                code = updater.start_owner(["--ref", "v9.9.9"], system)
+            finally:
+                sys.stdout = stdout
+        self.assertEqual(code, 1)
+        [argv] = seen
+        self.assertEqual(argv[1:3], ["-I", "-u"])
+        self.assertEqual(Path(argv[3]).parent.parent, root / "runtime" / updater.RUNS)
+        self.assertEqual(Path(argv[3]).read_bytes(), UPDATE.read_bytes())
+        self.assertEqual(argv[4:], ["--owner", "--app", str(app), "--ref", "v9.9.9"])
+
+
 class Retry(unittest.TestCase):
     def setUp(self):
         self.folder = Path(tempfile.mkdtemp(prefix="tow-updater-"))

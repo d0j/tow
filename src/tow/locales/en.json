@@ -2286,6 +2286,9 @@
     "root_files_kept": "{name} was left as it is: it is not a file TOW wrote",
     "root_files_failed": "the start files could not be written again ({error})",
     "newer_data": "the data changed after the update was cut off ({path}): putting back the update snapshot ({snapshot}) would lose that, so nothing was changed. To go back to TOW {version} and that snapshot anyway, run: {command}",
+    "owner": "the update runs in its own process: closing this window no longer stops it (its log: {log})",
+    "owner_failed": "the update could not start in its own process ({error}): it runs in this window, so keep the window open until it ends",
+    "owner_left": "this window no longer follows the update; it goes on by itself (its log: {log}; its result: update-state.json)",
     "uv_settings_invalid": "the uv settings of {ref} cannot be written ({error}); nothing was updated",
     "uv_config_failed": "uv's settings for this install were not written again: {error}",
     "uv_config_invalid": "uv cannot use {path} ({error}): correct or remove your lines below \"# --- your settings below ---\"; nothing was updated"
