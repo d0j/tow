@@ -13,8 +13,9 @@ name: release
 # whose content passed the `ci` workflow (its four-OS gate) - on that commit or on any commit with
 # the same tree, such as the head of the pull request it merged. Nothing is uploaded unless the
 # bundle, both installers, the update of the latest published release to this tag
-# (scripts/update-smoke.py) and the real autostart of Windows, macOS and Linux (autostart.yml, no
-# skip allowed) passed on the runners.
+# (scripts/update-smoke.py), the smokes of a real install of the release's own source archive and
+# bundle (smokes.yml: the web update, crash cleanup, permissions) and the real autostart of
+# Windows, macOS and Linux (autostart.yml, no skip allowed) passed on the runners.
 
 on:
   push:
@@ -215,6 +216,14 @@ jobs:
         shell: bash
         run: uv run --no-project python scripts/update-smoke.py --previous "$RUNNER_TEMP/previous" --source tow-source.tar.gz
 
+  # The smokes of installers.yml's wrapper, on the very source archive and bundle uploaded below.
+  smokes:
+    needs: [source, windows]
+    uses: ./.github/workflows/smokes.yml
+    with:
+      ref: ${{ needs.source.outputs.commit }}
+      release: true
+
   # The OS autostart of the three systems for the checked commit, as real.yml runs it; a runner
   # that cannot run it fails the release instead of skipping.
   autostart:
@@ -226,7 +235,7 @@ jobs:
 
   publish:
     name: upload to the release
-    needs: [source, windows, posix, update, autostart]
+    needs: [source, windows, posix, update, smokes, autostart]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -236,10 +245,15 @@ jobs:
         with:
           ref: ${{ needs.source.outputs.commit }}
           persist-credentials: false
+      # The two artifacts to publish, by name (the smokes' logs are artifacts of this run too).
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
+          name: source
           path: artifacts
-          merge-multiple: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows
+          path: artifacts
       - name: Assets and SHA256SUMS
         run: |
           mkdir assets

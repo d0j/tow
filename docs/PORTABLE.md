@@ -1010,6 +1010,19 @@ Built so far (this workstream):
   then runs the update entry file ("Update TOW.cmd", `update-tow`) of every layout TOW has written
   since 1.22.0 (`scripts/update-smoke-entry-files.json`) against a loopback release of the
   commit, moves the install, updates it once more there and checks its permissions.
+- Smokes (`.github/workflows/smokes.yml`, 1.33.1): a reusable workflow that `installers.yml` runs
+  on its triggers (the one to dispatch on a branch: it publishes nothing) and `release.yml` on the
+  release's own source archive and bundle before it publishes. Always: Settings' update of the
+  candidate with the real handoff and job read-back (`scripts/web-update-smoke.py`; the
+  historical engine is the update test above), and on the three systems a `tow run` killed hard,
+  an orphaned web server taken over and a port of another program left alone, with the folders'
+  permissions read independently (`scripts/crash-smoke.py`, `scripts/permissions-smoke.py`:
+  POSIX modes; Windows access rules by SID; a repair and a refusal kept apart). Weekly and by
+  hand also the substitutes: native `ubuntu-24.04-arm` and an Intel Mac with their real
+  architecture asserted, BusyBox and musl in a pinned Alpine container, a standard Windows account
+  in code page 866, `install.ps1` downloading a release over HTTPS on Windows PowerShell 5.1,
+  Windows with long paths off, Rosetta, a quarantined program on macOS (recorded with its
+  expectation) and NFD folder names through install, move and update.
 - Real systems (`.github/workflows/real.yml`): on pull requests that touch the clients, autostart,
   the check, the supervisor or what these tests run through (the OS layer, storage, the CLI, the
   installers and launchers, the test helpers, the locked dependencies), when such a change reaches

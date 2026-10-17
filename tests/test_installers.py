@@ -812,10 +812,10 @@ def _runs(job):
 
 def test_every_workflow_is_checked_here():
     found = sorted(path.stem for path in (ROOT / ".github" / "workflows").glob("*.yml"))
-    assert found == ["autostart", "ci", "installers", "real", "release"]
+    assert found == ["autostart", "ci", "installers", "real", "release", "smokes"]
 
 
-@pytest.mark.parametrize("name", ["ci", "installers", "real", "autostart"])
+@pytest.mark.parametrize("name", ["ci", "installers", "real", "autostart", "smokes"])
 def test_only_main_gate_writes_shared_uv_cache(name):
     _text, flow = _workflow(name)
     found = 0
@@ -830,10 +830,10 @@ def test_only_main_gate_writes_shared_uv_cache(name):
                 assert options["save-cache"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
             else:
                 assert options["save-cache"] is False
-    assert found == {"ci": 2, "installers": 3, "real": 3, "autostart": 1}[name]
+    assert found == {"ci": 2, "installers": 3, "real": 3, "autostart": 1, "smokes": 5}[name]
 
 
-@pytest.mark.parametrize("name", ["ci", "release", "installers", "real", "autostart"])
+@pytest.mark.parametrize("name", ["ci", "release", "installers", "real", "autostart", "smokes"])
 def test_every_workflow_pins_its_actions_and_only_reads_by_default(name):
     text, flow = _workflow(name)
     # Every action pinned to a commit (the repository requires it); checkout and setup-uv to the
@@ -1153,7 +1153,7 @@ def test_the_release_workflow_tests_everything_before_it_uploads():
     writers = [name for name, job in jobs.items() if job.get("permissions", {}).get("contents") == "write"]
     assert writers == ["publish"]
     assert jobs["publish"]["permissions"] == {"contents": "write"}
-    assert set(jobs["publish"]["needs"]) == {"source", "windows", "posix", "update", "autostart"}
+    assert set(jobs["publish"]["needs"]) == {"source", "windows", "posix", "update", "smokes", "autostart"}
     for job_id in ("windows", "posix", "update", "autostart"):
         assert jobs[job_id]["needs"] == ["source"]
     windows = _runs(jobs["windows"])
@@ -1350,9 +1350,10 @@ def test_release_jobs_build_and_publish_the_commit_the_source_job_checked():
     assert any(step.get("id") == "tag" and "GITHUB_OUTPUT" in step["run"] for step in jobs["source"]["steps"])
     checkouts = setups = 0
     called = {name: job for name, job in jobs.items() if "uses" in job}
-    assert set(called) == {"autostart"}  # a reusable workflow: it checks out the commit it is given
-    assert called["autostart"]["with"]["ref"] == "${{ needs.source.outputs.commit }}"
-    assert "source" in called["autostart"]["needs"]
+    assert set(called) == {"autostart", "smokes"}  # reusable workflows: they check out the commit given
+    for job in called.values():
+        assert job["with"]["ref"] == "${{ needs.source.outputs.commit }}"
+        assert "source" in job["needs"]
     for name, job in jobs.items():
         for step in job.get("steps", []):
             uses = step.get("uses", "")
