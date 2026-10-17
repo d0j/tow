@@ -248,6 +248,52 @@ def _hold_to_request_deadlines(c: httpx.Client) -> httpx.Client:
     return c
 
 
+_LOCAL_SUFFIXES = (".localhost", ".local", ".lan", ".internal", ".home.arpa")
+
+
+def is_local_host(host: str) -> bool:
+    """A loopback, private or link-local address, ``localhost``, a name of the local network
+    (``.local``, ``.lan``, ``.home.arpa``...) or a name without a dot: what a proxy from the
+    environment never carries (as a browser bypasses the proxy for local addresses)."""
+    import ipaddress
+
+    name = host.strip("[]").rstrip(".").lower()
+    if not name:
+        return False
+    try:
+        address = ipaddress.ip_address(name)
+    except ValueError:
+        return name == "localhost" or "." not in name or name.endswith(_LOCAL_SUFFIXES)
+    return address.is_loopback or address.is_private or address.is_link_local
+
+
+class _LocalHostsDirect(httpx.BaseTransport):
+    """A proxy taken from the environment (HTTP(S)_PROXY): a local host goes direct instead.
+
+    With ``allow_private_tracker_hosts`` a site on this computer or the home network is allowed,
+    and a system proxy would otherwise carry its traffic - its sign-in and cookies too - unless
+    NO_PROXY named it (1.33.1 QA-14). The torrent clients' adapters use no proxy at all."""
+
+    def __init__(self, proxied: httpx.BaseTransport, direct: httpx.BaseTransport) -> None:
+        self.proxied, self.direct = proxied, direct
+
+    def route(self, url: httpx.URL) -> httpx.BaseTransport:
+        return self.direct if is_local_host(url.host) else self.proxied
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        return self.route(request.url).handle_request(request)
+
+    def close(self) -> None:
+        self.proxied.close()  # the direct transport is the client's own: it closes it
+
+
+def _local_hosts_direct(c: httpx.Client) -> httpx.Client:
+    for pattern, transport in list(c._mounts.items()):
+        if transport is not None:
+            c._mounts[pattern] = _LocalHostsDirect(transport, c._transport)
+    return c
+
+
 def client(
     ua: str | None = None,
     cookies: dict[str, str] | None = None,
@@ -261,14 +307,16 @@ def client(
         transport = PublicOnlyTransport()
     else:
         transport = None
-    return _hold_to_request_deadlines(
-        httpx.Client(
-            headers={"User-Agent": ua or UA_DEFAULT, "Accept-Encoding": "gzip, deflate, identity"},
-            cookies=cookies or {},
-            follow_redirects=follow_redirects,
-            timeout=httpx.Timeout(20.0, connect=5.0),
-            transport=transport,
-            trust_env=not public_only,
+    return _local_hosts_direct(
+        _hold_to_request_deadlines(
+            httpx.Client(
+                headers={"User-Agent": ua or UA_DEFAULT, "Accept-Encoding": "gzip, deflate, identity"},
+                cookies=cookies or {},
+                follow_redirects=follow_redirects,
+                timeout=httpx.Timeout(20.0, connect=5.0),
+                transport=transport,
+                trust_env=not public_only,
+            )
         )
     )
 
