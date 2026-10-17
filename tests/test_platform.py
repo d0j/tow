@@ -15,6 +15,7 @@ import stat
 import struct
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar
 
@@ -1619,3 +1620,105 @@ def test_the_native_rename_of_this_system_refuses_an_existing_name(tmp_path):
     assert posix._rename_no_replace(str(source), str(link), system) == errno_module.EEXIST
     assert destination.read_bytes() == b"prepared"
     assert source.read_bytes() == b"late"
+
+
+# --- the file system a path is on (volume_of) ------------------------------------------------------
+
+_MOUNT_LINES = (
+    "22 1 8:2 / / rw,relatime shared:1 - ext4 /dev/sda2 rw",
+    "30 22 0:40 / /srv/media rw shared:2 - nfs4 nas:/export/media rw,vers=4.2",
+    "31 22 0:41 / /mnt/my\\040disk rw - exfat /dev/sdb1 rw",
+    "32 22 0:42 / /mnt/ssh rw - fuse.sshfs user@host:/data rw",
+    "33 22 0:43 / /mnt/fuse rw - fuse some-local-fuse rw",
+    "34 22 8:33 / /mnt/ntfs rw - fuseblk /dev/sdc1 rw",
+    "35 30 0:44 / /srv/media rw - cifs //nas/media rw",  # mounted over the NFS one: it counts
+    "garbage line",
+)
+_MOUNTINFO = "\n".join(_MOUNT_LINES)
+
+
+@pytest.mark.parametrize(
+    ("path", "identity", "kind"),
+    [
+        ("/home/user/tow/data", "ext4 /", "local"),
+        ("/srv/media/tv", "cifs /srv/media //nas/media", "network"),
+        ("/srv/mediathek", "ext4 /", "local"),  # a name that only starts like a mount point
+        ("/mnt/my disk/tv", "exfat /mnt/my disk", "local"),
+        ("/mnt/ssh/tow", "fuse.sshfs /mnt/ssh user@host:/data", "network"),
+        ("/mnt/fuse/tow", "fuse /mnt/fuse", "unknown"),
+        ("/mnt/ntfs", "fuseblk /mnt/ntfs", "local"),
+        ("/mnt/usb", "ext4 /", "local"),  # not mounted: its empty folder is on the root file system
+    ],
+)
+def test_linux_volume_is_the_longest_mount_above_the_path(path, identity, kind):
+    assert posix.linux_volume(path, _MOUNTINFO) == platform.Volume(identity, kind)
+
+
+def test_linux_volume_unknown_without_mountinfo():
+    assert posix.linux_volume("/srv", "") is None
+
+
+def test_posix_backends_read_their_own_sources(monkeypatch):
+    monkeypatch.setattr(posix, "_resolve", lambda path: "/srv/media/tv")
+    monkeypatch.setattr(posix, "_read", lambda path: _MOUNTINFO if path == "/proc/self/mountinfo" else "")
+    assert PosixBackend("linux").volume(Path("/srv/media/tv")).kind == "network"
+    monkeypatch.setattr(posix, "_statfs", lambda path: ("smbfs", "/Volumes/media", "//user@nas/media"))
+    assert PosixBackend("macos").volume(Path("/Volumes/media/tv")) == platform.Volume(
+        "smbfs /Volumes/media //user@nas/media", "network"
+    )
+    monkeypatch.setattr(posix, "_statfs", lambda path: ("apfs", "/System/Volumes/Data", "/dev/disk3s5"))
+    assert PosixBackend("macos").volume(Path("/Users/user")) == platform.Volume("apfs /System/Volumes/Data", "local")
+    monkeypatch.setattr(posix, "_statfs", lambda path: None)
+    assert PosixBackend("macos").volume(Path("/Users/user")) is None
+
+
+@pytest.mark.parametrize(
+    ("mount_point", "drive_type", "guid", "expected"),
+    [
+        ("D:\\", 3, "\\\\?\\Volume{0000AAAA-1111}\\", ("\\\\?\\volume{0000aaaa-1111}\\", "local")),
+        ("C:\\mnt\\disk\\", 3, "\\\\?\\Volume{0000BBBB-2222}\\", ("\\\\?\\volume{0000bbbb-2222}\\", "local")),
+        ("Z:\\", 4, None, ("path z:\\", "network")),  # a mapped network drive has no volume GUID
+        ("\\\\nas\\tv\\", 4, None, ("share \\\\nas\\tv\\", "network")),
+        ("E:\\", 0, "\\\\?\\Volume{0000CCCC-3333}\\", ("\\\\?\\volume{0000cccc-3333}\\", "unknown")),
+    ],
+)
+def test_windows_volume_is_the_mounted_volume_not_the_drive_letter(
+    monkeypatch, mount_point, drive_type, guid, expected
+):
+    monkeypatch.setattr(windows, "_volume_path", lambda path: mount_point)
+    monkeypatch.setattr(windows, "_drive_type", lambda root: drive_type)
+    monkeypatch.setattr(windows, "_volume_guid", lambda root: guid)
+    assert windows.volume(Path("X:\\any")) == platform.Volume(*expected)
+
+
+def test_windows_volume_unknown_when_windows_cannot_tell(monkeypatch):
+    monkeypatch.setattr(windows, "_volume_path", lambda path: None)
+    assert windows.volume(Path("X:\\any")) is None
+
+    def failing(_path):
+        raise OSError("no such volume")
+
+    monkeypatch.setattr(windows, "_volume_path", failing)
+    assert windows.volume(Path("X:\\any")) is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the Windows volume calls")
+def test_this_windows_names_its_local_volume_by_guid(tmp_path):
+    found = platform.volume_of(tmp_path)
+    assert found is not None
+    assert found.kind == "local"
+    assert found.identity.startswith("\\\\?\\volume{")
+    assert platform.volume_of(tmp_path / "not" / "there") == found
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="/proc/self/mountinfo")
+def test_this_linux_finds_the_mount_of_a_folder(tmp_path):
+    found = PosixBackend("linux").volume(tmp_path)
+    assert found is not None
+    assert found.identity.split(" ", 1)[1].startswith("/")
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS statfs")
+def test_this_mac_reads_statfs_of_its_root():
+    fstype, mount_point, _source = posix._statfs("/")
+    assert (fstype, mount_point) == ("apfs", "/")

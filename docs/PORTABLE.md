@@ -452,8 +452,9 @@ gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` sa
   `%`, two `!`, or a `^` and a `!` before it writes anything; do not move an install into one.
 - `data/` belongs on a local file system. TOW's locks (`flock` on Linux and macOS, file locks on
   Windows) on NFS or SMB depend on the protocol version, the kernel and the mount options, and may
-  not keep a second TOW on another computer out; TOW does not check this. Night copies and restore
-  points may go to a network folder: only the live `data/` must be local.
+  not keep a second TOW on another computer out. `tow doctor` warns when it recognises the file system
+  of `data/` as a network one (NFS, SMB, 9p, SSHFS and the like; FUSE in general is not recognised).
+  Night copies and restore points may go to a network folder: only the live `data/` must be local.
 - The folder needs a file system with links: uv links `runtime/python/cpython-X.Y-*` to the
   full version (a junction on Windows, a symlink elsewhere). FAT32 and exFAT (many USB sticks)
   have none, and `tow setup` cannot complete there (not verified on every uv version); use NTFS

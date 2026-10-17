@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from tow.platform import _common, powershell_program, windows_program
+from tow.platform._common import Volume
 
 FILETIME_UNIX_EPOCH = 116444736000000000
 _EVENT_NS = "{http://schemas.microsoft.com/win/2004/08/events/event}"
@@ -279,6 +280,59 @@ def _kernel32_with_last_error() -> tuple[Any, Any]:
     if getattr(ctypes, "windll", None) is None or library is None or get_error is None:
         raise AttributeError("ctypes.windll")
     return library("kernel32", use_last_error=True), get_error
+
+
+# GetDriveTypeW: a network drive or share; removable, fixed, CD and RAM disks are this computer's.
+_DRIVE_KINDS = {2: "local", 3: "local", 4: "network", 5: "local", 6: "local"}
+
+
+def _volume_call(name: str, path: str, size: int) -> str | None:
+    """GetVolumePathNameW or GetVolumeNameForVolumeMountPointW of ``path``, None when it fails."""
+    from ctypes import wintypes
+
+    kernel32, _last_error = _kernel32_with_last_error()
+    call = getattr(kernel32, name)
+    call.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+    call.restype = wintypes.BOOL
+    buffer = ctypes.create_unicode_buffer(size)
+    return buffer.value if call(path, buffer, size) and buffer.value else None
+
+
+def _volume_path(path: str) -> str | None:
+    """The mount point holding ``path``: a drive (``D:\\``), a folder a volume is mounted on
+    (``C:\\mnt\\disk\\``) or a share (``\\\\nas\\tv\\``)."""
+    return _volume_call("GetVolumePathNameW", path, 32768)
+
+
+def _volume_guid(mount_point: str) -> str | None:
+    """``\\\\?\\Volume{GUID}\\`` of a local volume's mount point: the same after a reboot or another
+    drive letter; None for a share or a substituted drive."""
+    return _volume_call("GetVolumeNameForVolumeMountPointW", mount_point, 50)
+
+
+def _drive_type(mount_point: str) -> int:
+    from ctypes import wintypes
+
+    kernel32, _last_error = _kernel32_with_last_error()
+    kernel32.GetDriveTypeW.argtypes = (wintypes.LPCWSTR,)
+    kernel32.GetDriveTypeW.restype = wintypes.UINT
+    return int(kernel32.GetDriveTypeW(mount_point))
+
+
+def volume(path: Path) -> Volume | None:
+    """The volume holding the existing ``path`` (tow.platform.volume_of)."""
+    try:
+        mount_point = _volume_path(os.fspath(path))
+        if not mount_point:
+            return None
+        if mount_point.startswith("\\\\"):
+            return Volume("share " + ntpath.normcase(mount_point), "network")
+        kind = _DRIVE_KINDS.get(_drive_type(mount_point), "unknown")
+        guid = _volume_guid(mount_point)
+    except AttributeError, OSError, ValueError:
+        return None
+    # A mapped network drive or a substituted one has no volume GUID: its mount point names it.
+    return Volume(guid.casefold() if guid else "path " + ntpath.normcase(mount_point), kind)
 
 
 def process_alive(pid: int) -> bool:
@@ -946,6 +1000,9 @@ class WindowsBackend:
 
     def allocated_bytes(self, path: Path) -> int | None:
         return compressed_file_size(path)
+
+    def volume(self, path: Path) -> Volume | None:
+        return volume(path)
 
     def elevated(self) -> bool:
         return elevated()

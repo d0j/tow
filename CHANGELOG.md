@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Added
+
+- `tow doctor` warns when the live `data/` folder is on a network file system (NFS, SMB, 9p, SSHFS and the like),
+  where TOW's locks may not keep a second TOW on another computer out.
+
 ### Fixed
 
 - **Mark all read** and **Clear history** in Recent messages give up after 10 seconds when TOW does not answer
