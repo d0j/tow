@@ -1043,7 +1043,10 @@ Built so far (this workstream):
   architecture asserted, BusyBox and musl in a pinned Alpine container, a standard Windows account
   in code page 866, `install.ps1` downloading a release over HTTPS on Windows PowerShell 5.1,
   Windows with long paths off, Rosetta, a quarantined program on macOS (recorded with its
-  expectation) and NFD folder names through install, move and update.
+  expectation), NFD folder names through install, move and update, and a device on the network
+  as two network namespaces of one Linux runner joined by a veth pair (`scripts/netns-smoke.py`:
+  TOW in one, a client in the other at its address; sign-in, separate sessions, scrubbed texts).
+  These are separate network stacks on one runner, not a second device.
 - Real systems (`.github/workflows/real.yml`): on pull requests that touch the clients, autostart,
   the check, the supervisor or what these tests run through (the OS layer, storage, the CLI, the
   installers and launchers, the test helpers, the locked dependencies), when such a change reaches
@@ -1067,7 +1070,14 @@ Built so far (this workstream):
   it), on Linux and macOS from the terminal through systemd or launchd, where Settings' update is
   refused as designed. A Windows runner also drives a pinned qBittorrent (its version, SHA-256
   and signature recorded) with save paths in a Cyrillic folder, and Linux and macOS run the
-  native probes with each fallback forced (`tests/integration/test_real_probes.py`).
+  native probes with each fallback forced (`tests/integration/test_real_probes.py`). Both client
+  jobs record how qBittorrent (and on Linux Transmission) spell file names Windows reserves (CON,
+  `aux.txt`, COM0, LPT0, superscript digits, CONIN$, a trailing dot or space) in synthetic
+  torrents that reach no tracker, keep the record as an artifact and check TOW's file-name keys
+  against it (`tests/integration/test_real_client_names.py`). Another job mounts a tmpfs, vfat
+  and exFAT (the kernel's drivers and FUSE) on Ubuntu and exFAT and FAT disk images on macOS:
+  a folder's recorded volume through unmount and remount, and an export published without hard
+  links or refused without a file (`tests/integration/test_real_filesystems.py`).
   These tests carry `@pytest.mark.real_system("TOW_REAL_...")`: skipped unless that variable is 1,
   which only these workflows set; then the test guard lets them through.
 - Releases (`.github/workflows/release.yml`, 1.22): a `v*` tag (or a dispatch with a tag) must be
