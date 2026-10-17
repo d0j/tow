@@ -106,6 +106,42 @@ def test_the_crash_smoke_kills_only_processes_of_its_install(tmp_path, monkeypat
     assert killed == []
 
 
+@pytest.mark.parametrize(("os_name", "reuse"), [("posix", True), ("nt", False)])
+def test_the_crash_smokes_unrelated_listener_binds_past_time_wait_only_outside_windows(monkeypatch, os_name, reuse):
+    # Before: the listener bound without SO_REUSEADDR, so on Linux and macOS the stopped server's
+    # connections in TIME_WAIT made its bind fail ("Address already in use") with nothing listening.
+    import os
+    import types
+
+    crash = _script("crash-smoke.py")
+    calls: list[tuple] = []
+
+    class Stop(Exception):
+        pass
+
+    class Socket:
+        def setsockopt(self, *args):
+            calls.append(("setsockopt", *args))
+
+        def bind(self, address):
+            calls.append(("bind", address))
+
+        def listen(self, backlog):
+            calls.append(("listen", backlog))
+
+        def accept(self):
+            raise Stop
+
+    fake = types.SimpleNamespace(socket=Socket, SOL_SOCKET=1, SO_REUSEADDR=2)
+    monkeypatch.setitem(sys.modules, "socket", fake)
+    monkeypatch.setattr(os, "name", os_name)
+    monkeypatch.setattr(sys, "argv", ["-c", "18959"])
+    with pytest.raises(Stop):
+        exec(crash.LISTENER, {"__name__": "listener"})  # noqa: S102 - the smoke's own child code
+    expected = [("setsockopt", 1, 2, 1)] if reuse else []
+    assert calls == [*expected, ("bind", ("127.0.0.1", 18959)), ("listen", 16)]
+
+
 def test_the_permissions_smoke_reads_sids_not_names():
     permissions = _script("permissions-smoke.py")
     user = "S-1-5-21-1-2-3-1001"
