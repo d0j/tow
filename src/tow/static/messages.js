@@ -830,37 +830,40 @@
   // A read or clear refused for too many requests (429) is sent once more after its Retry-After (a
   // hidden tab: once shown), up to the same entry (``cursor``, taken when it was asked): never one a
   // refresh showed meanwhile.
+  // The POST and its body take 10 s at most, as the list's GET (``within``): a longer one is aborted
+  // and said once as not saved. It is not sent again by itself (it may have been saved), and an
+  // answer arriving after that is not taken: the next refresh shows what the server kept.
   const mark = (path, { cursor = shared.cursor, again = false } = {}) => {
     if (typeof fetch !== "function" || !cursor) return Promise.resolve();
     const mine = session;
     const body = new URLSearchParams({ cursor });
     const headers = { Accept: "application/json", ...tabHeader() };
-    return fetch(path, { method: "POST", credentials: "same-origin", headers, body, signal: requests?.signal })
-      .then(async (response) => {
-        if (mine !== session) return;
-        let data = null;
-        try {
-          data = await response.json();
-        } catch {
-          data = null;
-        }
-        if (mine !== session) return; // signed out while the body was read
-        if (response.ok) {
-          accept(data);
-          return;
-        }
-        if (response.status === 429 && !again) {
-          const retry = () => { if (mine === session) mark(path, { cursor, again: true }); };
-          window.setTimeout(() => { if (mine === session) whenShown(retry); }, retryAfterMs(response));
-          return;
-        }
-        if (response.status === 409) {
-          shared.etag = "";
-          refresh(); // another device changed the list meanwhile: shown anew
-          return;
-        }
-        failed(data?.error);
-      })
+    const read = async (response, current) => {
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (!current()) return; // signed out or given up while the body was read
+      if (response.ok) {
+        accept(data);
+        return;
+      }
+      if (response.status === 429 && !again) {
+        const retry = () => { if (mine === session) mark(path, { cursor, again: true }); };
+        window.setTimeout(() => { if (mine === session) whenShown(retry); }, retryAfterMs(response));
+        return;
+      }
+      if (response.status === 409) {
+        shared.etag = "";
+        refresh(); // another device changed the list meanwhile: shown anew
+        return;
+      }
+      failed(data?.error);
+    };
+    return within(path, { method: "POST", credentials: "same-origin", headers, body }, read)
+      .then((outcome) => { if (outcome?.timedOut && mine === session) failed(""); })
       .catch(() => { if (mine === session) failed(""); }); // aborted by a sign-out: nothing to say
   };
   if (menu && toggle) {

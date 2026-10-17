@@ -5,6 +5,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- **Mark all read** and **Clear history** in Recent messages give up after 10 seconds when TOW does not answer
+  and say once that it was not saved, instead of waiting for ever; an answer arriving later is not taken over
+  what the next refresh shows.
+
 ## [1.33.0] — 2026-10-17
 
 ### Changed

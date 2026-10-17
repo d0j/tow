@@ -422,6 +422,78 @@ verdict.rateLimitedWaitsForRetryAfter = true;
 }
 verdict.retriedMarkKeepsItsCursor = true;
 
+// A read or clear whose POST never answers, or whose body never ends, is given up (aborted) after
+// 10 s like the list's GET: the owner is told once that it was not saved, an answer arriving after
+// that is not taken (the next refresh shows what the server kept), and a later read or clear is a
+// request of its own. Signing out meanwhile ends it silently.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", subject: "Show A", text: "Check failed", at: 1800000100 }]);
+  const plain = server.fetch;
+  let hang = "";
+  let late = null;
+  const signals = [];
+  server.fetch = (url, options = {}) => {
+    if (url === "/messages.json" || !hang) return plain(url, options);
+    signals.push(options.signal);
+    if (hang === "fetch") {
+      server.requests.push({ url, method: options.method || "GET", body: null, headers: options.headers || {} });
+      return new Promise(() => {});
+    }
+    return plain(url, options).then((answer) => ({
+      ...answer,
+      json: () => new Promise((resolve) => { late = () => resolve({ ok: true, items: [{ id: "stale", kind: "err", text: "old" }], unread: 1, worst: "err", cursor: "x" }); }),
+    }));
+  };
+  const live = page({ storage: memoryStorage(), server });
+  await settle();
+  const center = live.window.towMessages.center;
+  const shown = [];
+  const show = center.show.bind(center);
+  center.show = (record, ...rest) => { shown.push(record); return show(record, ...rest); };
+  const posts = (url) => server.requests.filter((request) => request.url === url).length;
+  for (const [kind, button, url] of [["fetch", "[data-messages-read]", "/messages/read"], ["body", "[data-messages-clear]", "/messages/clear"]]) {
+    hang = kind;
+    shown.length = 0;
+    live.document.dispatch(live.$(button), "click");
+    await settle();
+    live.timers.advance(9900);
+    await settle();
+    assert.equal(shown.length, 0, kind);
+    live.timers.advance(200);
+    await settle();
+    assert.equal(signals.at(-1)?.aborted, true, kind);
+    assert.deepEqual(shown.map((record) => [record.kind, record.text]), [["err", "js.messages.not_saved"]], kind);
+    live.timers.advance(60000);
+    await settle();
+    assert.equal(shown.length, 1, kind); // said once, never again by itself
+    hang = "";
+    const before = posts(url);
+    live.document.dispatch(live.$(button), "click");
+    await settle();
+    assert.equal(posts(url), before + 1, kind);
+  }
+  late();
+  await settle();
+  assert.ok(!live.window.towMessages.shared().items.some((item) => item.id === "stale"));
+  assert.equal(shown.length, 1);
+  // Signed out while a read is on its way: nothing is said, then or after the 10 s.
+  server.change((list) => list.unshift({ id: "e3", cursor: "c3", kind: "ok", subject: "Show B", text: "New file", at: 1800000300, read: false }));
+  assert.equal(await live.window.towMessages.refresh(), true);
+  hang = "fetch";
+  shown.length = 0;
+  const sent = signals.length;
+  live.document.dispatch(live.$("[data-messages-read]"), "click");
+  await settle();
+  assert.equal(signals.length, sent + 1);
+  live.window.towMessages.signOut();
+  await settle();
+  live.timers.advance(20000);
+  await settle();
+  assert.equal(signals.at(-1)?.aborted, true);
+  assert.deepEqual(shown, []);
+}
+verdict.hungMarkGivenUp = true;
+
 // A hidden tab sends no automatic retry after 429 (as sync.js's poll asks nothing while hidden): the
 // list's retry and a refused read wait until the tab is shown again, and the list's retry goes with
 // that moment's own refresh - one request - under sync.js and without it.
