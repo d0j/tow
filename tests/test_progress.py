@@ -7,7 +7,7 @@ from helpers import raises_code
 from tow import platform
 from tow.episodes import item_identity, summarize_completion
 from tow.progress import filesystem_confirmation, reconcile_topic, safe_relative_path
-from tow.progress.expected import preferred_season_for
+from tow.progress.expected import _season_relative_expected, preferred_season_for
 from tow.progress.labels import latest_item_label
 from tow.progress.reconcile import _file_progress
 from tow.web.views import topic_progress_summary
@@ -2239,3 +2239,26 @@ def test_the_new_episode_is_the_latest_event_of_a_new_revision():
     assert record["last_event"]["kind"] == "episode_completed"  # a completion still outranks
     set_latest_event(record, {"kind": "revision_updated", "label": "S01E09", "at": "2026-10-08T20:20:00+03:00"})
     assert record["last_event"]["label"] == "S01E09"  # a later time always wins
+
+
+_RANGE_73_176 = {"source": "title", "episode_min": 73, "episode_max": 176, "total": 104}
+
+
+@pytest.mark.parametrize(
+    ("episodes", "numbering"),
+    [
+        ([1, 2, 80, 81], None),  # exactly half below the range: the files still fit it
+        ([1, 2, 3, 80], "restarted"),  # half + 1 below: numbering restarted
+        ([1, 80], None),
+        ([1, 2, 80, 81, 82], None),  # 2 of 5
+        ([1, 2, 3, 80, 81], "restarted"),  # 3 of 5
+        ([72, 73], None),  # the range's first episode is not below it
+        ([1, 72], "restarted"),
+    ],
+)
+def test_restarted_numbering_needs_more_than_half_below_the_range(episodes, numbering):
+    keys = [f"episode:e{number}" for number in episodes]
+    result = _season_relative_expected(dict(_RANGE_73_176), keys, None)
+    assert (result or {}).get("numbering") == numbering
+    if result is not None:
+        assert {key: result[key] for key in _RANGE_73_176} == _RANGE_73_176  # the title's range stays
