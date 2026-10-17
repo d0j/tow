@@ -1006,7 +1006,10 @@ Built so far (this workstream):
   the new version with `data/`, the key and `config.yaml` kept; the same once more with the new updater,
   and once with the copy it leaves in `runtime/update.py`. Weekly and by hand it also measures
   all 45 large file-selection scenarios of `tests/selection_work_probe.py`
-  (`TOW_SELECTION_WORK=all`); the gate measures the costliest of each kind.
+  (`TOW_SELECTION_WORK=all`); the gate measures the costliest of each kind. The update test
+  then runs the update entry file ("Update TOW.cmd", `update-tow`) of every layout TOW has written
+  since 1.22.0 (`scripts/update-smoke-entry-files.json`) against a loopback release of the
+  commit, moves the install, updates it once more there and checks its permissions.
 - Real systems (`.github/workflows/real.yml`): on pull requests that touch the clients, autostart,
   the check, the supervisor or what these tests run through (the OS layer, storage, the CLI, the
   installers and launchers, the test helpers, the locked dependencies), when such a change reaches

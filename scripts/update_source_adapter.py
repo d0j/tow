@@ -71,11 +71,21 @@ def loopback_origin(origin: str) -> str:
     return origin
 
 
+MAIN_GUARD = '\n\nif __name__ == "__main__":\n'
+
+
 def adapt_updater(text: str, origin: str) -> str:
-    """The updater's text with the test origin as its source (``UPDATER_SUFFIX``)."""
+    """The updater's text with the test origin as its source (``UPDATER_SUFFIX``): before its
+    ``if __name__ == "__main__":`` block, so a run of the file itself (the terminal update and the
+    entry files a user double-clicks, which copy it to their own process) uses it too, not only
+    the web update's worker, which imports it."""
     if MARKER in text:
         return text  # adapted already
-    return text + UPDATER_SUFFIX.format(origin=loopback_origin(origin), repo=REPO)
+    suffix = UPDATER_SUFFIX.format(origin=loopback_origin(origin), repo=REPO)
+    at = text.rfind(MAIN_GUARD)
+    if at < 0:
+        return text + suffix
+    return text[:at] + suffix + text[at:]
 
 
 def patch_releases(releases: Any, version: str) -> None:
