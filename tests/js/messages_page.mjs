@@ -422,6 +422,42 @@ verdict.rateLimitedWaitsForRetryAfter = true;
 }
 verdict.retriedMarkKeepsItsCursor = true;
 
+// A hidden tab sends no automatic retry after 429 (as sync.js's poll asks nothing while hidden): the
+// list's retry and a refused read wait until the tab is shown again, and the list's retry goes with
+// that moment's own refresh - one request - under sync.js and without it.
+for (const withSync of [true, false]) {
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", subject: "Show A", text: "Check failed", at: 1800000100 }]);
+  const extra = withSync ? { towSync: { client: { stopped: () => false } } } : {};
+  const live = page({ storage: memoryStorage(), server, extra });
+  await settle();
+  const count = (url) => server.requests.filter((request) => request.url === url).length;
+  server.change((list) => list.unshift({ id: "e2", cursor: "c2", kind: "ok", subject: "Show B", text: "New file", at: 1800000200, read: false }));
+  server.fail = { status: 429, data: { ok: false, error: "Too many requests." }, retryAfter: "3" };
+  assert.equal(await live.window.towMessages.refresh(), false);
+  live.document.dispatch(live.$("[data-messages-read]"), "click");
+  await settle();
+  server.fail = null;
+  live.document.hidden = true;
+  live.document.dispatch(live.document, "visibilitychange");
+  const gets = count("/messages.json");
+  const reads = count("/messages/read");
+  live.timers.advance(60000);
+  await settle();
+  assert.equal(count("/messages.json"), gets, `hidden, sync ${withSync}`);
+  assert.equal(count("/messages/read"), reads, `hidden, sync ${withSync}`);
+  live.document.hidden = false;
+  live.document.dispatch(live.document, "visibilitychange");
+  await settle();
+  assert.equal(count("/messages.json"), gets + 1, `shown, sync ${withSync}`);
+  assert.equal(count("/messages/read"), reads + 1, `shown, sync ${withSync}`);
+  assert.equal(server.requests.filter((request) => request.url === "/messages/read").at(-1).body.cursor, "c1");
+  live.timers.advance(60000);
+  await settle();
+  assert.equal(count("/messages.json"), gets + 1); // nothing owed any more
+  assert.equal(count("/messages/read"), reads + 1);
+}
+verdict.hiddenTabRetriesWhenShown = true;
+
 // The per-tab history of 1.32 and older: removed with one notice, never sent anywhere; a reload
 // says nothing again.
 {
