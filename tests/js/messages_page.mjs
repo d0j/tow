@@ -39,6 +39,7 @@ export const fakeServer = (items = []) => {
   server.fetch = (url, options = {}) => {
     const body = options.body ? Object.fromEntries(new URLSearchParams(String(options.body))) : null;
     server.requests.push({ url, method: options.method || "GET", body, headers: options.headers || {} });
+    if (server.offline) return Promise.reject(new TypeError("offline"));
     if (server.fail) return answer(server.fail.status, server.fail.data || {});
     if (url === "/messages.json") {
       const etag = `"r${server.revision}"`;
@@ -255,6 +256,36 @@ verdict.panelShowsThisTab = true;
   server.fail = null;
 }
 verdict.signedOutDropsTheList = true;
+
+// refresh() says whether the page has the install's list now (sync.js applies the messages area only
+// then): true for a list taken, or confirmed unchanged by a 304; false for a failed or lost request;
+// a refresh asked while one is on its way answers for a request sent after it.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "ok", subject: "Show A", text: "New file", at: 1800000100 }]);
+  const live = page({ storage: memoryStorage(), server });
+  await settle();
+  const refresh = () => live.window.towMessages.refresh();
+  assert.equal(await refresh(), true); // 304: what it has is the list
+  server.fail = { status: 503, data: {} };
+  assert.equal(await refresh(), false);
+  server.fail = null;
+  server.offline = true;
+  assert.equal(await refresh(), false);
+  server.offline = false;
+  const count = server.requests.length;
+  const first = refresh();
+  server.change((list) => list.unshift({ id: "e2", cursor: "c2", kind: "warn", subject: "Show B", text: "Check failed", at: 1800000200, read: false }));
+  const second = refresh();
+  assert.equal(await second, true);
+  assert.equal(server.requests.length, count + 2); // the second answer is of a request sent after the change
+  assert.deepEqual(live.window.towMessages.shared().items.map((item) => item.id), ["e2", "e1"]);
+  assert.equal(await first, true);
+  // Signed out meanwhile: not the list of this session.
+  const late = refresh();
+  live.window.towMessages.signOut();
+  assert.equal(await late, false);
+}
+verdict.refreshSaysWhetherTheListIsCurrent = true;
 
 // The per-tab history of 1.32 and older: removed with one notice, never sent anywhere; a reload
 // says nothing again.

@@ -305,6 +305,26 @@ sync.hint();
 assert.deepEqual(posted.at(-1), ["tow-sync.ns", "changed"]);
 verdict.hintScopedWithoutData = true;
 
+// ---- the messages area is applied (named in ``have``) only once messages.js has the list: a
+// refresh that failed leaves it unapplied and is asked again later, though every answer is 304.
+{
+  const results = [false, true];
+  const calls = [];
+  window.towMessages.refresh = () => { calls.push(clock.now()); return Promise.resolve(results.shift() ?? true); };
+  const rev = REV(7).replace(/7/g, "f");
+  const polled = () => sent.filter((r) => r.url.startsWith("/sync.json")).at(-1).url;
+  answer({ messages: { rev } });
+  while (!calls.length) await run(50);
+  await run(5000);
+  assert.ok(!polled().includes(`messages%3A${rev}`), polled());
+  while (calls.length < 2) await run(50);
+  assert.ok(calls[1] - calls[0] >= 5000);
+  await run(5000);
+  assert.ok(polled().includes(`messages%3A${rev}`), polled());
+  window.towMessages.refresh = () => {};
+}
+verdict.messagesAppliedOnlyOnceListTaken = true;
+
 // ---- signing out ends one session for every request and settler of the page: fragments of the
 // page area (pages.js, here on a History list) whose body arrives after it are not put in, nor
 // asked for again; a request asked afterwards is not sent; the sign-out's listeners are told once.

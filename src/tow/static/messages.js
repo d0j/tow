@@ -5,7 +5,8 @@
 // a check's progress and result - shown once, then kept under "This tab" in the panel while the
 // page lives (memory only); it never counts as unread. Every strip message goes through
 // window.towMessages.showMessage(record); window.towMessages.refresh() asks the server again (the
-// panel opening, the tab shown again, and sync.js's poll call it). Earlier versions kept a list
+// panel opening, the tab shown again, and sync.js's poll call it) and answers true once the page
+// has the list, false when it could not get it. Earlier versions kept a list
 // per tab in sessionStorage: it is removed with one notice, never uploaded.
 // The words a screen reader says come only from the page's two empty live regions, once per
 // message: never again on a reload, from the list or from a countdown.
@@ -415,7 +416,7 @@
       // aborted already
     }
     requests = newController();
-    again = false;
+    next = null;
     saying.forEach((timer) => window.clearTimeout(timer));
     saying.clear();
     ["announce", "announce-alert"].forEach((name) => {
@@ -698,10 +699,13 @@
   // The server: the list (conditional GET: unchanged costs a 304), read and clear (POST, for every
   // device). One request at a time; a refresh asked meanwhile runs once it ends. An answer of an
   // older session (signed out meanwhile) is dropped.
+  // ``refresh()`` answers whether the page has the install's list now: true once a list was taken or
+  // a 304 confirmed it, false for a failure, a refused or damaged list, or a request of an ended
+  // session. sync.js names the messages area as applied only on true and asks again otherwise.
   let inFlight = null;
-  let again = false;
+  let next = null; // the one refresh asked for while a request is on its way: sent right after it
   const accept = (data, etag = "") => {
-    if (!data || !Array.isArray(data.items)) return;
+    if (!data || !Array.isArray(data.items)) return false;
     shared = {
       items: data.items.slice(0, LIMIT),
       unread: Math.max(0, Number(data.unread) || 0),
@@ -711,38 +715,41 @@
       loaded: true,
     };
     render();
+    return true;
   };
-  const refresh = () => {
-    if (typeof fetch !== "function") return Promise.resolve();
-    if (inFlight) {
-      again = true;
-      return inFlight;
-    }
+  const ask = () => {
     const mine = session;
     const headers = { Accept: "application/json" };
     if (shared.etag) headers["If-None-Match"] = shared.etag;
     inFlight = fetch("/messages.json", { credentials: "same-origin", cache: "no-store", headers, signal: requests?.signal })
       .then(async (response) => {
-        if (mine !== session || response.status === 304) return;
+        if (mine !== session) return false;
+        if (response.status === 304) return shared.loaded;
         if (response.status === 401) {
           shared = emptyFeed(); // signed out: nothing of the list stays on the page
           render();
-          return;
+          return false;
         }
-        if (!response.ok) return;
+        if (!response.ok) return false;
         const data = await response.json();
-        if (mine !== session) return; // signed out while the body was read
-        accept(data, response.headers?.get?.("ETag") || "");
+        if (mine !== session) return false; // signed out while the body was read
+        return accept(data, response.headers?.get?.("ETag") || "");
       })
-      .catch(() => {})
-      .finally(() => {
-        inFlight = null;
-        if (again) {
-          again = false;
-          refresh();
-        }
-      });
+      .catch(() => false)
+      .finally(() => { inFlight = null; });
     return inFlight;
+  };
+  const refresh = () => {
+    if (typeof fetch !== "function") return Promise.resolve(false);
+    if (!inFlight) return ask();
+    if (!next) {
+      const mine = session;
+      next = inFlight.then(() => {
+        next = null;
+        return mine === session ? refresh() : false;
+      });
+    }
+    return next;
   };
   const failed = (text) => center.show({ kind: "err", text: text || t("js.messages.not_saved") });
   // Read or clear up to the newest entry this page shows: an entry that arrived since stays.

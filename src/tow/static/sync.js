@@ -1113,8 +1113,13 @@
     }
   });
 
-  // ---- the messages area: their list is messages.js's (it reads its own feed)
-  client.on("messages", () => window.towMessages?.refresh?.());
+  // ---- the messages area: their list is messages.js's (it reads its own feed). The area is applied
+  // only once messages.js has taken that list (its refresh answers true); otherwise it is offered
+  // again later, also behind 304s (the client's offer).
+  client.on("messages", () => {
+    const asked = window.towMessages?.refresh?.();
+    return typeof asked?.then === "function" ? asked.then((taken) => taken === true, () => false) : true;
+  });
 
   // ---- Home's rows
   const list = document.getElementById("topics");
