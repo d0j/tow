@@ -235,6 +235,13 @@ def user_home() -> Path:
     return Path.home()
 
 
+def expand_user(value: str) -> Path:
+    """``value`` with a leading ``~`` (``~user``) replaced by that home folder, as
+    ``Path.expanduser`` does: anything else is left as typed, and a home that cannot be found
+    raises RuntimeError. The only place outside the install's own folders that names a home."""
+    return Path(value).expanduser()
+
+
 def launcher(*, windows: bool) -> str:
     """The launcher as typed in the install folder: ``app\\scripts\\tow.cmd`` (``app/scripts/tow``)
     in a runtime install, ``scripts\\tow.cmd`` in a development checkout. Relative, so a page

@@ -17,7 +17,7 @@ from pathlib import Path
 from tow.folders import is_windows_device_path, protected_kind, windows_name_problem
 from tow.i18n import t
 from tow.log import owner_language
-from tow.paths import config_path, data_dir
+from tow.paths import config_path, data_dir, expand_user
 from tow.platform import is_windows
 
 
@@ -49,7 +49,7 @@ def resolve(value: str | None, location: Location) -> Path:
         if location.default:
             return install_dir() / location.default
         return data_dir() / location.data_subdir
-    path = Path(raw).expanduser()
+    path = expand_user(raw)
     return path if path.is_absolute() else install_dir() / path
 
 
@@ -114,7 +114,7 @@ def _of_another_system(raw: str) -> bool:
     would become a folder named "D:\\..." inside the install), /mnt/... on Windows (a folder on
     the current drive)."""
     looks_absolute = bool(_ABSOLUTE.match(raw))
-    return looks_absolute and not Path(raw).expanduser().is_absolute()
+    return looks_absolute and not expand_user(raw).is_absolute()
 
 
 _WINDOWS_NAME_TEXT = {
