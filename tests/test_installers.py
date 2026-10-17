@@ -830,7 +830,7 @@ def test_only_main_gate_writes_shared_uv_cache(name):
                 assert options["save-cache"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
             else:
                 assert options["save-cache"] is False
-    assert found == {"ci": 2, "installers": 3, "real": 3, "autostart": 1, "smokes": 5}[name]
+    assert found == {"ci": 2, "installers": 3, "real": 3, "autostart": 1, "smokes": 6}[name]
 
 
 @pytest.mark.parametrize("name", ["ci", "release", "installers", "real", "autostart", "smokes"])

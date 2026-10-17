@@ -14,8 +14,9 @@ name: smokes
 # With `extended` (weekly and by hand) also the substitutes of systems no owner's computer here
 # has: Linux on arm64 and an Intel Mac, each asserting the runner's real architecture (TC-07);
 # BusyBox and musl in an Alpine container (D06); a standard account with code page 866 (TC-15);
-# Windows with long paths off (D04); Rosetta (D05); a quarantined program on macOS (D07); and
-# folder names in NFD on macOS (TC-17).
+# Windows with long paths off (D04); Rosetta (D05); a quarantined program on macOS (D07); folder
+# names in NFD on macOS (TC-17); and a device on the network as two network namespaces of one
+# runner (D01: separate network stacks, not a second device).
 
 on:
   workflow_call:
@@ -30,7 +31,7 @@ on:
         type: boolean
         default: false
       extended:
-        description: "Also the weekly substitutes (other architectures, BusyBox, standard account, long paths off, Rosetta, Gatekeeper, NFD)"
+        description: "Also the weekly substitutes (other architectures, BusyBox, standard account, long paths off, Rosetta, Gatekeeper, NFD, network namespaces)"
         required: false
         type: boolean
         default: false
@@ -344,6 +345,41 @@ jobs:
           if ($value -ne 0) { throw "LongPathsEnabled is $value in this new process, not 0" }
           uv run --no-project python scripts/update-smoke.py --previous "$env:RUNNER_TEMP/previous" --source artifacts/tow-source.tar.gz --root-length 120
           if ($LASTEXITCODE) { throw "update-smoke.py exited with $LASTEXITCODE" }
+
+  # D01: TOW seen from the network - separate network stacks on one runner, not a second device.
+  # Two network namespaces joined by a veth pair: TOW in A (bind 0.0.0.0, network access on, a
+  # password of this run), an HTTP client in B at A's address from B's own (scripts/netns-smoke.py).
+  netns:
+    name: separate network stacks on one runner (Linux)
+    needs: build
+    if: ${{ !cancelled() && inputs.extended && (inputs.release || needs.build.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          save-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.SOURCE_ARTIFACT }}
+          path: artifacts
+      - name: TOW in namespace A, a client in namespace B at A's address - sign-in, sessions, scrubbed texts
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/logs"
+          uv run --no-project python scripts/netns-smoke.py --source "$PWD/artifacts/tow-source.tar.gz" --port 18968 2>&1 |
+            tee "$RUNNER_TEMP/logs/netns.log"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smokes-logs-netns
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: warn
 
   # D05, D07, TC-17 on macOS (Apple silicon): Rosetta's choice of the native uv, a quarantined
   # program actually launched, and folder names in NFD through install, move and update.
