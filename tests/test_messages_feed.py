@@ -5,8 +5,10 @@ scrubbed projection a device on the network gets, and update results reconciled 
 
 from __future__ import annotations
 
+import concurrent.futures
 import importlib.util
 import json
+import threading
 import uuid
 from contextlib import contextmanager, suppress
 from datetime import UTC, datetime, timedelta
@@ -745,3 +747,37 @@ def test_path_values_go_before_the_feed_is_formatted(monkeypatch):
         assert "…" in text  # the sentence stays whole, without the folder
     assert "9" in texts[0]  # the other values stay
     assert "10" in texts[1]
+
+
+# --------------------------------------------------------------------------- names without a lock or a quarantine
+
+
+def test_the_feed_names_topics_without_the_data_lock_or_a_quarantine():
+    from tow.store import persistence_lock, save_state, state_path
+
+    save_state({"topics": [{"id": "t1", "title": "Show A", "url": "http://rutor.info/torrent/1/x"}]})
+    _raw("topic_add", topic="t1", title="Show A")
+    path = state_path()
+    with path.open("r+b") as handle:  # another process leaves a damaged state.json
+        handle.write(b"{ not json")
+        handle.truncate()
+    held, release = threading.Event(), threading.Event()
+
+    def hold():
+        with persistence_lock():
+            held.set()
+            release.wait(60)
+
+    holder = threading.Thread(target=hold, daemon=True)
+    holder.start()
+    assert held.wait(10)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(1) as pool:
+            answer = pool.submit(lambda: TestClient(app).get("/messages.json")).result(timeout=10)
+    finally:
+        release.set()
+        holder.join(10)
+    assert answer.status_code == 200
+    assert answer.json()["items"][0]["subject"] == "Show A"  # named by the event itself
+    assert path.read_bytes() == b"{ not json"  # left in place
+    assert not [entry for entry in path.parent.iterdir() if ".corrupt-" in entry.name]
