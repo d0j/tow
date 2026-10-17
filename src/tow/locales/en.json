@@ -1252,6 +1252,7 @@
       "unknown_build": "A stable release was found, but this build's version cannot be compared",
       "available": "TOW {version} is available",
       "current": "You have the latest version",
+      "reload_to_use": "Reload the page to use TOW {version}.",
       "unavailable": "Could not check for updates. TOW keeps working; try again later",
       "stale": "could not refresh; showing the last successful check",
       "checked": "Checked: {when}",

@@ -68,6 +68,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An empty rule field shows its example on one line, ending with "…", in every browser: some browsers made it
   scroll or cut it on a narrow phone.
 - The torrent client's name in its card in **Settings** is no longer cut at the bottom in some browsers.
+- A **Settings** page left open over an update no longer says "You have the latest version" beside the note to
+  reload it: until you do, it says "Reload the page to use TOW …" with the version now running.
 
 ### Security
 
