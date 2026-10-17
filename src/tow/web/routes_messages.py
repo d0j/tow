@@ -5,6 +5,10 @@ no-cache``, after the middleware's sign-in and Host checks - and reads nothing b
 reader's snapshot and data/ui.json. ``POST /messages/read`` and ``POST /messages/clear`` take
 the ``cursor`` of the newest displayed entry (the middleware checks their Origin): a stale
 cursor is 409, markers that cannot be saved 503, both with the words why.
+
+All three take a token from ``/sync.json``'s rate limit, the same bucket per session of a device
+on the network (per tab on this computer): beyond it they answer 429 with ``Retry-After``
+before anything is read or written.
 """
 
 from __future__ import annotations
@@ -12,7 +16,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, Response
 
-from tow.web import services
+from tow.web import services, sync
 from tow.web.messages import feed_payload, mark_messages
 from tow.web.text import t
 
@@ -28,8 +32,19 @@ def _matches(header: str | None, etag: str) -> bool:
     return "*" in tags or etag in tags
 
 
+def _limited(request: Request, error: str) -> JSONResponse | None:
+    """429 with ``Retry-After`` once this session's (or tab's) bucket is empty, else None."""
+    wait = sync.take_token(sync.rate_key(request))
+    if not wait:
+        return None
+    headers = {**_NO_STORE, "Retry-After": str(int(wait))}
+    return JSONResponse({"ok": False, "error": error}, status_code=429, headers=headers)
+
+
 @router.get("/messages.json")
 def messages_json(request: Request) -> Response:
+    if (limited := _limited(request, "rate_limited")) is not None:  # a script asked: the code, as /sync.json
+        return limited
     payload = feed_payload()
     etag = f'"{payload["revision"]}"'
     headers = {"Cache-Control": "private, no-cache", "ETag": etag, "Vary": "Cookie, Accept-Language"}
@@ -38,7 +53,9 @@ def messages_json(request: Request) -> Response:
     return JSONResponse(payload, headers=headers)
 
 
-def _mark(cursor: str, *, clear: bool) -> Response:
+def _mark(request: Request, cursor: str, *, clear: bool) -> Response:
+    if (limited := _limited(request, t("web.message.rate_limited"))) is not None:  # the page says why
+        return limited
     try:
         payload = mark_messages(cursor, clear=clear)
     except services.MessageMarkerRefused:
@@ -49,10 +66,10 @@ def _mark(cursor: str, *, clear: bool) -> Response:
 
 
 @router.post("/messages/read")
-def messages_read(cursor: str = Form("", max_length=128)) -> Response:
-    return _mark(cursor, clear=False)
+def messages_read(request: Request, cursor: str = Form("", max_length=128)) -> Response:
+    return _mark(request, cursor, clear=False)
 
 
 @router.post("/messages/clear")
-def messages_clear(cursor: str = Form("", max_length=128)) -> Response:
-    return _mark(cursor, clear=True)
+def messages_clear(request: Request, cursor: str = Form("", max_length=128)) -> Response:
+    return _mark(request, cursor, clear=True)

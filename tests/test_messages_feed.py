@@ -27,6 +27,18 @@ BASE = "http://127.0.0.1:8787"
 LOCAL = {"Origin": BASE}
 
 
+@pytest.fixture(autouse=True)
+def _rate_limit_buckets():
+    """The endpoints share /sync.json's per-session rate limit: every test starts with full buckets."""
+    from tow.web import sync
+
+    with sync._BUCKETS_LOCK:
+        sync._BUCKETS.clear()
+    yield
+    with sync._BUCKETS_LOCK:
+        sync._BUCKETS.clear()
+
+
 def _raw(kind: str, *, ago: float = 0.0, **fields: object) -> str:
     """One event as another process appends it, at a chosen time."""
     moment = (datetime.now(UTC) - timedelta(seconds=ago)).isoformat()
@@ -781,3 +793,34 @@ def test_the_feed_names_topics_without_the_data_lock_or_a_quarantine():
     assert answer.json()["items"][0]["subject"] == "Show A"  # named by the event itself
     assert path.read_bytes() == b"{ not json"  # left in place
     assert not [entry for entry in path.parent.iterdir() if ".corrupt-" in entry.name]
+
+
+# --------------------------------------------------------------------------- rate limit
+
+
+@pytest.mark.parametrize(
+    ("method", "path"), [("get", "/messages.json"), ("post", "/messages/read"), ("post", "/messages/clear")]
+)
+def test_message_endpoints_share_the_sync_rate_limit(monkeypatch, method, path):
+    from tow.web import sync
+
+    _raw("topic_add", topic="a")
+    client = TestClient(app, base_url=BASE, headers={**LOCAL, "X-TOW-Tab": "tab-1"})
+    cursor = client.get("/messages.json").json()["cursor"]
+    asked: list[str] = []
+
+    def empty(key: str, **_kwargs) -> float:
+        asked.append(key)
+        return 7.0
+
+    monkeypatch.setattr(sync, "take_token", empty)
+    data = {"data": {"cursor": cursor}} if method == "post" else {}
+    refused = getattr(client, method)(path, **data)
+    assert refused.status_code == 429
+    assert refused.headers["retry-after"] == "7"
+    assert refused.headers["cache-control"] == "no-store"
+    assert refused.json()["ok"] is False
+    assert refused.json()["error"]
+    client.get("/sync.json")
+    assert asked == ["local:tab-1", "local:tab-1"]  # the same bucket as /sync.json
+    assert not ui_state_path().exists()
