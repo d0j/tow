@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import manual_check_consumers, open_network
+from helpers import manual_check_consumers, open_network, read_only_under_a_busy_config
 
 from tow import releases
 from tow.config import load_config, save_config
@@ -406,6 +406,24 @@ def test_a_file_unreadable_now_is_not_a_missing_file(monkeypatch, clock):
     response = _poll(client)  # nothing read before: unavailable, not empty
     assert response.status_code == 503
     assert response.json()["error"] == "data_unavailable"
+
+
+def test_a_poll_reading_a_busy_config_takes_no_lock_and_runs_no_recovery(monkeypatch):
+    """1.33.1 review: the middleware's config read that met Windows' refusal (a save replacing
+    the file) read again under the persistence lock, which runs the recovery steps inside a poll.
+    It now tries again without a lock; the poll says "recovering" and leaves the recovery to
+    ``recover_later``, outside the request."""
+    _seed()
+    client = TestClient(app)
+    scheduled: list[str] = []
+    monkeypatch.setattr(sync, "recover_later", lambda: scheduled.append("later"))
+    monkeypatch.setattr("tow.config.time.sleep", lambda _seconds: None)
+    with read_only_under_a_busy_config(monkeypatch) as reads:
+        response = _within(lambda: _poll(client))
+    assert response.status_code == 503
+    assert response.json()["error"] == "recovering"
+    assert scheduled == ["later"]
+    assert len(reads) >= 2
 
 
 def test_a_reading_that_saw_the_file_change_is_taken_again(monkeypatch, tmp_path):

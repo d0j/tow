@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
+from helpers import read_only_under_a_busy_config
 
 from tow import check, check_transaction
 from tow.check import apply as check_apply
@@ -816,6 +817,30 @@ def test_dry_run_is_preview_without_authoritative_writes(monkeypatch, tmp_path: 
     assert log_calls == []
     assert Path(load_state.__globals__["state_path"]()).read_bytes() == state_before
     assert Path(load_download_history.__globals__["download_history_path"]()).read_bytes() == history_before
+
+
+def test_dry_run_reading_a_busy_config_takes_no_lock_and_runs_no_recovery(monkeypatch):
+    """1.33.1 review: a dry run's config read that met Windows' refusal (a save replacing the
+    file) read again under the persistence lock, whose taking runs the recovery steps - a write
+    from a preview. It now tries again without a lock; the waiting recovery stays waiting."""
+    from tow.config import load_config, save_config
+
+    save_config({"bind": "127.0.0.1"})
+    save_state({"topics": [{"id": "topic-1", "title": "Show", "url": "https://tracker/1", "save_path": "TV"}]})
+    save_download_history({"schema_version": 1, "topics": {}})
+    _wire_fake_check(monkeypatch, FakeClient())
+    wired = check_run.load_config
+
+    def real_then_wired():
+        assert load_config()["bind"] == "127.0.0.1"
+        return wired()
+
+    monkeypatch.setattr(check_run, "load_config", real_then_wired)
+    monkeypatch.setattr("tow.config.time.sleep", lambda _seconds: None)
+    with read_only_under_a_busy_config(monkeypatch) as reads:
+        out = check.run_check(apply=False, notify=False, how="test")
+    assert out["results"][0]["ok"] is True
+    assert len(reads) == 2
 
 
 def test_apply_add_failure_is_reported_as_failure(monkeypatch):

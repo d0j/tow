@@ -30,7 +30,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   (a copy an interrupted earlier attempt left, or one added by hand), and a file deep inside that refuses the
   change no longer stops it half way. Before, every start warned that other accounts can change the TOW folder.
 - Windows: reading `config.yaml` at the moment another part of TOW saves it no longer fails with "Permission
-  denied"; the read waits for that save.
+  denied"; the read tries again a moment later. It only reads: a preview check or an open page never finishes
+  an interrupted restore or other work left waiting on its way.
 - Transmission: a file whose name Windows reserves (`CON`, `aux.txt`, `COM1`…) is matched again. Transmission
   lists and writes it as `_CON`, `_aux.txt`, and TOW took that for another file when it confirmed an add, chose
   files or checked the overlap with other torrents.

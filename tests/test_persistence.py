@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
-from helpers import reaped
+from helpers import read_only_under_a_busy_config, reaped
 
 from tow.store import JSON_MAX_DEPTH, StoreCorruptionError, StoreReadError, load_json, persistence_lock, save_json
 
@@ -45,45 +45,41 @@ def test_config_yaml_uses_atomic_write_and_reads_back(monkeypatch, tmp_path):
     assert list(path.parent.glob(".config.yaml.*.tmp")) == []
 
 
-def test_config_read_during_a_save_waits_for_the_save_under_the_lock(monkeypatch, tmp_path):
-    # Before: on Windows a read that opened config.yaml while another save replaced it failed
-    # with PermissionError (the gate on windows-latest: test_config_yaml_uses_atomic_write_and_reads_back).
-    # Now it reads once more under the persistence lock, which a save holds through its replace.
-    import contextlib
-
+def test_config_read_during_a_save_tries_again_without_a_lock(monkeypatch, tmp_path):
+    # Windows refuses to open config.yaml for the instant a save replaces it (the gate on
+    # windows-latest: test_config_yaml_uses_atomic_write_and_reads_back). The read tries again a
+    # few times after short pauses. It takes no lock: the persistence lock runs the recovery
+    # steps, which a read-only caller (a dry run, a poll) must never do (1.33.1 review: the
+    # retry took that lock).
     from tow import config
 
     path = tmp_path / "config.yaml"
     path.write_bytes(b"bind: 127.0.0.1\n")
-    events: list[str] = []
-    real_read = config.read_yaml_text
-
-    def read(target):
-        events.append("read")
-        if len(events) == 1:
-            raise PermissionError(13, "Permission denied", str(target))
-        return real_read(target)
-
-    @contextlib.contextmanager
-    def lock():
-        events.append("lock")
-        yield
-
-    monkeypatch.setattr(config, "read_yaml_text", read)
-    monkeypatch.setattr(config, "persistence_lock", lock)
-    assert config._config_text(path) == "bind: 127.0.0.1\n"
-    assert events == ["read", "lock", "read"]
+    pauses: list[float] = []
+    monkeypatch.setattr(config.time, "sleep", pauses.append)
+    with read_only_under_a_busy_config(monkeypatch, busy_reads=2) as reads:
+        assert config._config_text(path) == "bind: 127.0.0.1\n"
+    assert len(reads) == 3
+    assert len(pauses) == 2
+    assert all(0 < pause <= 0.25 for pause in pauses)
 
 
 def test_a_config_that_stays_unreadable_still_says_so(monkeypatch, tmp_path):
     from tow import config
 
+    reads: list[object] = []
+
     def read(target):
+        reads.append(target)
         raise PermissionError(13, "Permission denied", str(target))
 
+    pauses: list[float] = []
     monkeypatch.setattr(config, "read_yaml_text", read)
+    monkeypatch.setattr(config.time, "sleep", pauses.append)
     with pytest.raises(PermissionError):
         config._config_text(tmp_path / "config.yaml")
+    assert len(reads) == len(pauses) + 1 <= 6  # a few tries, then the refusal
+    assert sum(pauses) <= 1.0
 
 
 def test_corrupt_json_is_quarantined_and_fails_closed(tmp_path):
