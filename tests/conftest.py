@@ -209,16 +209,68 @@ def _replaced_copies() -> dict[tuple[str, str], tuple[str, str]]:
 
 def pytest_collection_finish(session):
     _DIFFERENT_AT_COLLECTION.update(_replaced_copies())
+    _I18N_SHIPPED.update(folder=_i18n_folder(), state=_i18n_state())
+
+
+# The language catalogs are process-wide caches (tow.i18n), read again after `i18n.reload()`. A
+# test that made every file read fail (a denied Path.open) while the caches were empty cached an
+# empty catalog for the rest of its worker: later tests got keys instead of texts and English
+# pages instead of Russian ones, depending on the order (1.33.1, CI seed 3132797). After every
+# test, with its patches undone, the catalogs must be the shipped ones again; a test that left
+# them otherwise fails, and they are read again for the tests after it.
+_I18N_SHIPPED: dict = {}
+
+
+def _i18n_folder():
+    from tow import i18n
+
+    return i18n.LOCALES_DIR
+
+
+def _i18n_state() -> tuple:
+    """(folder, {code: (usable, number of texts)}, languages) of the catalogs as TOW sees them
+    now; a cached catalog answers from its cache (cheap), a cleared one is read again."""
+    from tow import i18n
+
+    catalogs = {}
+    for code in i18n._files():
+        texts, _meta, usable = i18n._read(code)
+        catalogs[code] = (usable, len(texts))
+    return str(i18n.LOCALES_DIR), catalogs, i18n.available()
+
+
+def _i18n_put_back() -> str | None:
+    """What was wrong with the catalogs after a test (they are the shipped ones again), or None."""
+    if not _I18N_SHIPPED:
+        return None
+    from tow import i18n
+
+    left = _i18n_state()
+    if left == _I18N_SHIPPED["state"]:
+        return None
+    i18n.LOCALES_DIR = _I18N_SHIPPED["folder"]
+    i18n.reload()
+    folder, catalogs, languages = left
+    _shipped_folder, shipped, shipped_languages = _I18N_SHIPPED["state"]
+    changed = sorted(code for code in {*catalogs, *shipped} if catalogs.get(code) != shipped.get(code))
+    return (
+        f"this test left the language catalogs changed (folder {folder}; catalogs {changed}; languages "
+        f"{[code for code, _name, _native in languages]} instead of "
+        f"{[code for code, _name, _native in shipped_languages]}). A catalog read while the test made "
+        "file reads fail, or from a folder it put in, stays cached for every later test: fail only the "
+        "file under test, or put the folder back and call i18n.reload()."
+    )
 
 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_teardown(item, nextitem):
-    """Fails the test that left a replacement in a copied name (after its own teardown), and puts
-    the real object back so the tests after it are not affected."""
+    """Fails the test that left a replacement in a copied name or changed language catalogs (after
+    its own teardown), and puts the real ones back so the tests after it are not affected."""
     result = yield
     left = {key: value for key, value in _replaced_copies().items() if key not in _DIFFERENT_AT_COLLECTION}
     for (name, local), (source_name, original) in left.items():
         setattr(sys.modules[name], local, getattr(sys.modules[source_name], original))
+    catalogs = _i18n_put_back()
     if left:
         named = ", ".join(
             f"{name}.{local} (from {source_name} import {original})"
@@ -230,6 +282,8 @@ def pytest_runtest_teardown(item, nextitem):
             "(from tow import clock ... clock.local_zone()), see docs/EXTENDING.md.",
             pytrace=False,
         )
+    if catalogs:
+        pytest.fail(catalogs, pytrace=False)
     return result
 
 

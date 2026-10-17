@@ -205,6 +205,52 @@ def test_after_it():
     result.stdout.fnmatch_lines(["*copied at import kept this test's replacement: tow.zz_probe.local_zone*"])
 
 
+def test_a_test_that_leaves_the_language_catalogs_changed_fails(nested):
+    """A catalog read while a test denied every file read (1.33.1: test_diagnostic_json) or from a
+    folder the test put in stayed cached: later tests got keys instead of texts and English pages.
+    The test that left it fails at teardown, and the tests after it read the shipped catalogs."""
+    result = nested(
+        """
+from pathlib import Path
+
+from tow import i18n
+
+
+def test_reads_the_catalogs_while_reads_fail(monkeypatch):
+    i18n.reload()
+
+    def denied(self, *args, **kwargs):
+        raise PermissionError("synthetic denial")
+
+    monkeypatch.setattr(Path, "open", denied)
+    assert i18n.translate("common.save", "en") == "common.save"  # an empty catalog, cached
+
+
+def test_after_the_denied_reads():
+    assert i18n.translate("common.save", "en") == "Save"
+    assert "ru" in i18n.codes()
+
+
+def test_puts_its_own_folder_in(tmp_path):
+    (tmp_path / "en.json").write_text('{"_meta": {"name": "English"}}', encoding="utf-8")
+    i18n.LOCALES_DIR = tmp_path
+    i18n.reload()
+    assert i18n.translate("common.save", "en") == "common.save"
+
+
+def test_after_the_folder():
+    assert i18n.translate("common.save", "en") == "Save"
+    assert "ru" in i18n.codes()
+
+
+def test_a_reload_with_the_shipped_folder_is_fine():
+    i18n.reload()
+""",
+    )
+    result.assert_outcomes(passed=5, errors=2)
+    result.stdout.fnmatch_lines(["*this test left the language catalogs changed*"])
+
+
 def test_read_only_task_query_is_stubbed(nested):
     result = nested(
         """
