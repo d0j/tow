@@ -2,6 +2,10 @@
 
 Copied beside its manifest and run with the install's base Python. No TOW imports:
 updates may replace app/ while an already issued public-page request finishes.
+
+Windows only: TOW starts it only there (``tow.protection.local_service.managed``), and ``main``
+refuses any other system before it serves (``bind_owned_children``), so its process handling
+is Windows' alone.
 """
 
 from __future__ import annotations
@@ -30,6 +34,9 @@ from urllib.parse import urlsplit
 
 MAX_BODY = 1024 * 1024
 JOB_HANDLE: int | None = None
+# Windows process creation flags (named here: the subprocess module has them only on Windows).
+CREATE_NO_WINDOW = 0x08000000
+CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 
 class StartupPending(TimeoutError):
@@ -315,9 +322,6 @@ class NativeService:
             LOG_HTML="false",
             TEST_URL="about:blank",
         )
-        options: dict[str, Any] = {"start_new_session": True}
-        if sys.platform == "win32":
-            options = {"creationflags": subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP}
         binary = self.folder / self.manifest["executable"]
         if time.monotonic() >= deadline:
             raise TimeoutError("local service preparation exceeded request budget")
@@ -328,7 +332,7 @@ class NativeService:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            **options,
+            creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP,
         )
         self.ready = False
         self.start_deadline = time.monotonic() + 120
@@ -339,17 +343,12 @@ class NativeService:
             self.child = None
             return True
         try:
-            if sys.platform == "win32":
-                subprocess.run(
-                    [system_program("taskkill.exe"), "/PID", str(child.pid), "/T", "/F"],
-                    capture_output=True,
-                    timeout=10,
-                    check=False,
-                )
-            else:
-                import signal
-
-                os.killpg(child.pid, signal.SIGTERM)
+            subprocess.run(
+                [system_program("taskkill.exe"), "/PID", str(child.pid), "/T", "/F"],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
             child.wait(timeout=10)
         except (subprocess.TimeoutExpired, OSError):
             return False
@@ -371,7 +370,7 @@ class NativeService:
             stopped = self.stop()
             if not stopped:
                 self.next_stop = time.monotonic() + 10
-            return stopped or (sys.platform == "win32" and JOB_HANDLE is not None)
+            return stopped or JOB_HANDLE is not None  # the job ends what a failed stop left
         finally:
             self.lock.release()
 
