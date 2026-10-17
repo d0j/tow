@@ -20,6 +20,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Transmission: a file whose name Windows reserves (`CON`, `aux.txt`, `COM1`…) is matched again. Transmission
+  lists and writes it as `_CON`, `_aux.txt`, and TOW took that for another file when it confirmed an add, chose
+  files or checked the overlap with other torrents.
 - Under a policy that restricts PowerShell (Constrained Language Mode) the start files no longer take a running
   update for a cut-off one, an autostart task that cannot be read is no longer "absent", a non-English command line
   is read whole and a port held by a program TOW cannot identify is said so ([PORTABLE.md](docs/PORTABLE.md)).

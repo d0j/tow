@@ -24,6 +24,9 @@ MAX_PATH_CHARS = 4096
 # as save folders, which is a folder rule, not a client rename). Add a name only with a recorded
 # client spelling and a test of it.
 _WINDOWS_DEVICE = re.compile(r"^(?:con|prn|aux|nul|clock\$|com[1-9]|lpt[1-9])(?:\..*)?$", re.IGNORECASE)
+# Transmission's spelling of those names, recorded on Linux by real.yml (B36): "_" in front ("CON"
+# is "_CON", "aux.txt" "_aux.txt"), on disk and in its file list; CLOCK$ and COM0 it keeps.
+_UNDERSCORED_DEVICE = re.compile(r"^_(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$", re.IGNORECASE)
 _WINDOWS_FORBIDDEN = str.maketrans(dict.fromkeys('<>:"|?*', "_"))
 _LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 
@@ -203,6 +206,8 @@ def windows_path_key(path: str) -> str:
         if part in {"", "."}:
             continue
         part = part.translate(_WINDOWS_FORBIDDEN).rstrip(" .") or "_"
+        if _UNDERSCORED_DEVICE.fullmatch(part):
+            part = part[1:]
         if _WINDOWS_DEVICE.fullmatch(part):
             part += "_"
         parts.append(part)
