@@ -83,7 +83,11 @@ def user_sid() -> str:
 
 
 def windows_acl(path: Path) -> dict:
-    env = {**os.environ, "TOW_SMOKE_ACL_PATH": str(path)}
+    # Without PSModulePath: one inherited from PowerShell 7 lists its own modules first, and
+    # Windows PowerShell then finds PowerShell 7's Microsoft.PowerShell.Security for Get-Acl and
+    # cannot load it. Without the variable it uses its own default.
+    env = {k: v for k, v in os.environ.items() if k.upper() != "PSMODULEPATH"}
+    env["TOW_SMOKE_ACL_PATH"] = str(path)
     done = _run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ACL_SCRIPT], env=env)
     if done.returncode != 0:
         raise PermissionsError(f"Get-Acl {path}: {done.stderr.strip() or done.stdout.strip()}")
