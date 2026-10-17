@@ -34,6 +34,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - `config.yaml` can set how often open pages may ask TOW what changed: `web: {rate_burst: 40, rate_per_sec: 4}`
   (each tab of this computer and each signed-in device on its own). A wrong value is named when TOW starts.
+- `tow ... --json` writes its JSON in ASCII (other characters as `\u` escapes): Windows PowerShell 5.1 read a
+  Cyrillic install folder in it as garbage (`tow.cmd keys status --json | ConvertFrom-Json`). Text for people
+  is unchanged.
 - Closing the window of an update ("Update TOW.cmd", `update-tow`, `deploy.ps1`) no longer stops the update
   halfway: it runs in its own process, which stops TOW, switches the code, starts TOW again or rolls back by
   itself; the window only shows its progress.

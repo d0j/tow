@@ -7,11 +7,18 @@ from collections.abc import Callable
 from typing import Any
 
 
+def machine(data: Any, *, indent: int | None = 2) -> str:
+    """``--json``: ASCII JSON, every other character as JSON's own escape. Windows PowerShell 5.1
+    decodes a program's pipe in the console's code page, not UTF-8: a Cyrillic folder came back
+    garbled from ``tow.cmd ... --json | ConvertFrom-Json`` (X27); the escapes read the same in any."""
+    return json.dumps(data, ensure_ascii=True, indent=indent)
+
+
 def show(data: Any, as_json: bool, text: Callable[[Any], str] | None = None) -> None:
     """``data`` as JSON for a program, or as sentences for a person: ``text`` writes those of a
     command's result; a refusal or a result with a message says just that."""
     if as_json:
-        print(json.dumps(data, ensure_ascii=False, indent=2))
+        print(machine(data))
     elif text is not None and not (isinstance(data, dict) and data.get("ok") is False):
         print(text(data))
     else:

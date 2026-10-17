@@ -1,4 +1,5 @@
 import dataclasses
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -197,7 +198,7 @@ def test_unexpected_cli_error_does_not_echo_secret(monkeypatch, capsys):
     assert cli.main(["version", "--json"]) == cli.EXIT_CANNOT_RUN
     out = capsys.readouterr().out
     assert "must-not-be-displayed" not in out
-    assert "не удалось выполнить команду" in out
+    assert "не удалось выполнить команду" in json.loads(out)["error"]  # machine JSON escapes it (X27)
 
 
 def test_a_folder_tow_cannot_write_is_named_with_its_cause(monkeypatch, capsys):
@@ -207,13 +208,13 @@ def test_a_folder_tow_cannot_write_is_named_with_its_cause(monkeypatch, capsys):
 
     _runs(monkeypatch, "version", denied)
     assert cli.main(["version", "--json"]) == cli.EXIT_CANNOT_RUN
-    out = capsys.readouterr().out
-    assert "C:\\\\TOW\\\\data\\\\state.json" in out  # JSON-escaped
-    assert "Access is denied" in out
-    assert "не удалось выполнить команду" not in out
+    error = json.loads(capsys.readouterr().out)["error"]  # machine JSON: read back, not searched (X27)
+    assert "C:\\TOW\\data\\state.json" in error
+    assert "Access is denied" in error
+    assert "не удалось выполнить команду" not in error
     _runs(monkeypatch, "version", lambda _args: (_ for _ in ()).throw(ConnectionError("x")))
     assert cli.main(["version", "--json"]) == cli.EXIT_CANNOT_RUN  # no file: the general sentence
-    assert "не удалось выполнить команду" in capsys.readouterr().out
+    assert "не удалось выполнить команду" in json.loads(capsys.readouterr().out)["error"]
 
 
 def test_a_restart_without_a_supervisor_is_said_in_the_owners_language(monkeypatch):
@@ -234,7 +235,7 @@ def test_failed_check_does_not_echo_exception_secret(monkeypatch, capsys):
     assert cli.main(["check", "--json"]) == cli.EXIT_CANNOT_RUN
     out = capsys.readouterr().out
     assert "must-not-be-displayed" not in out
-    assert "не удалось выполнить команду" in out
+    assert "не удалось выполнить команду" in json.loads(out)["error"]  # machine JSON escapes it (X27)
 
 
 def test_debug_env_shows_the_traceback(monkeypatch):

@@ -6,11 +6,10 @@ from __future__ import annotations
 
 import argparse
 import contextvars
-import json
 import os
 import sys
 
-from tow.cli import commands
+from tow.cli import commands, render
 from tow.cli.command import EXIT_CANNOT_RUN as EXIT_CANNOT_RUN
 from tow.cli.command import EXIT_INTERRUPTED as EXIT_INTERRUPTED
 from tow.cli.command import EXIT_OK as EXIT_OK
@@ -93,7 +92,7 @@ def _main(argv: list[str] | None) -> int:
     refusal = _foreign_code_refusal()
     if refusal:  # before anything is written in the folder (only config.yaml's language was read)
         if getattr(args, "json", False):
-            print(json.dumps({"ok": False, "error": refusal}, ensure_ascii=False))
+            print(render.machine({"ok": False, "error": refusal}, indent=None))
         else:
             print(refusal, file=sys.stderr)
         return EXIT_CANNOT_RUN
@@ -140,7 +139,7 @@ def _main(argv: list[str] | None) -> int:
         else:
             reason = t("cli.command_failed")
         if getattr(args, "json", False):  # a script asked for JSON: it gets JSON on failure too
-            print(json.dumps({"ok": False, "error": reason}, ensure_ascii=False))
+            print(render.machine({"ok": False, "error": reason}, indent=None))
         else:
             print(f"tow {args.cmd}: {reason}", file=sys.stderr)
         return EXIT_CANNOT_RUN
