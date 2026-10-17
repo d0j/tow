@@ -12,9 +12,9 @@
 // and never less than the server's Retry-After. 304 Not Modified is a success: the areas stay as
 // they are - and an area this page could not apply yet (a reader failed, its rows or fragments did
 // not come) is not lost behind it: it is kept and asked again after later successful polls, 5, 10,
-// 20, 40, then every 60 s after the failure. Another tab of this browser that changed something says so on a BroadcastChannel of
-// this install and sign-in (a hint without any data): this tab asks within 250 ms, never sooner
-// than its own waiting after a failure. Signed out (401, 403, or the Sign out form): every area
+// 20, 40, then every 60 s after the failure. Another tab of this browser that changed something
+// says so on a BroadcastChannel of this install and sign-in (a hint without any data): this tab
+// asks within 250 ms, never sooner than its own waiting after a failure. Signed out (401, 403, or the Sign out form): every area
 // this page learned is forgotten, every request of the page (the poll, Home's rows, the page area's
 // fragments) is aborted, and an answer still on its way - also a body still being read - is ignored.
 (() => {
