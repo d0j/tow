@@ -1722,3 +1722,8 @@ def test_this_linux_finds_the_mount_of_a_folder(tmp_path):
 def test_this_mac_reads_statfs_of_its_root():
     fstype, mount_point, _source = posix._statfs("/")
     assert (fstype, mount_point) == ("apfs", "/")
+
+
+def test_a_backend_without_the_volume_probe_answers_unknown(tmp_path):
+    with platform.use(SimpleNamespace(name="linux")):  # type: ignore[arg-type]
+        assert platform.volume_of(tmp_path) is None

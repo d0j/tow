@@ -288,7 +288,7 @@ def volume_of(path: Path | str) -> Volume | None:
     network one), or None when it cannot be told. Read-only: nothing is written or mounted."""
     try:
         return current().volume(Path(path))
-    except OSError, ValueError:
+    except AttributeError, OSError, ValueError:  # a backend without the probe knows nothing
         return None
 
 
