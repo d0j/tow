@@ -795,6 +795,121 @@ def test_a_transaction_in_progress_is_503_and_its_recovery_runs_apart(monkeypatc
     assert _poll(client).status_code == 200
 
 
+def _check_journal() -> Path:
+    from tow import check_transaction
+
+    return check_transaction._journal().root
+
+
+def _night_restore_marker() -> Path:
+    from tow.paths import data_dir
+    from tow.snapshots import restore
+
+    return data_dir() / restore._MARKER
+
+
+def _import_checkpoint(status: str) -> Path:
+    import json
+
+    from tow.bundle import checkpoint
+    from tow.paths import data_dir
+
+    folder = data_dir() / "import-checkpoints" / "20261017-100000-test"
+    folder.mkdir(parents=True, exist_ok=True)
+    # As write_import_transaction writes it, without its atomic writer's lock (held by the test).
+    record = {"format": checkpoint.TRANSACTION_FORMAT, "checkpoint": str(folder), "status": status}
+    (folder / "TRANSACTION.json").write_text(json.dumps(record), encoding="utf-8")
+    return folder
+
+
+def _remove(path: Path) -> None:
+    import shutil
+
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink(missing_ok=True)
+
+
+# Final review 1.33.0 #4: only the site transaction was looked at. A check's commit (history,
+# then state), an import or a restore point (import checkpoints) and a night-copy restore have
+# markers of their own; while one is there the stores may not belong together.
+def _made_check() -> Path:
+    _check_journal().mkdir(parents=True)
+    return _check_journal()
+
+
+def _made_night_restore() -> Path:
+    _night_restore_marker().write_text("{}", encoding="utf-8")
+    return _night_restore_marker()
+
+
+_MARKERS = {
+    "check": _made_check,
+    "night_restore": _made_night_restore,
+    "import": lambda: _import_checkpoint("prepared"),
+}
+
+
+@pytest.mark.parametrize("marker", sorted(_MARKERS))
+def test_every_transaction_marker_is_503_and_its_recovery_runs_apart(monkeypatch, clock, marker):
+    _seed()
+    client = TestClient(app)
+    taken = threading.Event()
+
+    class _lock:  # the recovery's own data lock (whose hooks recover): recorded, not taken here
+        def __enter__(self):
+            taken.set()
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(services, "persistence_lock", _lock)
+    monkeypatch.setattr(services, "recover_store_transaction", lambda: None)
+    with _locks_held():
+        made = _MARKERS[marker]()
+        try:
+            response = _within(lambda: _poll(client))
+            assert response.status_code == 503
+            assert response.json()["error"] == "recovering"
+            assert response.headers["retry-after"] == str(sync.RETRY_AFTER_SEC)
+        finally:
+            _remove(made)
+    sync._recovery.join(10)
+    assert taken.is_set()  # the recovery took the data lock, whose hooks recover every journal
+    clock.tick()
+    assert _poll(client).status_code == 200
+
+
+def test_a_transaction_that_begins_while_the_stores_are_read_is_503(monkeypatch, clock):
+    """Checked before and after the reading: a check's commit started meanwhile."""
+    _seed()
+    client = TestClient(app)
+    reads = []
+    real = services.sync_read
+
+    def reading(path, limit):
+        reads.append(path)
+        if len(reads) == 2:  # between the state and the history
+            _check_journal().mkdir(parents=True)
+        return real(path, limit)
+
+    monkeypatch.setattr(services, "sync_read", reading)
+    monkeypatch.setattr(sync, "recover_later", lambda: None)
+    try:
+        response = _poll(client)
+    finally:
+        _remove(_check_journal())
+    assert response.status_code == 503
+    assert response.json()["error"] == "recovering"
+
+
+def test_a_finished_import_is_no_transaction(clock):
+    _seed()
+    _import_checkpoint("committed")
+    assert _poll(TestClient(app)).status_code == 200
+
+
 def test_a_poll_makes_no_folder_and_runs_no_cleanup(monkeypatch, tmp_path):
     from datetime import UTC, datetime, timedelta
 
