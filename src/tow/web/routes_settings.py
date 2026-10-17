@@ -30,7 +30,7 @@ from tow.notifiers import cards as notifier_cards
 from tow.restore_points import RestorePointError
 from tow.store import SecretStoreError
 from tow.store_transaction import StoreTransaction
-from tow.web import _context, edit_base, services, settings_merge
+from tow.web import _context, edit_base, page_sync, services, settings_merge
 from tow.web.messages import flash_redirect, request_flash
 from tow.web.site_store import save_together, settings_undo
 from tow.web.templating import TEMPLATES
@@ -42,6 +42,15 @@ router = APIRouter()
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request) -> Response:
+    # The page knows its revision and its sections' digests (page_sync): it asks for nothing
+    # until another device or TOW changes what it shows.
+    return page_sync.annotated_response(request, "/settings", settings_view(request, live=False))
+
+
+def settings_view(request: Request, *, live: bool) -> Response:
+    """The Settings page as drawn for ``request``. ``live``: drawn for the poll (``page_sync``),
+    without the log, which is no fragment (its own section reads ``/log.json`` while open) and
+    whose reading takes the log's lock."""
     from tow.clients.factory import ready as ready_clients
     from tow.log import format_event, index_event_titles, index_site_titles
 
@@ -98,7 +107,9 @@ def settings_page(request: Request) -> Response:
             "backups": backup_view(cfg, request),
             "language_setting": _language_setting(cfg),
             "theme_setting": cfg.get("theme") if cfg.get("theme") in THEMES else "auto",
-            "log_rows": [
+            "log_rows": []
+            if live
+            else [
                 format_event(e, title_index=title_index, site_titles=site_titles)
                 for e in services.read_events(limit=200)
             ],

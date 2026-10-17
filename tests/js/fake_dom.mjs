@@ -142,6 +142,7 @@ export class FakeElement {
   querySelectorAll(selector) { return this.descendants().filter((node) => matchesSelector(node, selector)); }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
+  removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] || []).filter((each) => each !== fn); }
   focus() { this.ownerDocument.activeElement = this; }
   getBoundingClientRect() { return this.rect; }
 }

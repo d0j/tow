@@ -438,3 +438,25 @@ def test_the_home_list_tools_follow_rows_another_device_changed():
         "localSortKept",
     )
     assert verdict == dict.fromkeys(keys, True)
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_sites_settings_and_history_follow_their_fragments_without_overwriting_the_owner():
+    verdict = _verdict("page_sync.mjs")
+    keys = (
+        "lifecycleIdempotent",
+        "keyedListInsertRemoveReplace",
+        "protectedSectionsWaitWithNote",
+        "ownLinesAdopted",
+        "historyMergedOncePerEventWithinBounds",
+        "pageAreaAppliedFromItsRevision",
+    )
+    assert verdict == dict.fromkeys(keys, True), verdict
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_settings_section_drawn_again_gets_its_listeners_once_and_loses_the_old_ones():
+    verdict = _verdict("page_components.mjs")
+    assert verdict == dict.fromkeys(("mountedOnceEach", "remountedAfterReplace", "accordionReadsTheSectionsNow"), True)

@@ -632,6 +632,7 @@
   })();
   const show = (record, options) => window.towMessages?.showMessage?.(record, options);
   let rowSync = null; // Home's rows (below)
+  let pageQuery = ""; // page=/sites… once pages.js follows this page's area
 
   // What the page is doing that a reload or a row drawn again would destroy.
   const FIELDS = "input, select, textarea, [contenteditable]";
@@ -695,7 +696,9 @@
       if (response.status === 200) answer.body = await response.json().catch(() => null);
       return answer;
     },
-    query: () => "",
+    // The page area (Sites, Settings, History: pages.js) once a page asks for it: its path and
+    // History's filters go with every poll (the server's request variant).
+    query: () => pageQuery,
     signedOut: (status) => {
       rowSync?.cancel();
       window.towChecks?.scheduler?.stop?.();
@@ -1093,6 +1096,12 @@
 
   window.towSync = {
     on: (area, fn, options) => client.on(area, fn, options),
+    // The page area: ``{page, group, q}`` names it (pages.js); nothing: no page area.
+    page: (params) => {
+      const query = new URLSearchParams();
+      Object.entries(params || {}).forEach(([key, value]) => { if (value) query.set(key, String(value)); });
+      pageQuery = query.toString();
+    },
     onPoll: (fn) => client.onPoll(fn),
     health,
     now: () => client.now(),

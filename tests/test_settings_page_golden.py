@@ -74,6 +74,9 @@ def _normalised(page: str) -> str:
     page = re.sub(r'value="tow-[0-9a-f]{12}"', 'value="tow-<random>"', page)
     # A saved password's comparison token in a form's base: keyed by the server process.
     page = re.sub(r"&#34;[0-9a-f]{8}\.[0-9a-f]{32}&#34;", "&#34;<secret-token>&#34;", page)
+    # What the page knows it shows (tow.web.page_sync): digests of the times and the folders above.
+    page = re.sub(r"<!--frag:([A-Za-z0-9_-]+):[0-9a-f]{32}-->", r"<!--frag:\1:<digest>-->", page)
+    page = re.sub(r"<!--frags:(/[a-z]+):[0-9a-f]{32}-->", r"<!--frags:\1:<revision>-->", page)
     # Where the tab keeps its recent messages: a hash of this install's folders.
     page = re.sub(r'data-namespace="[0-9a-f]{16}"', 'data-namespace="<install>"', page)
     page = re.sub(r"<root>[^\"<]*", lambda m: m.group(0).replace("\\", "/"), page)

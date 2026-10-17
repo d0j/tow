@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from tow.guess import GuessError
 from tow.jsonish import as_dict
-from tow.web import _context, edit_base, services, site_merge
+from tow.web import _context, edit_base, page_sync, services, site_merge
 from tow.web.messages import flash_redirect, request_flash
 from tow.web.site_actions import add_site, delete_site, edit_site, save_site, site_edit_base
 from tow.web.site_form import NewSite, SiteEdit
@@ -26,6 +26,13 @@ router = APIRouter()
 
 @router.get("/sites", response_class=HTMLResponse)
 def sites(request: Request) -> Response:
+    # The page knows its revision and its rows' digests (page_sync): it asks for nothing until
+    # another device or TOW changes what it shows.
+    return page_sync.annotated_response(request, "/sites", sites_view(request))
+
+
+def sites_view(request: Request) -> Response:
+    """The Sites page as drawn for ``request`` (the poll draws it too: ``page_sync.render``)."""
     state = _context.state()  # read-only snapshots of this request (tow.web._context)
     trackers = _context.config().get("trackers") or {}
     trackers = {name: {**services.tracker_site_defaults(name), **spec} for name, spec in trackers.items()}

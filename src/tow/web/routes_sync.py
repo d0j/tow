@@ -1,5 +1,6 @@
 """Routes: one state on every open page (``tow.web.sync``) - the revisions a page polls,
-``GET /sync.json``, and Home's rows drawn again in batches, ``GET``/``POST /topics/rows``.
+``GET /sync.json``, Home's rows drawn again in batches, ``GET``/``POST /topics/rows``, and what
+Sites, Settings and History draw again, ``GET /page/fragments`` (``tow.web.page_sync``).
 
 Both only read: no recovery, cleanup, quarantine or folder is made on their way (the middleware
 gives them a read-only path), and none waits for the persistence, check or log lock. Who may ask
@@ -17,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-from tow.web import sync
+from tow.web import page_sync, sync
 
 router = APIRouter()
 
@@ -54,19 +55,20 @@ def _unavailable(exc: sync.Unavailable) -> JSONResponse:
 
 
 @router.get("/sync.json", response_model=None)
-def sync_json(request: Request, have: str = "", page: str = "") -> Response:
+def sync_json(request: Request, have: str = "", page: str = "", group: str = "", q: str = "") -> Response:
     """The revision of every area this page shows and, for those that differ from ``have``, what
-    they are now. The ETag names this exact request (its ``have``, page, language, access and
-    session); ``If-None-Match`` with it answers 304."""
+    they are now. The ETag names this exact request (its ``have``, page, History's filters
+    ``group`` and ``q``, language, access and session); ``If-None-Match`` with it answers 304."""
     if (limited := _limited(request)) is not None:
         return limited
     try:
         wanted = sync.parse_have(have)
         page = sync.parse_page(page)
+        filters = page_sync.filters(group, q) if page == "/history" else None
     except ValueError:
         return _refused("bad_request", 400)
     try:
-        found = sync.answer(request, wanted, page)
+        found = sync.answer(request, wanted, page, filters=filters)
     except sync.Unavailable as exc:
         return _unavailable(exc)
     headers = {**_CONDITIONAL, **_date(), "ETag": found.etag}
@@ -100,6 +102,30 @@ def topics_rows(request: Request, ids: str = "", rev: str = "") -> Response:
     if len(ids) > sync.MAX_IDS * 130:
         return _refused("bad_request", 400)
     return _rows(request, [part for part in ids.split(",") if part], rev)
+
+
+@router.get("/page/fragments", response_model=None)
+def page_fragments(request: Request, page: str = "", rev: str = "", group: str = "", q: str = "") -> Response:
+    """What Sites, Settings or History draws again when its page area changed, drawn from one
+    sample: Sites and Settings ``{"ok", "page", "rev", "order", "fragments": [{"id", "hash",
+    "html"}], "stale"}`` (every fragment, in its order), History ``{"ok", "page", "rev",
+    "entries": [{"id", "hash", "html"}], "limit", "stale"}`` (the newest lines its filters
+    choose). ``stale``: drawn from another revision than ``rev`` - the page applies the whole of
+    it and takes its revision."""
+    if (limited := _limited(request)) is not None:
+        return limited
+    if page not in (*page_sync.FRAGMENT_PAGES, "/history") or (rev and not sync.REVISION.fullmatch(rev)):
+        return _refused("bad_request", 400)
+    try:
+        filters = page_sync.filters(group, q) if page == "/history" else {}
+    except ValueError:
+        return _refused("bad_request", 400)
+    try:
+        found = sync.history_fragments(request, filters) if page == "/history" else sync.page_fragments(request, page)
+    except sync.Unavailable as exc:
+        return _unavailable(exc)
+    found["stale"] = bool(rev) and rev != found["rev"]
+    return JSONResponse(found, headers={**_NO_STORE, **_date()})
 
 
 @router.post("/topics/rows", response_model=None)

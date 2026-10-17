@@ -562,10 +562,11 @@ def test_a_routine_log_line_that_is_no_message_leaves_the_messages_revision(cloc
 def test_the_settings_page_follows_its_backup_inventory(monkeypatch, clock):
     _seed()
     client = TestClient(app)
-    copies = [{"name": "a", "created_at": 1.0, "bytes": 10}]
+    # A copy as the page lists it (the revision is what the page draws: tow.web.page_sync).
+    copies = [{"name": "a", "created_at": "2026-10-16T10:00:00+00:00", "bytes": 10}]
     monkeypatch.setattr(services, "list_snapshots", lambda limit=None: list(copies))
     before = _revs(client, page="/settings")
-    copies.append({"name": "b", "created_at": 2.0, "bytes": 10})
+    copies.append({"name": "b", "created_at": "2026-10-16T11:00:00+00:00", "bytes": 10})
     clock.tick()
     after = _revs(client, page="/settings")
     assert after["page"] != before["page"]

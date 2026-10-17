@@ -23,7 +23,11 @@
 
   {# The owner's order: what TOW needs first (clients, messengers, checks), then access, copies and
      updates, then the rarely changed (the service, language and theme, optional site access). #}
-  <div class="settings-content" id="settings-acc">
+  {#- What another device or TOW changes is drawn again in place (tow.web.page_sync, static/pages.js):
+      each section between its comments. Updates and the Log follow the server by themselves
+      (updates.js, /log.json) and are no fragments. -#}
+  <div class="settings-content" id="settings-acc"><!--frags:/settings-->
+    <!--frag:acc-clients-->
     <details class="settings-section settings-accordion acc" id="acc-clients"{% if open_section == 'clients' %} open{% endif %} data-q="{{ t('settings.clients.title') }} {{ clients | map(attribute='title') | unique | join(' ') }} {{ search_words.clients }}">
       <summary>
         <span id="settings-clients-title" class="settings-summary-title">{{ t('settings.clients.title') }}</span>
@@ -161,8 +165,9 @@
           </div>
         </details>
       </div>
-    </details>
+    </details><!--/frag:acc-clients-->
 
+    <!--frag:acc-bots-->
     <details class="settings-section settings-accordion acc" id="acc-bots"{% if open_section == 'bots' %} open{% endif %} data-q="{{ t('settings.notify.title') }} {{ notifiers | map(attribute='title') | unique | join(' ') }} {{ search_words.notify }}">
       <summary>
         <span id="settings-bots-title" class="settings-summary-title">{{ t('settings.notify.title') }}</span>
@@ -225,9 +230,9 @@
                   <label for="{{ field_id }}">{{ f.label }}{% if not f.required %} {{ t('settings.common.optional') }}{% endif %}{% if f.kind == 'secret' and f.saved %}{{ saved_hint(field_id ~ '-saved') }}{% endif %}</label>
                   {% if f.kind == 'secret' %}
                   {#- A token, a webhook or a key: not a password to remember or to generate. #}
-                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password" class="w-{{ f.width }}" value="{{ f.suggestion }}"{% if f.saved %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="{{ field_id }}-saved {{ keep_id }}"{% elif example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">{{ reveal(field_id, f.label) }}</span>
+                  <span class="secret"><input id="{{ field_id }}" name="{{ f.name }}" type="password" class="w-{{ f.width }}" value="{{ f.suggestion }}"{% if f.suggestion %} data-sync-volatile{% endif %}{% if f.saved %} placeholder="{{ t('web.secret.keep_placeholder') }}" aria-describedby="{{ field_id }}-saved {{ keep_id }}"{% elif example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">{{ reveal(field_id, f.label) }}</span>
                   {% else %}
-                  <input id="{{ field_id }}" name="{{ f.name }}" class="w-{{ f.width }}" value="{{ nd.get(f.name, f.value or f.suggestion) }}"{% if example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+                  <input id="{{ field_id }}" name="{{ f.name }}" class="w-{{ f.width }}" value="{{ nd.get(f.name, f.value or f.suggestion) }}"{% if f.suggestion and not f.value %} data-sync-volatile{% endif %}{% if example %} placeholder="{{ example }}"{% endif %} autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
                   {% endif %}
                 </div>
                 {% endfor %}
@@ -255,8 +260,9 @@
           {% endfor %}
         </div>
       </div>
-    </details>
+    </details><!--/frag:acc-bots-->
 
+    <!--frag:acc-intervals-->
     <details class="settings-section settings-accordion acc" id="acc-intervals"{% if open_section == 'intervals' %} open{% endif %} data-q="{{ t('settings.intervals.title') }} {{ t('settings.intervals.q') }}">
       <summary>
         <span id="settings-intervals-title" class="settings-summary-title">{{ t('settings.intervals.title') }}</span>
@@ -285,8 +291,9 @@
           </div>
         </form>
       </div>
-    </details>
+    </details><!--/frag:acc-intervals-->
 
+    <!--frag:acc-access-->
     <details class="settings-section settings-accordion acc" id="acc-access"{% if open_section == 'access' %} open{% endif %} data-q="{{ t('settings.access.title') }} {{ t('settings.access.q') }}">
       <summary>
         <span id="settings-access-title" class="settings-summary-title">{{ t('settings.access.title') }}</span>
@@ -391,10 +398,11 @@
           </div>
         </div>
       </div>
-    </details>
+    </details><!--/frag:acc-access-->
 
     {% set point_cleanup_unknown = backups.point_cleanup_read_error or (backups.point_cleanup_unrecorded and restore_points) %}
     {% set night_cleanup_unknown = backups.cleanup_read_error or (backups.cleanup_unrecorded and backups.snapshots) %}
+    <!--frag:acc-transfer-->
     <details class="settings-section settings-accordion acc" id="acc-transfer"{% if open_section == 'transfer' %} open{% endif %} data-q="{{ t('settings.backups.title') }} {{ t('settings.backups.night_title') }} {{ t('settings.backups.manual_title') }} {{ t('settings.backups.file_title') }} {{ t('settings.backups.q') }}">
       <summary>
         <span id="settings-transfer-title" class="settings-summary-title">{{ t('settings.backups.title') }}</span>
@@ -410,7 +418,7 @@
             <input id="backup-path-{{ f.kind }}" name="path" value="{{ f.value }}" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-{{ f.kind }}-where{% if hint %} backup-path-{{ f.kind }}-hint{% endif %}">
             {#- Where the copies go, always: an empty field is the default folder, not "no copies". -#}
             {% set where = t('common.default_path', path=f.default_path) if not f.value else (t('settings.backups.now', path=f.path) if f.path != f.value else '') %}
-            <p class="field-hint" id="backup-path-{{ f.kind }}-where">{{ where }}{% if f.free %}{% if where %} <span class="nowrap">· {% else %}<span class="nowrap">{% endif %}{{ t('settings.backups.free', free=f.free) }}</span>{% endif %}</p>
+            <p class="field-hint" id="backup-path-{{ f.kind }}-where">{{ where }}{% if f.free %}{% if where %} <span class="nowrap">· {% else %}<span class="nowrap">{% endif %}<span data-sync-volatile>{{ t('settings.backups.free', free=f.free) }}</span></span>{% endif %}</p>
             {% if hint %}<p class="field-hint" id="backup-path-{{ f.kind }}-hint">{{ hint }}</p>{% endif %}
           </div>
           <div class="settings-actions">
@@ -544,7 +552,7 @@
           </article>
         </div>
       </div>
-    </details>
+    </details><!--/frag:acc-transfer-->
 
     <details class="settings-section settings-accordion acc" id="acc-updates"{% if open_section == 'updates' %} open{% endif %} data-q="{{ t('releases.title') }} {{ t('releases.search') }}">
       <summary>
@@ -607,6 +615,7 @@
       </div>
     </details>
 
+    <!--frag:acc-service-->
     <details class="settings-section settings-accordion acc" id="acc-service"{% if open_section == 'service' %} open{% endif %} data-q="{{ t('settings.service.title') }} {{ t('settings.service.q') }}">
       <summary>
         <span id="settings-service-title" class="settings-summary-title">{{ t('settings.service.title') }}</span>
@@ -663,13 +672,14 @@
           </dl>
         </details>
       </div>
-    </details>
+    </details><!--/frag:acc-service-->
 
     {#- Language and theme: one section, two forms, each with its own label. ?open=theme and
         #acc-theme (the theme form) still land here. The language is saved with its button (a
         list changed with the arrow keys must not reload the page at each step); the theme in the
         background, as before. -#}
     {% set themes = [('auto', 'monitor', t('settings.theme.auto')), ('light', 'sun', t('settings.theme.light')), ('dark', 'moon', t('settings.theme.dark'))] %}
+    <!--frag:acc-language-->
     <details class="settings-section settings-accordion acc" id="acc-language"{% if open_section in ('language', 'theme') %} open{% endif %} data-q="{{ t('settings.appearance.title') }} {{ t('settings.language.choose') }} {{ t('settings.theme.title') }} {{ language_setting.search }} {{ t('settings.theme.q') }}">
       <summary>
         <span class="settings-summary-title">{{ t('settings.appearance.title') }}{% if lang() != 'en' %} · Language{% endif %}</span>
@@ -711,9 +721,9 @@
           <noscript><div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div></noscript>
         </form>
       </div>
-    </details>
+    </details><!--/frag:acc-language-->
 
-    {% include '_settings_protection.html' %}
+    <!--frag:acc-protection-->{% include '_settings_protection.html' %}<!--/frag:acc-protection-->
 
     <details class="settings-section settings-accordion acc settings-log" id="acc-log"{% if open_section == 'log' %} open{% endif %} data-q="{{ t('settings.log.title') }} {{ t('settings.log.q') }}">
       <summary>

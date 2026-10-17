@@ -134,6 +134,7 @@ ROUTES = frozenset(
         ("GET", "/sync.json"),
         ("GET", "/topics/rows"),
         ("POST", "/topics/rows"),
+        ("GET", "/page/fragments"),
     }
 )
 
