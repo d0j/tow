@@ -177,6 +177,31 @@ def test_the_new_shell_smokes_parse():
 
 
 @pytest.mark.allow_system
+def test_the_rosetta_smoke_reads_the_interpreter_not_its_config_script(tmp_path):
+    # Before: the first bin/python3* file was taken, which can be python3.X-config (a shell
+    # script), and `lipo -archs` stopped the Rosetta leg with "can't figure out the architecture".
+    import re
+    import shutil
+    import subprocess
+
+    shell = shutil.which("sh")
+    if shell is None:
+        pytest.skip("no sh on this machine")
+    text = (SCRIPTS / "macos-smoke.sh").read_text(encoding="utf-8")
+    line = re.search(r"^\s*(python=\$\(find .*\))$", text, re.MULTILINE)
+    assert line is not None
+    bin_dir = tmp_path / "runtime" / "python" / "cpython-3.14.8-macos-aarch64-none" / "bin"
+    bin_dir.mkdir(parents=True)
+    for name in ("python3.14-config", "python3-config", "python3.14"):
+        (bin_dir / name).write_text("#!/bin/sh\n", encoding="utf-8")
+    script = f'dir="{tmp_path.as_posix()}"\n{line.group(1)}\nprintf "%s" "$python"\n'
+    done = subprocess.run([shell, "-c", script], capture_output=True, text=True, check=False)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.rsplit("/", 1)[-1] == "python3.14"
+    assert '|| fail "lipo cannot read $python"' in text  # an unreadable file says so
+
+
+@pytest.mark.allow_system
 def test_the_nonadmin_smoke_parses_and_stays_ascii():
     import shutil
     import subprocess
