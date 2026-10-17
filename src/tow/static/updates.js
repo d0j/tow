@@ -192,8 +192,10 @@
     const quick = updating && !pendingTarget && !pollFailed && !document.hidden && !window.towSync?.client?.backingOff?.();
     pollTimer = window.setTimeout(() => { pollTimer = null; pollJob(); }, quick ? 2000 : 5000);
   };
+  // Shown or hidden: the read already planned moves to 2 s or 5 s at once (a tab hidden just after a
+  // read made no 2 s read while hidden only by chance).
   document.addEventListener?.("visibilitychange", () => {
-    if (!document.hidden && updating && pollTimer !== null) schedulePoll();
+    if (updating && pollTimer !== null) schedulePoll();
   });
   // TOW stopped for the update (or went away) while a job ran: "TOW is restarting…" until it answers
   // again; then the job's result as before. An install whose answer was lost keeps "confirming".
