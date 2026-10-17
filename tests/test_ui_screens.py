@@ -314,7 +314,9 @@ def test_an_empty_history_search_offers_the_way_back_and_no_storage_note(client)
     shown = BeautifulSoup(client.get("/history").text, "html.parser")
     assert shown.select(".history-box .log-line")
     assert "5 МБ" not in shown.get_text()
-    assert "последние" not in shown.get_text()  # said only when the list stops at its limit
+    # Said only when the list stops at its limit: drawn hidden below it (pages.js shows it once
+    # live merges fill the list).
+    assert shown.select_one("[data-history-note]").has_attr("hidden")
     assert "w-m" in shown.select_one("#history-q")["class"]
 
 

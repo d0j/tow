@@ -28,7 +28,8 @@
   {% if q or group %}<p class="history-empty">{{ t('history.empty') }} <a href="/history">{{ t('history.show_all') }}</a></p>{% else %}<p class="history-empty">{{ t('history.no_events') }}</p>{% endif %}
   {% endfor %}
 </div>
-{#- Said only when the list stops at its limit. -#}
-{% if rows|length >= history_limit %}<p class="sub" data-history-note>{{ t('history.note', n=history_limit) }}</p>{% endif %}
+{#- Said only when the list stops at its limit; always drawn, hidden below it, so pages.js can show it
+    once live merges fill the list (and hide it again). -#}
+<p class="sub" data-history-note{% if rows|length < history_limit %} hidden{% endif %}>{{ t('history.note', n=history_limit) }}</p>
 </div>
 {% endblock %}
