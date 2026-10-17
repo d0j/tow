@@ -529,6 +529,17 @@ def _without_folders(params: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def log_line(row: dict[str, Any], *, local: bool) -> dict[str, Any]:
+    """A line of the log (``tow.log.format_event``: History, ``/log.json``, Settings' log) for
+    this PC (every word) or a network device: its details and its raw error scrubbed as Recent
+    messages are (a link keeps its host, a folder or file path goes)."""
+    if not local:
+        for name in ("detail", "raw"):
+            if row.get(name):
+                row[name] = services.scrub_display(str(row[name]), limit=8192)
+    return row
+
+
 def issue_text(issue: Issue, *, local: bool) -> str:
     """The issue's message in the page's language; a time in the page's way of writing times.
     ``local``: for this PC (every word), else for a network device (scrubbed as Recent messages

@@ -10,7 +10,7 @@ from tow.web import _context, page_sync, services
 from tow.web.messages import request_flash
 from tow.web.templating import TEMPLATES
 from tow.web.text import t, time_parts
-from tow.web.views import issue_notes
+from tow.web.views import issue_notes, log_line
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ def history_page(request: Request, group: str = "", q: str = "") -> Response:
     title_index = index_event_titles(state.get("topics") or [])
     events = services.history_events(group=group, text=q, limit=HISTORY_LIMIT, title_index=title_index)
     # Each line keyed by its event (page_sync.history_rows): the page merges the newest in by it.
-    rows = page_sync.history_rows(events, state, _context.config())
+    rows = page_sync.history_rows(events, state, _context.config(), local=access.is_local(request))
     return TEMPLATES.TemplateResponse(
         request,
         "history.html",
@@ -45,14 +45,16 @@ def history_page(request: Request, group: str = "", q: str = "") -> Response:
 
 
 @router.get("/log.json")
-def log_json() -> Response:
+def log_json(request: Request) -> Response:
     from tow.log import format_event, index_event_titles, index_site_titles
+
+    local = access.is_local(request)  # a network device's lines are scrubbed (views.log_line)
 
     title_index = index_event_titles(_context.state().get("topics") or [])
     site_titles = index_site_titles(_context.config())
     # Each with the server's words for its time: the one time rule in the page script (towTime).
     rows = [
-        {**row, "time": time_parts(row.get("iso"))}
+        {**log_line(row, local=local), "time": time_parts(row.get("iso"))}
         for row in (
             format_event(e, title_index=title_index, site_titles=site_titles) for e in services.read_events(limit=200)
         )
