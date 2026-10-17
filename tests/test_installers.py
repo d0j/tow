@@ -246,6 +246,40 @@ def test_install_sh_takes_apple_silicon_uv_under_rosetta(tmp_path, arch, sysctl,
     assert not (tmp_path / "TOW").exists()  # the failed download leaves nothing
 
 
+_LINUX_UNAME = "case $1 in -s) echo Linux ;; -m) echo {arch} ;; *) echo Linux ;; esac"
+
+
+@pytest.mark.allow_system  # install.sh with a stub uname/curl in a temp folder; refused before any download
+@pytest.mark.parametrize("arch", ["armv7l", "armv6l", "armv8l", "i686", "riscv64", "s390x"])
+def test_install_sh_refuses_a_system_outside_the_contract_before_anything(tmp_path, arch):
+    # B13: ARMv7 was accepted, then its setup stopped half way (six packages to compile on glibc,
+    # no Python at all on musl, docs/PORTABLE.md 1b); the other systems were refused already.
+    done = _install_sh(tmp_path, {"uname": _LINUX_UNAME.format(arch=arch), "curl": _FAILED_CURL})
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert f"this computer (Linux {arch}) is not supported" in done.stderr, done.stdout + done.stderr
+    assert not (tmp_path / "curl.log").exists()  # nothing downloaded
+    assert not (tmp_path / "TOW").exists()  # nothing written
+
+
+@pytest.mark.allow_system  # install.sh with a stub uname/ldd/curl in a temp folder; stops at the uv download
+@pytest.mark.parametrize(
+    ("arch", "ldd", "target"),
+    [
+        ("x86_64", "echo 'ldd (GNU libc) 2.39'", "x86_64-unknown-linux-gnu"),
+        ("aarch64", "echo 'ldd (GNU libc) 2.39'", "aarch64-unknown-linux-gnu"),
+        ("x86_64", "echo 'musl libc (x86_64)' >&2; exit 1", "x86_64-unknown-linux-musl"),
+        ("aarch64", "echo 'musl libc (aarch64)' >&2; exit 1", "aarch64-unknown-linux-musl"),
+    ],
+)
+def test_install_sh_takes_the_uv_of_a_supported_linux(tmp_path, arch, ldd, target):
+    stubs = {"uname": _LINUX_UNAME.format(arch=arch), "ldd": ldd, "curl": _FAILED_CURL}
+    done = _install_sh(tmp_path, stubs)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert f"uv {_sh_uv_version()} ({target})" in done.stdout, done.stdout + done.stderr
+    assert f"/uv-{target}.tar.gz" in (tmp_path / "curl.log").read_text(encoding="utf-8")
+    assert not (tmp_path / "TOW").exists()
+
+
 def _sh_uv_version() -> str:
     match = re.search(r"^UV_VERSION=(\S+)$", SH.read_text(encoding="utf-8"), re.MULTILINE)
     assert match is not None

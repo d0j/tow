@@ -9,6 +9,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - `tow doctor` warns when the live `data/` folder is on a network file system (NFS, SMB, 9p, SSHFS and the like),
   where TOW's locks may not keep a second TOW on another computer out.
+### Changed
+
+- `install.sh` refuses a 32-bit ARM computer (ARMv7, ARMv6) before it writes anything, as it already refused
+  other systems TOW cannot run on: there the setup stopped half way, with packages to compile or no Python at
+  all. A 64-bit Raspberry Pi OS is not affected.
 
 ### Fixed
 

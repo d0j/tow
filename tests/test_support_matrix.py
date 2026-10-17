@@ -87,12 +87,24 @@ def test_install_sh_chooses_only_targets_of_the_contract():
     text = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
     bases = set(re.findall(r"\) target=([a-z0-9_]+)-(?:unknown-linux|apple-darwin)", text))
     bases |= set(re.findall(r"^\s+target=([a-z0-9_]+)-apple-darwin", text, re.MULTILINE))
-    assert bases == {"x86_64", "aarch64", "armv7"}
+    assert bases == {"x86_64", "aarch64"}
     rows = set(_rows())
     for base in ("x86_64", "aarch64"):
         assert {f"linux-{base}-gnu", f"linux-{base}-musl", f"macos-{base}"} <= rows
-    assert {"linux-armv7-gnueabihf", "linux-armv7-musleabihf"} <= rows
     assert '*) die "this computer ($system $arch) is not supported"' in text
+
+
+def test_rows_the_contract_does_not_support_are_refused_by_the_installers():
+    """B13: a row whose setup cannot finish (no wheels, no Python) is refused by its installer, and
+    the table says so; install.sh accepted both ARMv7 rows and failed half way through the setup."""
+    rows = _rows()
+    for target in ("linux-armv7-gnueabihf", "linux-armv7-musleabihf"):
+        assert rows[target][4].startswith(("not supported", "cannot work")), target
+        assert "`install.sh` refuses it" in rows[target][4], target
+    assert "`install.ps1` refuses it" in rows["windows-aarch64"][4]
+    text = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
+    assert re.search(r'^\s+linux-arm\*\) die "this computer \(\$system \$arch\) is not supported', text, re.MULTILINE)
+    assert "armv7" not in text.split("case $os-$arch in", 1)[1].split("esac", 1)[0].replace("ARMv7", "")
 
 
 def test_usable_wheels_follow_the_tags():

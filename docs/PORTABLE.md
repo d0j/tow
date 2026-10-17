@@ -216,9 +216,9 @@ The owner's guide is [install.md](install.md); the README links the stable relea
   Windows PowerShell 5.1 and 7, keeps its settings inside a function and `exit`s only when run as
   a file (under `irm | iex` an exit would close the owner's window); it is ASCII (irm decodes a release asset in
   any code page). `TOW_INSTALL_SOURCE` / `TOW_INSTALL_SUMS` install from local files (tests).
-- `install.sh` takes uv `-unknown-linux-gnu` on glibc, `-musl` elsewhere (ARMv7: `-gnueabihf`,
-  `-musleabihf`), `-apple-darwin` on macOS; `--desktop` (Linux) writes `$XDG_DATA_HOME/applications/tow.desktop` (the
-  only write outside the folder besides autostart, both on request).
+- `install.sh` takes uv `-unknown-linux-gnu` on glibc, `-musl` elsewhere (x86_64 and aarch64; 32-bit ARM is
+  refused, 1b), `-apple-darwin` on macOS; `--desktop` (Linux) writes `/applications/tow.desktop`
+  (the only write outside the folder besides autostart, both on request).
 
 ## 1b. Supported systems: the dependency contract (1.33.1)
 
@@ -239,16 +239,14 @@ the installers' targets in step with `uv.lock`. The status of a row changes only
 | linux-x86_64-musl | yes | none | never run | expected to work, not verified (Alpine) |
 | linux-aarch64-musl | yes | none | never run | expected to work, not verified |
 | macos-x86_64 | yes | cryptography | never run | needs Rust and the Xcode tools (§1); not verified |
-| linux-armv7-gnueabihf | yes | cffi, httptools, markupsafe, pyyaml, regex, uvloop | never run | not supported: six source builds |
-| linux-armv7-musleabihf | **none** | cffi, cryptography, httptools, markupsafe, pyyaml, regex, uvloop, watchfiles | never run | cannot work: no Python build |
+| linux-armv7-gnueabihf | yes | cffi, httptools, markupsafe, pyyaml, regex, uvloop | never run | not supported: six source builds; `install.sh` refuses it |
+| linux-armv7-musleabihf | **none** | cffi, cryptography, httptools, markupsafe, pyyaml, regex, uvloop, watchfiles | never run | cannot work: no Python build; `install.sh` refuses it |
 | windows-aarch64 | yes | cryptography, httptools | never run | not supported: `install.ps1` refuses it |
 
-- 32-bit x86 (Windows or Linux), riscv64, ppc64le and s390x are refused by the installers before
-  anything is written (`install.ps1`: 64-bit only; `install.sh`: "this computer … is not
-  supported"), whatever uv offers there.
-- `install.sh` still accepts both ARMv7 rows: their `uv sync` (glibc: needs a C compiler and the
-  headers of libffi and libyaml) or `uv python install` (musl) fails there with uv's own error, and
-  the installer removes what it added.
+- 32-bit x86 (Windows or Linux), 32-bit ARM (ARMv6, ARMv7, ARMv8 in 32-bit mode), riscv64, ppc64le
+  and s390x are refused by the installers before anything is written (`install.ps1`: 64-bit only;
+  `install.sh`: "this computer … is not supported"), whatever uv offers there: on ARMv7 the
+  setup would stop half way (six packages to compile with glibc, no Python with musl).
 - The oldest system each row needs comes from the wheels (`manylinux_2_17`, `musllinux_1_2`,
   `macosx_11_0`); a newer lock can raise it, and `support-matrix.py` says so.
 
