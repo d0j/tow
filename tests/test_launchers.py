@@ -65,10 +65,13 @@ def test_generic_cli_launcher_uses_runtime_env():
     assert last.index('if exist "%TOW_EXE%" ("%TOW_EXE%" %*)') < last.index('"%TOW_UV%" run --frozen --no-dev')
     exits = [line for line in text.splitlines() if "exit /b" in line and not line.startswith("rem ")]
     # The refusals, before TOW runs: a moved folder, an update cut off while it replaced the code,
-    # no folder for uv's temporary files where uv runs TOW before setup.
+    # no folder for uv's temporary files, or no settings file of uv's, where uv runs TOW before setup.
     assert exits[:2] == ["if defined TOW_MOVED exit /b 3", "if defined TOW_CUT exit /b 3"]
-    assert len(exits) == 3
+    assert len(exits) == 4
     assert exits[2].endswith(r'mkdir "%TOW_ROOT%\runtime\uv-tmp" || exit /b 3')
+    assert exits[3].endswith("if errorlevel 1 exit /b 3")
+    lines = text.splitlines()
+    assert 'call "%%~dp0tow-uv-config.cmd"' in lines[lines.index(exits[3]) - 1]
 
 
 @pytest.mark.allow_system  # the launcher in a temp install whose environment was left behind by a move
@@ -663,7 +666,10 @@ def test_the_windows_files_start_tow_from_a_folder_with_percent_caret_or_bang(tm
 
 _UV_PROBE = r"""import json, os, sys
 names = ("TMP", "TEMP", "TMPDIR", "UV_PYTHON", "PYTHONHOME", "PYTHONPATH", "UV_OFFLINE")
+names += ("UV_CONFIG_FILE", "UV_NO_CONFIG")
 seen = {name: os.environ.get(name) for name in names}
+config = seen["UV_CONFIG_FILE"]
+seen["config"] = open(config, encoding="utf-8-sig").read() if config and os.path.isfile(config) else None
 temp = seen["TMPDIR"] if os.name != "nt" else seen["TEMP"]
 seen["temp_is_dir"] = bool(temp) and os.path.isdir(temp)
 with open(RECORD, "a", encoding="utf-8") as handle:
@@ -694,10 +700,14 @@ def test_setup_gives_uv_a_temp_folder_inside_and_none_of_the_accounts_python_set
         UV_PYTHON="3.12", PYTHONPATH=str(tmp_path / "lib"), UV_OFFLINE="1", TMP=str(tmp_path), TEMP=str(tmp_path)
     )
     env["TMPDIR"] = str(tmp_path)
+    env["UV_NO_CONFIG"] = "1"  # X39: uv would drop .python-version (measured), and with it TOW's Python
     if layout == "install":
         env["PYTHONHOME"] = str(tmp_path / "no-python")  # a Python that reads it does not start
     bin_dir = app / "runtime" / "bin" if layout == "checkout" else root / "runtime" / "bin"
     bin_dir.mkdir(parents=True)
+    # uv's settings of an older version (another manifest) with a line of the owner's below the mark.
+    stale = '# old\nrequired-version = ">=0.1"\n# --- your settings below ---\nnative-tls = true\n'
+    (root / "runtime" / "uv.toml").write_text(stale, encoding="utf-8")
     if os.name == "nt":
         # uv: a venv launcher of this Python; `uv python install` and `uv sync` run the files
         # "python" and "sync" of app\ (setup's folder), tow.exe the file "keys".
@@ -720,13 +730,19 @@ def test_setup_gives_uv_a_temp_folder_inside_and_none_of_the_accounts_python_set
     runs = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
     assert runs, done.stdout + done.stderr
     temp = str(root / "runtime" / "uv-tmp")
+    template = (ROOT / "scripts" / "runtime-uv.toml").read_text(encoding="utf-8")
     for seen in runs:
         if layout == "checkout":
             assert (seen["UV_PYTHON"], seen["PYTHONPATH"]) == ("3.12", str(tmp_path / "lib"))
             assert seen["TEMP" if os.name == "nt" else "TMPDIR"] == str(tmp_path)
+            assert (seen["UV_CONFIG_FILE"], seen["UV_NO_CONFIG"]) == (None, "1")  # the developer's uv setup
             continue
         assert (seen["UV_PYTHON"], seen["PYTHONHOME"], seen["PYTHONPATH"]) == (None, None, None)
         assert seen["UV_OFFLINE"] == "1"  # the owner's own choice stays
+        # uv reads the install's file only, TOW's lines of this code first, the owner's kept (X39).
+        assert seen["UV_CONFIG_FILE"] == str(root / "runtime" / "uv.toml")
+        assert seen["UV_NO_CONFIG"] is None
+        assert seen["config"].replace("\r\n", "\n") == template + "native-tls = true\n"
         names = ("TMP", "TEMP") if os.name == "nt" else ("TMPDIR",)
         assert {seen[name] for name in names} == {temp}
         assert seen["temp_is_dir"] is True
@@ -772,6 +788,10 @@ def test_uv_run_before_setup_keeps_its_temp_inside_too(tmp_path, layout):
     else:
         assert {seen[name] for name in names} == {str(root / "runtime" / "uv-tmp")}
         assert seen["temp_is_dir"] is True
+        # No settings file yet (an older updater brought this code): written before uv runs (X39).
+        assert seen["UV_CONFIG_FILE"] == str(root / "runtime" / "uv.toml")
+        template = (ROOT / "scripts" / "runtime-uv.toml").read_text(encoding="utf-8")
+        assert seen["config"].replace("\r\n", "\n") == template
 
 
 @pytest.mark.allow_system  # deploy.ps1 in a temp install; every Python is a launcher of this one

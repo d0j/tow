@@ -59,6 +59,10 @@ if [ "$TOW_ROOT" != "$TOW_APP" ]; then
     export UV_CACHE_DIR="$TOW_ROOT/runtime/cache"
     export UV_PROJECT_ENVIRONMENT="$TOW_APP/.venv"
     export UV_MANAGED_PYTHON=1
+    # uv reads this install's own settings (runtime/uv.toml, written by uv_config before uv runs),
+    # never the account's or the system's uv.toml; UV_NO_CONFIG would also drop .python-version.
+    export UV_CONFIG_FILE="$TOW_ROOT/runtime/uv.toml"
+    unset UV_NO_CONFIG
     # Python settings of the whole account would give the install's own Python another Python,
     # home or modules (a development checkout keeps them); the owner's UV_OFFLINE and the like stay.
     unset UV_PYTHON
@@ -99,6 +103,34 @@ uv_temp() {
     TMP=$TMPDIR
     TEMP=$TMPDIR
     export TMPDIR TMP TEMP
+}
+
+# uv's settings of an install (docs/PORTABLE.md 1): runtime/uv.toml, before uv runs. The lines up to
+# the marker are TOW's - scripts/runtime-uv.toml, the [tool.uv] settings of pyproject.toml (the tests
+# keep them equal; scripts/update.py writes the same) - and the owner's lines below it stay (all of a
+# file without one). Also when an older updater brought this code here and wrote no such file.
+uv_config() {
+    [ "$TOW_ROOT" != "$TOW_APP" ] || return 0
+    config=$TOW_ROOT/runtime/uv.toml
+    next=$TOW_ROOT/runtime/.uv.toml.tmp
+    mkdir -p "$TOW_ROOT/runtime" && cat "$TOW_APP/scripts/runtime-uv.toml" >"$next" || return 1
+    if [ -f "$config" ]; then
+        awk -v mark='# --- your settings below ---' '
+            { line[NR] = $0; text = $0; sub(/^[ \t]+/, "", text); sub(/[ \t\r]+$/, "", text)
+              if (text == mark && !at) at = NR }
+            END { for (i = at + 1; i <= NR; i++) print line[i] }' "$config" >>"$next" || return 1
+        if cmp -s "$next" "$config"; then
+            rm -f "$next"
+            return 0
+        fi
+    fi
+    mv -f "$next" "$config"
+}
+need_uv_config() {
+    if ! uv_config; then
+        echo "TOW: uv's settings $TOW_ROOT/runtime/uv.toml could not be written." >&2
+        exit 3
+    fi
 }
 
 if [ "${1:-}" = setup ]; then
@@ -155,6 +187,7 @@ if [ "${1:-}" = setup ]; then
         fi
     done
     uv_temp
+    need_uv_config
     # The Python of .python-version, into runtime/python; no copies on PATH.
     "$uv" python install --no-bin
     "$uv" sync --frozen --no-dev
@@ -177,4 +210,5 @@ fi
 # Not set up yet: uv runs TOW from the locked environment.
 refuse_interrupted
 uv_temp
+need_uv_config
 exec "$uv" run --frozen --no-dev --project "$TOW_APP" tow "$@"

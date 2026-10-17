@@ -161,8 +161,23 @@ def fetch_uv(bin_dir: Path) -> Path:
     return bin_dir / "uv.exe"
 
 
+def write_uv_config(top: Path) -> Path:
+    """The bundle's runtime\\uv.toml: app\\scripts\\runtime-uv.toml, the [tool.uv] settings of its
+    pyproject.toml as the launchers and update.py write them (the tests keep them equal)."""
+    template = top / "app" / "scripts" / "runtime-uv.toml"
+    expected = tomllib.loads((top / "app" / "pyproject.toml").read_text(encoding="utf-8")).get("tool", {}).get("uv", {})
+    if tomllib.loads(template.read_text(encoding="utf-8")) != expected:
+        raise SystemExit("build-bundle: scripts/runtime-uv.toml is not pyproject.toml's [tool.uv]")
+    config = top / "runtime" / "uv.toml"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(template, config)
+    return config
+
+
 def uv_env(top: Path, venv: Path) -> dict[str, str]:
-    """The launchers' environment for this bundle (scripts/tow-env.cmd), the venv elsewhere."""
+    """The launchers' environment for this bundle (scripts/tow-env.cmd), the venv elsewhere: uv
+    reads the bundle's own runtime\\uv.toml (the required uv, the pinned Python manifest, so the
+    first start never fetches it), never the build machine's uv.toml."""
     runtime = top / "runtime"
     env = {key: value for key, value in os.environ.items() if not key.startswith(("UV_", "VIRTUAL_ENV"))}
     env.update(
@@ -171,18 +186,8 @@ def uv_env(top: Path, venv: Path) -> dict[str, str]:
         UV_CACHE_DIR=str(runtime / "cache"),
         UV_PROJECT_ENVIRONMENT=str(venv),
         UV_MANAGED_PYTHON="1",
-        UV_NO_CONFIG="1",  # the build machine's uv.toml stays out
+        UV_CONFIG_FILE=str(runtime / "uv.toml"),
     )
-    # --no-config isolates the builder from its machine, but the portable bootstrap's
-    # pinned manifest must be cached too: first start must not fetch it from the network.
-    config = top / "app" / "pyproject.toml"
-    if config.is_file():
-        settings = tomllib.loads(config.read_text(encoding="utf-8")).get("tool", {}).get("uv", {})
-        manifest = settings.get("python-downloads-json-url")
-        if manifest is not None:
-            if not isinstance(manifest, str):
-                raise ValueError("python-downloads-json-url must be a string")
-            env["UV_PYTHON_DOWNLOADS_JSON_URL"] = manifest
     return env
 
 
@@ -295,8 +300,11 @@ REQUIRED = (
     "app/scripts/tow-start.cmd",
     "app/scripts/update.py",
     "app/scripts/root_files.py",
+    "app/scripts/runtime-uv.toml",
+    "app/scripts/tow-uv-config.cmd",
     "app/src/tow/cli/__init__.py",
     "runtime/bin/uv.exe",
+    "runtime/uv.toml",
 )
 
 
@@ -344,6 +352,7 @@ def build(out: Path, *, source: Path | None, work: Path | None, keep: bool) -> P
     version = version_of(top / "app")
     say(f"TOW {version} in {top}")
     write_root_files(top)
+    write_uv_config(top)
     uv = fetch_uv(top / "runtime" / "bin")
     prepare_runtime(top, uv, work)
     destination = out / ZIP_NAME

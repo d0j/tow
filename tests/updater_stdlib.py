@@ -123,6 +123,36 @@ class Environment(unittest.TestCase):
         self.assertEqual({temp[name] for name in ("TMP", "TEMP", "TMPDIR")}, {str(root / "runtime" / "uv-tmp")})
         self.assertTrue((root / "runtime" / "uv-tmp").is_dir())
 
+    def test_uv_reads_the_installs_settings_written_again_with_the_owners_lines(self):
+        # X39: uv reads <TOW>/runtime/uv.toml alone; the updater writes TOW's head from the code's
+        # [tool.uv] (tomllib, Python 3.11) and keeps the owner's lines below the marker.
+        root = Path(tempfile.mkdtemp(prefix="tow-updater-"))
+        self.addCleanup(updater.remove_tree, root)
+        app = root / "app"
+        app.mkdir()
+        _uv, env = updater.launcher_env(app, {"UV_NO_CONFIG": "1"})
+        self.assertEqual(env["UV_CONFIG_FILE"], str(root / "runtime" / "uv.toml"))
+        self.assertNotIn("UV_NO_CONFIG", env)
+        manifest = "https://example.test/m.json"
+        (app / "pyproject.toml").write_text(
+            f'[project]\nversion = "9.9.9"\n[tool.uv]\nrequired-version = ">=0.12"\n'
+            f'python-downloads-json-url = "{manifest}"\n',
+            encoding="utf-8",
+        )
+        config = root / "runtime" / "uv.toml"
+        config.parent.mkdir()
+        config.write_text(f'required-version = ">=0.1"\n{updater.UV_CONFIG_MARKER}\nnative-tls = true\n', "utf-8")
+        self.assertTrue(updater.write_uv_config(root, app))
+        text = config.read_text(encoding="utf-8")
+        self.assertNotIn("[tool", text)
+        self.assertIn(f'python-downloads-json-url = "{manifest}"\n', text)
+        self.assertIn('required-version = ">=0.12"\n', text)
+        self.assertTrue(text.endswith(f"{updater.UV_CONFIG_MARKER}\nnative-tls = true\n"))
+        self.assertFalse(updater.write_uv_config(root, app))  # the same again: nothing written
+        config.write_text(f'{updater.UV_CONFIG_MARKER}\nrequired-version = ">=0.1"\n', encoding="utf-8")
+        with self.assertRaises(ValueError):
+            updater.write_uv_config(root, app)  # TOW's key among the owner's lines
+
 
 class Retry(unittest.TestCase):
     def setUp(self):

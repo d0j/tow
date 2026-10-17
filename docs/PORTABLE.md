@@ -121,6 +121,17 @@ runtime install `UV_PYTHON_INSTALL_DIR=<root>/runtime/python`,
 `UV_PYTHON_BIN_DIR=<root>/runtime/bin`, `UV_CACHE_DIR=<root>/runtime/cache`,
 `UV_PROJECT_ENVIRONMENT=<root>/app/.venv`, `UV_MANAGED_PYTHON=1`; a `runtime/bin/uv(.exe)` is
 preferred over uv on PATH. A development checkout keeps the developer's uv setup unchanged.
+uv reads `<root>/runtime/uv.toml` alone (`UV_CONFIG_FILE`; an inherited `UV_NO_CONFIG` is cleared, since
+it also drops `.python-version`): never the account's or the system's `uv.toml`, and not the project's
+`[tool.uv]` either, so the file carries every `[tool.uv]` setting of `app/pyproject.toml` (`required-version`,
+`python-downloads-json-url`) in a standalone `uv.toml`'s syntax (no `[tool.uv]` header, which uv refuses there).
+Its lines above `# --- your settings below ---` are TOW's: `tow setup` and uv runs before setup write them from
+`app/scripts/runtime-uv.toml` (`tow-uv-config.cmd`, `scripts/tow`), `update.py` from the target's
+`pyproject.toml` before the target's `uv sync`, from the previous code's before a rollback's sync, after a
+recovered switch and when the release is already installed (an older updater never wrote the file). The owner's
+own settings (`native-tls`, an index, a mirror) go below that line and are kept; `UV_*` variables such as
+`UV_OFFLINE` still apply. A line there that repeats a key of TOW's, or does not parse, refuses an update before
+TOW stops; uv itself names the file when a launcher meets it.
 `.venv` holds absolute paths: after moving the folder `tow setup` rebuilds it.
 The release smoke tests also move a previously started and stopped installation with its
 existing `.venv`, then require an offline rebuild, Python and TOW inside the new folder,

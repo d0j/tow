@@ -1,0 +1,6 @@
+# uv's settings for this TOW install: uv reads this file instead of the account's uv.toml
+# (docs/PORTABLE.md, section 1). TOW writes the lines above the marker again from
+# app/pyproject.toml; settings of your own go below it and are kept. Do not repeat TOW's keys there.
+required-version = ">=0.12"
+python-downloads-json-url = "https://raw.githubusercontent.com/astral-sh/uv/46b84fd0bfec23b72f29e8e2185ba68a65052f48/crates/uv-python/download-metadata.json"
+# --- your settings below ---

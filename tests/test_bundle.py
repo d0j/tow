@@ -411,21 +411,35 @@ def test_python_bootstrap_uses_an_immutable_official_manifest_for_older_uv():
     )
 
 
-def test_bundle_caches_its_bootstrap_manifest_despite_isolated_builder_config(tmp_path, monkeypatch):
-    app = tmp_path / "app"
-    app.mkdir()
-    app.joinpath("pyproject.toml").write_text(
-        '[tool.uv]\npython-downloads-json-url = "https://example.test/pinned.json"\n', encoding="utf-8"
-    )
+def test_the_builder_reads_the_bundles_own_uv_settings_not_the_machines(tmp_path, monkeypatch):
+    # The builder used UV_NO_CONFIG plus the manifest in UV_PYTHON_DOWNLOADS_JSON_URL; it now reads
+    # the bundle's runtime/uv.toml, as the launchers and update.py make uv read it (X39). The
+    # manifest still reaches uv: that file carries it (test below).
+    monkeypatch.setenv("UV_NO_CONFIG", "1")
     monkeypatch.setenv("UV_PYTHON_DOWNLOADS_JSON_URL", "https://example.test/unrelated.json")
     env = bundle.uv_env(tmp_path, tmp_path / "venv")
-    assert env["UV_NO_CONFIG"] == "1"
-    assert env["UV_PYTHON_DOWNLOADS_JSON_URL"] == "https://example.test/pinned.json"
+    assert env["UV_CONFIG_FILE"] == str(tmp_path / "runtime" / "uv.toml")
+    assert "UV_NO_CONFIG" not in env
+    assert "UV_PYTHON_DOWNLOADS_JSON_URL" not in env
 
 
-def test_bundle_rejects_a_wrongly_typed_bootstrap_manifest(tmp_path):
+def test_the_bundle_carries_its_uv_settings_and_refuses_a_stale_template(tmp_path):
+    import shutil
+    import tomllib
+
     app = tmp_path / "app"
-    app.mkdir()
-    app.joinpath("pyproject.toml").write_text("[tool.uv]\npython-downloads-json-url = 123\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="must be a string"):
-        bundle.uv_env(tmp_path, tmp_path / "venv")
+    (app / "scripts").mkdir(parents=True)
+    shutil.copyfile(ROOT / "pyproject.toml", app / "pyproject.toml")
+    shutil.copyfile(ROOT / "scripts" / "runtime-uv.toml", app / "scripts" / "runtime-uv.toml")
+    config = bundle.write_uv_config(tmp_path)
+    assert config.read_bytes() == (ROOT / "scripts" / "runtime-uv.toml").read_bytes()
+    manifest = tomllib.loads(config.read_text(encoding="utf-8"))["python-downloads-json-url"]
+    assert (
+        manifest
+        == tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["uv"][
+            "python-downloads-json-url"
+        ]
+    )
+    (app / "pyproject.toml").write_text('[tool.uv]\nrequired-version = ">=9"\n', encoding="utf-8")
+    with pytest.raises(SystemExit, match=r"runtime-uv.toml"):
+        bundle.write_uv_config(tmp_path)

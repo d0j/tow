@@ -34,6 +34,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - `config.yaml` can set how often open pages may ask TOW what changed: `web: {rate_burst: 40, rate_per_sec: 4}`
   (each tab of this computer and each signed-in device on its own). A wrong value is named when TOW starts.
+- TOW's own uv no longer reads the account's or the computer's `uv.toml`: an index, a mirror, a cache or a
+  Python preference set there for other projects could break TOW's setup and updates. An install now has its own
+  `runtime/uv.toml`; settings of yours (`native-tls`, an index) go below its marked line and are kept.
 
 ## [1.33.0] — 2026-10-17
 
