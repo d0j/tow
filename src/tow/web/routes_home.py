@@ -29,7 +29,7 @@ from tow.web.views import (
 router = APIRouter()
 
 
-def _first_steps(cfg: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+def _first_steps(request: Request, cfg: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     """The empty Home's checklist: is a torrent client set up (and answering), is a messenger on."""
     from tow.clients.factory import client_configurations, client_secret_block
     from tow.notifiers import health as notify_health
@@ -44,7 +44,7 @@ def _first_steps(cfg: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
         client_set = False
     # The same three states as the header's client name (AGENTS.md): green when it answers,
     # red when it did not, grey until a check or the diagnostics asked it.
-    tone = header_health()["qbit_tone"]
+    tone = header_health(local=access.is_local(request))["qbit_tone"]
     return {
         "client": {"ok": "ok", "bad": "failed"}.get(tone, "saved") if client_set else "todo",
         "messenger": notify_health(secrets, state) is not None,
@@ -135,6 +135,6 @@ def index(request: Request) -> Response:
             "check_activity_requested": bool(active_id),
             # A "Needs attention" link opens this topic's row (?open=<id>).
             "landing_topic": str(request.query_params.get("open") or ""),
-            "first_steps": None if state.get("topics") else _first_steps(cfg, state),
+            "first_steps": None if state.get("topics") else _first_steps(request, cfg, state),
         },
     )

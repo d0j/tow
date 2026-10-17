@@ -155,7 +155,7 @@ def test_a_client_that_answers_check_shows_as_answering_at_once(legacy_qbit, mon
     _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
     health = load_state()["health"]
     assert (health["qbit_ok"], health["clients_ok"], health["check_ok"]) == (True, {"default": True}, True)
-    assert header_health()["qbit_tone"] == "ok"
+    assert header_health(local=True)["qbit_tone"] == "ok"
 
 
 def test_a_client_that_refuses_check_shows_as_not_answering_at_once(legacy_qbit, monkeypatch):
@@ -178,7 +178,7 @@ def test_a_client_that_refuses_check_shows_as_not_answering_at_once(legacy_qbit,
     health = load_state()["health"]
     assert (health["qbit_ok"], health["clients_ok"]) == (True, {"default": True})  # the check's own
     assert set(health["ping_failed"]) == {"default"}
-    assert header_health()["qbit_tone"] == "bad"
+    assert header_health(local=True)["qbit_tone"] == "bad"
     assert 'class="pill bad"' in _client().get("/settings").text
 
     class Alive:
@@ -188,7 +188,7 @@ def test_a_client_that_refuses_check_shows_as_not_answering_at_once(legacy_qbit,
     monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Alive())
     _client().post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
     assert "ping_failed" not in load_state()["health"]
-    assert header_health()["qbit_tone"] == "ok"
+    assert header_health(local=True)["qbit_tone"] == "ok"
 
     # A check after the failed "Check" decides again (its new health has no mark); one that
     # asked no client keeps it.
@@ -404,13 +404,13 @@ def test_a_failed_check_is_in_needs_attention_as_in_the_header(legacy_qbit, monk
     monkeypatch.setattr("tow.web.services.client_from_secrets", lambda *_a: Broken())
 
     def entries() -> list[tuple[str, str]]:
-        return [(e["id"], e["fix"]) for e in attention_view(load_state(), load_config())["entries"]]
+        return [(e["id"], e["fix"]) for e in attention_view(load_state(), load_config(), local=True)["entries"]]
 
     c.post("/settings/client/ping", data={"client_id": ""}, follow_redirects=False)
-    assert header_health()["qbit_tone"] == "bad"
+    assert header_health(local=True)["qbit_tone"] == "bad"
     assert entries() == [("client_down", "check_client:default")]
     c.post("/settings/client/ping", data={"client_id": "transmission"}, follow_redirects=False)
-    assert header_health()["qbit_tone"] == "bad"  # the header is the main client's
+    assert header_health(local=True)["qbit_tone"] == "bad"  # the header is the main client's
     assert entries() == [
         ("client_down", "check_client:default"),
         ("client_down:transmission", "check_client:transmission"),

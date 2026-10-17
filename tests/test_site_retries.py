@@ -278,8 +278,8 @@ def test_one_click_site_incident_opens_the_real_check_control(monkeypatch):
         services, "site_retry_status", lambda *args: {"a": datetime.fromtimestamp(T0 + 1800, UTC).isoformat()}
     )
     client = TestClient(app)
-    entry = views.attention_view(load_state(), cfg)["entries"][0]
-    assert len(views.attention_view(load_state(), cfg)["entries"]) == 1
+    entry = views.attention_view(load_state(), cfg, local=True)["entries"][0]
+    assert len(views.attention_view(load_state(), cfg, local=True)["entries"]) == 1
     assert len(entry["subjects"]) == 2
     page = client.get(entry["href"])
     assert page.status_code == 200

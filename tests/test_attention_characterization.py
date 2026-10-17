@@ -59,7 +59,7 @@ def _everything_but_the_lost_folder() -> dict:
 
 def _listed(state: dict) -> list[dict]:
     save_state(state)
-    return views.attention(load_state(), load_config())
+    return views.attention(load_state(), load_config(), local=True)
 
 
 def _items(state: dict) -> list[str]:

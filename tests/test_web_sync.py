@@ -840,6 +840,72 @@ def test_a_network_device_never_sees_a_rows_raw_error(monkeypatch, clock):
     assert remote_rows["t2"] == local_rows["t2"]
 
 
+def test_a_network_device_never_sees_a_raw_error_in_needs_attention(monkeypatch, clock):
+    """Final browser QA 1.33.0 Q5, the header: Needs attention (the page's list, /health.json and
+    the /sync.json attention area) said a topic's raw error - local paths, a stored message's
+    folder - to network devices, the rows already scrubbed. A network device gets the feed's
+    words; this PC keeps every word; neither is ever handed the other's from a cache."""
+    low_disk = {"needed": 5, "free": 1, "path": r"D:\TV\Show B"}
+    _seed(
+        _topic("t1", last_error=RAW_ERROR, last_error_class="disk"),
+        _topic(
+            "t2",
+            "Show B",
+            last_error="low disk",
+            last_error_class="disk",
+            last_error_code="check.low_disk",
+            last_error_params=low_disk,
+        ),
+    )
+    lan = _lan(monkeypatch)
+    local = TestClient(app, headers=ORIGIN)
+    secrets = ("SECRET1", "SECRET2", r"D:\TV", "/home/owner", "e01.mkv")
+
+    def panel(html: str) -> str:  # the header's Needs attention
+        start = html.index('id="current-problems"')
+        return html[start : html.index("</details>", start)]
+
+    def shown(client: TestClient) -> dict[str, str]:
+        return {
+            "page": panel(client.get("/").text),
+            "health.json": " | ".join(e["text"] for e in client.get("/health.json").json()["attention"]["entries"]),
+            "sync.json": " | ".join(e["text"] for e in _poll(client).json()["areas"]["attention"]["entries"]),
+        }
+
+    # Either order, within one sample: a cached answer for one is never the other's.
+    for first, second in ((lan, local), (local, lan)):
+        monkeypatch.setattr(sync, "AREAS_MEMO", sync.Areas())
+        for client in (first, second):
+            for where, text in shown(client).items():
+                if client is lan:
+                    assert "tracker.example" in text, where  # the link's host stays
+                    assert not [secret for secret in secrets if secret in text], (where, text)
+                else:
+                    assert r"D:\TV\Show A\e01.mkv" in text, where
+                    assert r"D:\TV\Show B" in text, where
+    revs = _revs(lan), _revs(local)
+    assert revs[0]["attention"] != revs[1]["attention"]
+
+
+def test_a_network_device_never_sees_a_folder_in_an_issues_words():
+    """Q5, the notes and Needs attention: a message's folder (a lost data folder) is "…" for a
+    network device, as in Recent messages; this PC reads it."""
+    from tow.issues.model import Issue, Message, Target
+    from tow.web.views import issue_text
+
+    lost = Issue(
+        kind="data_lost",
+        id="data_lost",
+        severity="bad",
+        message=Message("issues.data_lost", {"folder": r"D:\TOW\data"}),
+        target=Target("settings", open="transfer", anchor="backup-night", note=True),
+    )
+    assert r"D:\TOW\data" in issue_text(lost, local=True)
+    remote = issue_text(lost, local=False)
+    assert "D:" not in remote
+    assert "(…)" in remote
+
+
 def test_settings_and_history_polls_never_wait_for_the_data_or_the_logs_lock(clock):
     """Final review 1.33.0 #8: the Settings inventory read the night copies' cleanup under the
     data lock (whose taking runs the recovery steps), and History's lines took the log's lock -

@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from tow import access
 from tow.web import _context, page_sync, services
 from tow.web.messages import request_flash
 from tow.web.templating import TEMPLATES
@@ -38,7 +39,7 @@ def history_page(request: Request, group: str = "", q: str = "") -> Response:
             "history_limit": HISTORY_LIMIT,
             "flash": request_flash(request),
             # What needs the owner and is explained here, in a note of its own.
-            "notes": issue_notes(state, _context.config(), "history"),
+            "notes": issue_notes(state, _context.config(), "history", local=access.is_local(request)),
         },
     )
 

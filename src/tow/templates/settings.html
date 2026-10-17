@@ -7,7 +7,7 @@
 {#- A refused save of one form (edit_base) names it: its kind and what it is about. -#}
 {% from "_file.html" import file_input %}
 {% block body %}
-{% set hh = header_health() %}
+{% set hh = header_health(request) %}
 <div class="settings-page settings-page-compact">
   <header class="settings-title">
     <h1 id="page-title">{{ t('settings.page.title') }}</h1>
