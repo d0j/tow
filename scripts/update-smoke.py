@@ -386,6 +386,11 @@ class Smoke:
         expect(self.wait(True, 120), f"the previous release does not answer on {self.port}")
         version = self.version()
         say(f"the previous release answers as {version}")
+        if WINDOWS:
+            permissions = _script("permissions-smoke.py", "permissions_smoke")
+            if permissions.check(self.root):
+                say("the previous release's first start left the install open:")
+                self.explain_open_root(permissions, repair=False)
         return version
 
     def update_command(self, ref: str) -> list[str]:
@@ -603,10 +608,11 @@ class Smoke:
         expect(not problems, f"the install's permissions: {problems}")
         say("   the root, data/, keys/ and keys/master.key are private")
 
-    def explain_open_root(self, permissions) -> None:
-        """Why TOW could not close the root (Windows): the longest paths below it, and what icacls
-        answers when asked what TOW asks at every start (the root closed for this account,
-        SYSTEM and Administrators, passed on to what it holds)."""
+    def explain_open_root(self, permissions, *, repair: bool = True) -> None:
+        """Why TOW could not close the root (Windows): the longest paths below it, the root's
+        rules, what `tow permissions` reports and (``repair``) what icacls answers when asked what
+        TOW asks at every start (the root closed for this account, SYSTEM and Administrators,
+        passed on to what it holds)."""
         base = "\\\\?\\" + str(self.root)
         lengths = []
         for current, folders, files in os.walk(base):
@@ -617,6 +623,8 @@ class Smoke:
         say(f"   the root's permissions: {permissions.windows_acl(self.root)}")
         code, _output = self.tow("permissions", capture=True)  # its report is printed above
         say(f"   tow permissions exited {code}")
+        if not repair:
+            return
         grants = [f"*{sid}:(OI)(CI)F" for sid in (permissions.user_sid(), "S-1-5-18", "S-1-5-32-544")]
         done = subprocess.run(
             ["icacls", str(self.root), "/inheritance:r", "/grant:r", *grants, "/C"],
