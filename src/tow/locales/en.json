@@ -1069,8 +1069,8 @@
   },
   "issues": {
     "volume_missing_topic": "The folder of {title} is on another disk, or its disk is not connected ({folder})",
-    "volume_missing_night": "The night copies folder is on another disk, or its disk is not connected ({folder}): no copy is written there",
-    "volume_missing_manual": "The folder of backups made by hand is on another disk, or its disk is not connected ({folder}): no copy is written there",
+    "volume_missing_night": "The nightly backups folder is on another disk, or its disk is not connected ({folder}): no nightly backup is written there",
+    "volume_missing_manual": "The folder of backups made by hand is on another disk, or its disk is not connected ({folder}): no restore point is written there",
     "site_access": "{site}: site access is limited (topics: {count})",
     "site_connection": "{site}: no connection to the site (topics: {count})",
     "topic_error": "{title} — {error}",
