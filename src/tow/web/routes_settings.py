@@ -81,6 +81,7 @@ def settings_view(request: Request, *, live: bool) -> Response:
         point["size_label"] = format_bytes(point["bytes"])
     backups = backup_view(cfg, request)
     service = service_view()
+    conflict = edit_base.any_conflict(request)
     return TEMPLATES.TemplateResponse(
         request,
         "settings.html",
@@ -105,7 +106,8 @@ def settings_view(request: Request, *, live: bool) -> Response:
             "flash_ttl_min": _shown_minutes(flash_ttl_sec()),
             "allow_lan": as_bool(cfg.get("allow_lan")),
             "check_updates": as_bool(cfg.get("check_updates", True)),
-            "protection": services.protection_settings_view(cfg),
+            # A refused save's recovery form draws the connections of its draft (settings_merge).
+            "protection": settings_merge.protection_recovery(services.protection_settings_view(cfg), conflict),
             "lan_password_set": access.password_is_set(s),
             "lan_hint": password_hint(s.get("lan_auth")),
             "hint_max": MAX_HINT_LENGTH,
@@ -130,7 +132,7 @@ def settings_view(request: Request, *, live: bool) -> Response:
             # Each form's base (edit_base): what it shows, saved now; a refused save's ?conflict=
             # brings back the owner's draft, both values and the base to save it against.
             "bases": _bases(cfg, s, backup_folders=backups["folders"], service=service),
-            "edit_conflict": edit_base.any_conflict(request),
+            "edit_conflict": conflict,
         },
     )
 

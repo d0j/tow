@@ -864,6 +864,78 @@ def test_a_stale_protection_form_never_restores_a_connection_removed_elsewhere(p
     assert "Saved now:" in b.get(response.headers["location"]).text
 
 
+def _with_new_connection(form: dict, kind: str, url: str) -> dict:
+    """The form with its blank suggestion (the last card) filled in and switched on."""
+    ident = form["provider_id"][-1]
+    kinds, urls = list(form["provider_kind"]), list(form["provider_url"])
+    kinds[-1], urls[-1] = kind, url
+    return {
+        **form,
+        "provider_kind": kinds,
+        "provider_url": urls,
+        "provider_enabled": [*form["provider_enabled"], ident],
+    }
+
+
+def test_two_tabs_adding_different_services_never_save_a_hybrid_connection(protection_two):
+    """Re-check 1.33.0 #1: both tabs offered the same suggested id; after A saved, B's recovery
+    form drew that id as A's saved card - A's service with B's address - and "mine" saved a
+    connection neither tab configured. The recovery form brings back B's whole collection."""
+    a, b = protection_two
+    a_form, b_form = protection_form(a), protection_form(b)
+    assert a_form["provider_id"][-1] == b_form["provider_id"][-1]  # the same suggestion
+    post(a, "/settings/protection", _with_new_connection(a_form, "flaresolverr", "http://127.0.0.1:8201"))
+    assert len(providers()) == 3
+    location = post(b, "/settings/protection", _with_new_connection(b_form, "byparr", "http://127.0.0.1:8202"))
+    location = location.headers["location"]
+    assert "conflict=" in location
+    again = protection_form(b, location)
+    shown = list(zip(again["provider_kind"], again["provider_url"], strict=True))
+    assert ("byparr", "http://127.0.0.1:8202") in shown
+    assert ("flaresolverr", "http://127.0.0.1:8202") not in shown
+    response = post(b, "/settings/protection", {**again, "resolve_providers": "mine"})
+    assert "conflict=" not in response.headers["location"]
+    saved = [(item["kind"], item["url"]) for item in load_config()["protection"]["providers"]]
+    assert saved == [
+        ("flaresolverr", "http://127.0.0.1:8191/v1"),
+        ("byparr", "http://127.0.0.1:8192/v1"),
+        ("byparr", "http://127.0.0.1:8202/v1"),
+    ]
+
+
+def test_a_connection_removed_elsewhere_keeps_its_draft_in_the_recovery_form(protection_two):
+    """Re-check 1.33.0 #1: the recovery form drew only the connections saved now, so the draft of
+    one removed on another device vanished and "mine" could not bring it back."""
+    a, b = protection_two
+    b_form = protection_form(b)
+    post(a, "/settings/protection/remove", {"provider_id": "second"})
+    urls = list(b_form["provider_url"])
+    urls[1] = "http://127.0.0.1:8193"
+    location = post(b, "/settings/protection", {**b_form, "provider_url": urls}).headers["location"]
+    assert "conflict=" in location
+    again = protection_form(b, location)
+    index = again["provider_id"].index("second")
+    assert (again["provider_kind"][index], again["provider_url"][index]) == ("byparr", "http://127.0.0.1:8193")
+    assert "second" in again["provider_enabled"]
+    post(b, "/settings/protection", {**again, "resolve_providers": "mine"})
+    saved = load_config()["protection"]["providers"]
+    assert [(item["id"], item["kind"], item["url"]) for item in saved] == [
+        ("first", "flaresolverr", "http://127.0.0.1:8191/v1"),
+        ("second", "byparr", "http://127.0.0.1:8193/v1"),
+    ]
+
+
+def test_a_protection_conflict_resolved_as_saved_keeps_the_connections_saved_now(protection_two):
+    a, b = protection_two
+    a_form, b_form = protection_form(a), protection_form(b)
+    post(a, "/settings/protection", _with_new_connection(a_form, "flaresolverr", "http://127.0.0.1:8201"))
+    before = load_config()["protection"]["providers"]
+    response = post(b, "/settings/protection", _with_new_connection(b_form, "byparr", "http://127.0.0.1:8202"))
+    again = protection_form(b, response.headers["location"])
+    post(b, "/settings/protection", {**again, "resolve_providers": "current"})
+    assert load_config()["protection"]["providers"] == before
+
+
 def test_protection_fields_changed_on_both_sides_are_a_conflict_with_the_draft_kept(protection_two):
     a, b = protection_two
     b_form = protection_form(b)

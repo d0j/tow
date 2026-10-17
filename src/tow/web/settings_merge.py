@@ -265,6 +265,60 @@ def protection_draft(fields: Mapping[str, Any]) -> dict[str, str]:
     return out
 
 
+def _draft_connections(draft: Mapping[str, Any]) -> dict[str, dict[str, str]]:
+    """The connections of a refused save's draft, in the form's order: ``{id: {field: value}}``."""
+    out: dict[str, dict[str, str]] = {}
+    for key, value in draft.items():
+        head, _, rest = str(key).partition(":")
+        ident, _, name = rest.rpartition(":")
+        if head == "providers" and ident and name in {"kind", "url", "order", "enabled"}:
+            out.setdefault(ident, {})[name] = str(value)
+    return out
+
+
+def protection_recovery(view: Mapping[str, Any], conflict: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Site access as its form draws it (``view``: ``services.protection_settings_view``); in a
+    refused save's recovery form whose draft holds the connections, the draft's whole collection.
+
+    The connections are one group: "mine" saves exactly what the form sends, so the form must
+    send the owner's collection, not the one saved now with the draft's values laid over it (a
+    suggested id another tab saved meanwhile drew that tab's service with this tab's address; a
+    connection removed elsewhere vanished with its draft). A draft connection saved now as the
+    same service is its saved card; any other one is drawn with its own service, as a new one."""
+    connections = _draft_connections(conflict.get("draft") or {}) if conflict else {}
+    if not conflict or conflict.get("kind") != "protection" or not connections:
+        return dict(view)
+    saved = {card["id"]: card for card in view["cards"] if not card["new"]}
+    titles = {choice["kind"]: choice["title"] for choice in view["choices"]}
+    cards = []
+    for index, (ident, fields) in enumerate(connections.items(), 1):
+        kind = fields.get("kind", "")
+        card = saved.get(ident)
+        if card is not None and card["kind"] == kind:
+            cards.append(card)
+            continue
+        offered = kind in titles or not kind  # a service no longer offered keeps its kind, hidden
+        cards.append(
+            {
+                "id": ident,
+                "kind": kind,
+                "url": fields.get("url", ""),
+                "enabled": fields.get("enabled") == "1",
+                "available": offered,
+                "new": offered,
+                "draft": True,
+                "on_demand": False,
+                "local_runtime_refused": False,
+                "order": fields.get("order") or index,
+                "title": titles.get(kind, kind),
+                "api_status": "unknown",
+                "retry_sec": 0,
+                "api_key": "protection_ui.api_unknown",
+            }
+        )
+    return {**view, "cards": cards}
+
+
 def protection_rows(
     groups: tuple[str, ...],
     now: Mapping[str, Any],
