@@ -310,10 +310,7 @@ def protection_recovery(view: Mapping[str, Any], conflict: Mapping[str, Any] | N
                 "on_demand": False,
                 "local_runtime_refused": False,
                 "order": fields.get("order") or index,
-                "title": titles.get(kind, kind),
-                "api_status": "unknown",
-                "retry_sec": 0,
-                "api_key": "protection_ui.api_unknown",
+                "title": titles.get(kind, kind),  # no service status: it has never been saved
             }
         )
     return {**view, "cards": cards}
