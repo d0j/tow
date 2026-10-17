@@ -830,7 +830,7 @@ def test_only_main_gate_writes_shared_uv_cache(name):
                 assert options["save-cache"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
             else:
                 assert options["save-cache"] is False
-    assert found == {"ci": 2, "installers": 3, "real": 3, "autostart": 1, "smokes": 6}[name]
+    assert found == {"ci": 2, "installers": 3, "real": 4, "autostart": 1, "smokes": 6}[name]
 
 
 @pytest.mark.parametrize("name", ["ci", "release", "installers", "real", "autostart", "smokes"])
@@ -918,6 +918,7 @@ def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
         "src/tow/config.py",
         "src/tow/store.py",
         "src/tow/storage/**",
+        "src/tow/bundle/**",  # the export the file system test publishes (C04)
         "src/tow/platform/**",
         "src/tow/paths.py",  # TC-08: the install's folders, which autostart reads
         "src/tow/lifecycle.py",  # read by `tow run` at start
@@ -940,13 +941,14 @@ def test_real_systems_run_on_their_code_weekly_and_by_hand_never_unbounded():
     for path in triggers["pull_request"]["paths"]:  # no filter names a file that is gone
         assert next(ROOT.glob(path.removesuffix("/**")), None), path
     jobs = flow["jobs"]
-    assert set(jobs) == {"clients", "clients-windows", "probes", "autostart"}
+    assert set(jobs) == {"clients", "clients-windows", "probes", "filesystems", "autostart"}
     # The autostart job lives in autostart.yml, which release.yml runs too (TC-03).
     assert jobs["autostart"]["uses"] == "./.github/workflows/autostart.yml"
     reusable_text, reusable = _workflow("autostart")
     autostart = reusable["jobs"]["autostart"]
     # The autostart job also updates under the OS manager and rolls back (TC-05): 70 minutes.
-    for job, limit in ((jobs["clients"], 40), (jobs["clients-windows"], 40), (jobs["probes"], 20), (autostart, 70)):
+    bounded = ((jobs["clients"], 40), (jobs["clients-windows"], 40), (jobs["probes"], 20), (jobs["filesystems"], 25))
+    for job, limit in (*bounded, (autostart, 70)):
         assert job["timeout-minutes"] <= limit
         assert all(step.get("timeout-minutes") for step in job["steps"] if "pytest" in step.get("run", ""))
     assert jobs["clients"]["runs-on"] == "ubuntu-24.04"

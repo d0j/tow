@@ -252,3 +252,23 @@ def test_real_records_the_client_spellings_of_reserved_names_and_checks_tows_key
         assert "tests/integration/test_real_client_names.py" in steps[record]["run"], job_id
         assert all(steps[i]["timeout-minutes"] <= 15 for i in (record, keys)), job_id
     assert "TOW_REAL_TRANSMISSION" in flow["jobs"]["clients"]["env"]
+
+
+def test_real_mounts_the_c03_and_c04_file_systems_on_linux_and_macos():
+    """tmpfs, vfat and exFAT (the kernel's drivers and FUSE) on Ubuntu, exFAT and FAT disk images
+    on macOS; the images are made in the job, the test mounts and unmounts them itself."""
+    _text, flow = _flow("real")
+    job = flow["jobs"]["filesystems"]
+    assert job["strategy"]["matrix"]["os"] == ["ubuntu-24.04", "macos-latest"]
+    assert job["env"] == {"TOW_REAL_FILESYSTEMS": "1"}
+    steps = {step.get("if"): step for step in job["steps"] if "TOW_REAL_FS_IMAGES" in step.get("run", "")}
+    linux, macos = steps["runner.os == 'Linux'"]["run"], steps["runner.os == 'macOS'"]["run"]
+    for tool in ("mkfs.vfat", "mkfs.exfat", "exfat-fuse", "modprobe exfat", "truncate -s 64M"):
+        assert tool in linux, tool
+    assert 'echo "TOW_REAL_FS=tmpfs vfat exfat exfat-fuse"' in linux
+    assert "hdiutil create -size 64m -fs ExFAT" in macos
+    assert 'hdiutil create -size 64m -fs "MS-DOS FAT32"' in macos
+    assert 'echo "TOW_REAL_FS=exfat msdos"' in macos
+    test = next(step for step in job["steps"] if "pytest" in step.get("run", ""))
+    assert "tests/integration/test_real_filesystems.py" in test["run"]
+    assert test["timeout-minutes"] <= 10
