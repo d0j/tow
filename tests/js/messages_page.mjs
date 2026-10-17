@@ -394,6 +394,34 @@ verdict.oneRequestForTheListAtOnce = true;
 }
 verdict.rateLimitedWaitsForRetryAfter = true;
 
+// A read or clear refused (429) is sent again with the cursor of the moment it was asked: an entry
+// that arrived during Retry-After (a refresh showed it meanwhile) is neither cleared nor read by it.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", subject: "Show A", text: "Check failed", at: 1800000100 }]);
+  const live = page({ storage: memoryStorage(), server });
+  await settle();
+  const posts = (url) => server.requests.filter((request) => request.url === url);
+  const arrives = (id) => server.change((list) => list.unshift({ id, cursor: `c-${id}`, kind: "ok", subject: "Show", text: "New file", at: 1800000200, read: false }));
+  for (const [button, url] of [["[data-messages-clear]", "/messages/clear"], ["[data-messages-read]", "/messages/read"]]) {
+    const asked = live.window.towMessages.shared().cursor;
+    server.fail = { status: 429, data: { ok: false, error: "Too many requests." }, retryAfter: "3" };
+    live.document.dispatch(live.$(button), "click");
+    await settle();
+    server.fail = null;
+    assert.equal(posts(url).at(-1).body.cursor, asked);
+    arrives(`${url.slice(10)}-new`);
+    assert.equal(await live.window.towMessages.refresh(), true);
+    assert.notEqual(live.window.towMessages.shared().cursor, asked);
+    live.timers.advance(3100);
+    await settle();
+    assert.equal(posts(url).length, 2, url);
+    assert.equal(posts(url).at(-1).body.cursor, asked, url);
+  }
+  // What arrived after the clear stays; what arrived after the read (not shown at its click) is unread.
+  assert.deepEqual(live.window.towMessages.shared().items.map((item) => [item.id, item.read]), [["read-new", false], ["clear-new", true]]);
+}
+verdict.retriedMarkKeepsItsCursor = true;
+
 // The per-tab history of 1.32 and older: removed with one notice, never sent anywhere; a reload
 // says nothing again.
 {
