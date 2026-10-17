@@ -314,6 +314,7 @@ _KEEP = (
     "paused",
     "topics",
     "copy_kind",
+    "undo",
 )
 _HEX32 = re.compile(r"[0-9a-f]{32}")
 _TOPIC_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -880,6 +881,56 @@ def _without_paths(params: Any, depth: int = 0) -> Any:
     return kept
 
 
+# A message says what happened on its own, as a sentence: History's label of these kinds is a
+# bare word ("interval", "undone", "added") that its line explains, so the feed has its own.
+_FEED_LABELS = {
+    key.rsplit(".", 1)[1]: key
+    for key in (
+        "log.feed.kind.topic_add",
+        "log.feed.kind.topic_delete",
+        "log.feed.kind.topic_edit",
+        "log.feed.kind.topic_pause",
+        "log.feed.kind.topic_resume",
+        "log.feed.kind.client_updated",
+        "log.feed.kind.qbit_move",
+        "log.feed.kind.browser_auth",
+        "log.feed.kind.settings_interval",
+        "log.feed.kind.settings_language",
+        "log.feed.kind.settings_theme",
+        "log.feed.kind.settings_password",
+        "log.feed.kind.settings_client",
+        "log.feed.kind.settings_client_default",
+        "log.feed.kind.settings_access",
+        "log.feed.kind.settings_service_autostart",
+        "log.feed.kind.settings_backup_location",
+        "log.feed.kind.undo",
+    )
+}
+# An undo names what it undid when its event says (the undo record's kind).
+_UNDO_LABELS = {
+    key.rsplit(".", 1)[1]: key
+    for key in (
+        "log.feed.undo.topic",
+        "log.feed.undo.topic_put",
+        "log.feed.undo.topic_add",
+        "log.feed.undo.site",
+        "log.feed.undo.settings",
+        "log.feed.undo.settings_access",
+        "log.feed.undo.settings_clients",
+    )
+}
+
+
+def _feed_label(rec: Mapping[str, Any]) -> str | None:
+    """The feed's own words for what happened, or None: History's label says it."""
+    kind = str(rec.get("_kind") or "")
+    if kind == "topic_pause" and rec.get("paused") is False:
+        kind = "topic_resume"  # the pause button turned pause off
+    key = _UNDO_LABELS.get(str(rec.get("undo") or "")) if kind == "undo" else None
+    key = key or _FEED_LABELS.get(kind)
+    return t(key) if key else None
+
+
 _FORMAT_FIELDS = (
     "kind",
     "ts",
@@ -939,7 +990,7 @@ def render_entry(
     if site and subject != str(site_titles.get(site) or site):
         fields["tracker"] = site  # a topic's message names its site too; a site's says it once
     row = eventlog.format_event(fields, site_titles=site_titles)
-    bits = [row["label"]]
+    bits = [_feed_label(rec) or row["label"]]
     if entry["kind"] == "settings_update_result":
         outcome = str(rec.get("status") or "")
         if outcome in _UPDATE_RESULTS:
