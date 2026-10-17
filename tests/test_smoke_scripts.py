@@ -127,6 +127,44 @@ def test_the_permissions_smoke_reads_sids_not_names():
     assert "GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])" in permissions.ACL_SCRIPT
 
 
+@pytest.mark.allow_system
+def test_the_new_shell_smokes_parse():
+    import shutil
+    import subprocess
+
+    shell = shutil.which("dash") or shutil.which("sh")
+    if shell is None:
+        pytest.skip("no sh on this machine")
+    for name in ("alpine-smoke.sh", "macos-smoke.sh", "install-smoke.sh"):
+        done = subprocess.run([shell, "-n", str(SCRIPTS / name)], capture_output=True, text=True, check=False)
+        assert done.returncode == 0, name + done.stderr
+
+
+@pytest.mark.allow_system
+def test_the_nonadmin_smoke_parses_and_stays_ascii():
+    import shutil
+    import subprocess
+
+    path = SCRIPTS / "nonadmin-smoke.ps1"
+    text = path.read_text(encoding="utf-8")
+    assert text.isascii()  # Windows PowerShell 5.1 reads a file without a BOM in the ANSI code page
+    assert "-join [char[]](0x0422, 0x0435, 0x0441, 0x0442)" in text
+    assert "if (-not $env:GITHUB_ACTIONS)" in text  # never creates an account outside CI
+    assert "Remove-LocalUser" in text
+    program = shutil.which("pwsh")
+    if program is None:
+        pytest.skip("no pwsh on this machine")
+    script = (
+        "$errors = $null; "
+        f"[void][System.Management.Automation.Language.Parser]::ParseFile('{path}', [ref]$null, [ref]$errors); "
+        "$errors | ForEach-Object { $_.ToString() }; if ($errors) { exit 1 }"
+    )
+    done = subprocess.run(
+        [program, "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, check=False
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
 def test_install_smoke_builds_its_nfd_name_from_code_points():
     text = (SCRIPTS / "install-smoke.sh").read_text(encoding="utf-8")
     assert "nfd=\" $(printf '\\320\\270\\314\\206')\"" in text  # и + U+0306 in UTF-8

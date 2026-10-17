@@ -1387,7 +1387,9 @@ def test_the_smokes_and_real_autostart_install_into_cyrillic_folders():
 
 
 def test_the_smoke_scripts_never_use_the_live_port():
-    for name in ("bundle-smoke.ps1", "install-smoke.sh", "install-smoke.ps1", "update-smoke.py"):
+    names = ("bundle-smoke.ps1", "install-smoke.sh", "install-smoke.ps1", "update-smoke.py", "crash-smoke.py")
+    names += ("alpine-smoke.sh", "macos-smoke.sh", "nonadmin-smoke.ps1")
+    for name in names:
         text = (ROOT / "scripts" / name).read_text(encoding="utf-8")
         assert "never on 8787" in text
         assert "TOW_NO_BROWSER" in text
