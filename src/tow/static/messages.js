@@ -813,11 +813,12 @@
   };
   const failed = (text) => center.show({ kind: "err", text: text || t("js.messages.not_saved") });
   // Read or clear up to the newest entry this page shows: an entry that arrived since stays.
-  // A read or clear refused for too many requests (429) is sent once more after its Retry-After.
-  const mark = (path, again = false) => {
-    if (typeof fetch !== "function" || !shared.cursor) return Promise.resolve();
+  // A read or clear refused for too many requests (429) is sent once more after its Retry-After, up
+  // to the same entry (``cursor``, taken when it was asked): never one a refresh showed meanwhile.
+  const mark = (path, { cursor = shared.cursor, again = false } = {}) => {
+    if (typeof fetch !== "function" || !cursor) return Promise.resolve();
     const mine = session;
-    const body = new URLSearchParams({ cursor: shared.cursor });
+    const body = new URLSearchParams({ cursor });
     return fetch(path, { method: "POST", credentials: "same-origin", headers: { Accept: "application/json" }, body, signal: requests?.signal })
       .then(async (response) => {
         if (mine !== session) return;
@@ -833,7 +834,7 @@
           return;
         }
         if (response.status === 429 && !again) {
-          window.setTimeout(() => { if (mine === session) mark(path, true); }, retryAfterMs(response));
+          window.setTimeout(() => { if (mine === session) mark(path, { cursor, again: true }); }, retryAfterMs(response));
           return;
         }
         if (response.status === 409) {
