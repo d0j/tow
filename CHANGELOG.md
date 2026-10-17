@@ -54,6 +54,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   the wait ends.
 - In **Settings**, two open messenger or torrent client cards stand side by side only from 1280 px wide: at
   1200 px a long field, such as the Discord webhook, was narrower than its size.
+- A status pill in **Settings** that wraps on a phone has its lines centred, as every pill's text is.
 
 ### Security
 

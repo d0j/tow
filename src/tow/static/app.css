@@ -891,7 +891,7 @@ a.settings-link:hover { background: var(--panel2); text-decoration: none; }
   .settings-panel { padding: var(--sp-3); }
   /* A long pill ("Nightly backup 2026-10-13 09:28:19 UTC+03:00") wraps instead of losing its end:
      a phone has no tooltip to show the rest. */
-  .settings-accordion > summary .pill { max-width: 48vw; white-space: normal; text-align: end; border-radius: .7rem; }
+  .settings-accordion > summary .pill { max-width: 48vw; white-space: normal; text-align: center; border-radius: .7rem; }
 }
 
 /* Compact settings accordion: equal, thin rows at every viewport width. */
