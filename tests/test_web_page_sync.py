@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
+from html.parser import HTMLParser
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,6 +28,7 @@ LAN = ("192.168.1.7", 50000)
 ORIGIN = {"Origin": "http://127.0.0.1"}
 MARKS = re.compile(r"<!--frag:([A-Za-z0-9_-]+):([0-9a-f]{32})-->")
 LIST = re.compile(r"<!--frags:(/[a-z]+):([0-9a-f]{32})-->")
+NODE = shutil.which("node")
 
 
 class Clock:
@@ -95,6 +100,69 @@ def _lan(monkeypatch) -> TestClient:
     lan = TestClient(app, client=LAN, headers=ORIGIN)
     assert lan.post("/login", data={"password": KEY}, follow_redirects=False).status_code == 303
     return lan
+
+
+class _Fields(HTMLParser):
+    """The fields of the forms in a piece of a page, as its markup draws them."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fields: list[dict] = []
+        self._forms = 0
+        self._select: dict | None = None
+        self._textarea: dict | None = None
+
+    def handle_starttag(self, tag, attrs):
+        a = {key: value or "" for key, value in attrs}
+        if tag == "form":
+            self._forms += 1
+            return
+        if not self._forms:
+            return
+        common = {"tag": tag, "name": a.get("name") or a.get("id", ""), "disabled": "disabled" in a}
+        if tag == "input":
+            kind = a.get("type", "text")
+            self.fields.append({**common, "type": kind, "value": a.get("value", ""), "checked": "checked" in a})
+        elif tag == "select":
+            self._select = {**common, "multiple": "multiple" in a, "options": []}
+            self.fields.append(self._select)
+        elif tag == "option" and self._select is not None:
+            option = {"value": a.get("value", ""), "defaultSelected": "selected" in a, "disabled": "disabled" in a}
+            self._select["options"].append(option)
+        elif tag == "textarea":
+            self._textarea = {**common, "type": "textarea", "value": "", "checked": False}
+            self.fields.append(self._textarea)
+
+    def handle_data(self, data):
+        if self._textarea is not None:
+            self._textarea["value"] += data
+
+    def handle_endtag(self, tag):
+        if tag == "form":
+            self._forms -= 1
+        elif tag == "select":
+            self._select = None
+        elif tag == "textarea":
+            self._textarea = None
+
+
+def _fields(html: str) -> list[dict]:
+    parser = _Fields()
+    parser.feed(html)
+    return parser.fields
+
+
+def _changed(fields: list[dict], tmp_path: Path) -> list[str]:
+    """The fields static/sync.js's one rule (pages.js's too) counts as changed on a page that has
+    just loaded them (tests/js/drawn_fields.mjs)."""
+    path = tmp_path / "fields.json"
+    path.write_text(json.dumps(fields), encoding="utf-8")
+    script = Path(__file__).parent / "js" / "drawn_fields.mjs"
+    result = subprocess.run(
+        [NODE, str(script), str(path)], capture_output=True, text=True, encoding="utf-8", timeout=30, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout.strip().splitlines()[-1])["changed"]
 
 
 # --------------------------------------------------------------------------- revisions
@@ -183,6 +251,71 @@ def test_a_random_suggestion_and_the_free_space_are_no_change():
     )
     assert page_sync.fragments(html)["a"][0] == page_sync.fragments(other)["a"][0]
     assert 'data-q="open"' in page_sync.normalized(html)  # a word "open" in a value stays
+
+
+@pytest.mark.parametrize("path", ["/settings", "/", "/sites", "/topics/t1/edit"])
+def test_every_select_of_a_form_draws_one_option_chosen(path):
+    """Final QA 1.33.0 F1: a select whose markup marks no option shows its first one, which a
+    script comparing with the marked default counted as the owner's change. Every select a form
+    draws marks the option it shows: the kind of client to add, a new Site access connection's
+    service, and a topic whose torrent client is gone (Home's Add form, its edit panel)."""
+    cfg = load_config()
+    cfg["clients"] = [
+        {"id": "main", "kind": "qbittorrent", "title": "Living room"},
+        {"id": "second", "kind": "transmission", "title": "Office"},
+    ]
+    save_config(cfg)
+    _seed()
+    state = load_state()
+    state["topics"][0]["client_id"] = "gone"
+    save_state(state)
+    html = TestClient(app, headers=ORIGIN).get(path).text
+    selects = [field for field in _fields(html) if field["tag"] == "select" and not field["multiple"]]
+    assert selects
+    unmarked = [field["name"] for field in selects if sum(o["defaultSelected"] for o in field["options"]) != 1]
+    assert unmarked == []
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_an_idle_settings_page_follows_another_devices_clients_and_site_access(clock, tmp_path):
+    """Final QA 1.33.0 F1: on a fresh Settings page "Torrent clients" and "Site access" counted as
+    being edited (a select without a marked option), so they kept "shows once you leave it" and
+    never followed another device. Drawn as the page has them, their fields are no draft; another
+    device's save changes exactly what the page then puts in, and that is no draft either."""
+    _seed()
+    local = TestClient(app, headers=ORIGIN)
+    html = local.get("/settings").text
+    rev, digests = _marks(html)
+    drawn = dict(re.findall(r"<!--frag:([A-Za-z0-9_-]+):[0-9a-f]{32}-->(.*?)<!--/frag:\1-->", html, re.DOTALL))
+    for section in ("acc-clients", "acc-protection"):
+        fields = _fields(drawn[section])
+        assert any(field["tag"] == "select" for field in fields), section
+        assert _changed(fields, tmp_path) == [], section
+    other = TestClient(app, headers=ORIGIN)  # another device
+    added = other.post("/settings/client/add", data={"kind": "transmission"}, follow_redirects=False)
+    assert added.status_code == 303
+    access = {
+        "enabled": "1",
+        "timeout_sec": "47",
+        "min_interval_sec": "1800",
+        "max_attempts": "2",
+        "provider_id": "first",
+        "provider_kind": "flaresolverr",
+        "provider_url": "http://127.0.0.1:8191",
+        "provider_order": "1",
+        "provider_enabled": "first",
+    }
+    assert other.post("/settings/protection", data=access, follow_redirects=False).status_code == 303
+    clock.tick()
+    now = _page_rev(local, "/settings")
+    assert now != rev
+    found = local.get("/page/fragments", params={"page": "/settings", "rev": now}).json()
+    changed = {item["id"]: item["html"] for item in found["fragments"] if digests.get(item["id"]) != item["hash"]}
+    assert set(changed) == {"acc-clients", "acc-protection"}
+    assert 'value="47"' in changed["acc-protection"]
+    for section, fragment in changed.items():
+        assert _changed(_fields(fragment), tmp_path) == [], section
 
 
 # --------------------------------------------------------------------------- the fragments' answer

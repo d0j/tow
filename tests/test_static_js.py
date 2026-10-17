@@ -439,6 +439,7 @@ def test_the_page_follows_header_jobs_undo_preferences_version_and_new_rows():
         "messagesAppliedOnlyOnceListTaken",
         "undoAsksForTheListOnlyWhenNew",
         "restoredFocusDoesNotHoldAFragment",
+        "selectWithoutMarkedOptionIsNoDraft",
         "signOutStopsPolling",
         "signOutEndsEveryRequestAndSettler",
     )

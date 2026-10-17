@@ -46,7 +46,7 @@
             <div class="card-body">
             <input type="hidden" name="provider_id" value="{{ p.id }}">
             {% if p.new %}
-            <div class="field"><label for="protection-kind-{{ p.id }}">{{ t('protection_ui.service_kind') }}</label><select id="protection-kind-{{ p.id }}" name="provider_kind" class="w-m"><option value="">{{ t('protection_ui.choose_kind') }}</option>{% for choice in protection.choices %}<option value="{{ choice.kind }}"{% if pd.get(key ~ 'kind') == choice.kind %} selected{% endif %}>{{ choice.title }}</option>{% endfor %}</select></div>
+            <div class="field"><label for="protection-kind-{{ p.id }}">{{ t('protection_ui.service_kind') }}</label><select id="protection-kind-{{ p.id }}" name="provider_kind" class="w-m"><option value=""{% if pd.get(key ~ 'kind') not in protection.choices|map(attribute='kind')|list %} selected{% endif %}>{{ t('protection_ui.choose_kind') }}</option>{% for choice in protection.choices %}<option value="{{ choice.kind }}"{% if pd.get(key ~ 'kind') == choice.kind %} selected{% endif %}>{{ choice.title }}</option>{% endfor %}</select></div>
             {% else %}<input type="hidden" name="provider_kind" value="{{ p.kind }}">{% endif %}
             {% if not p.available %}{{ note(t('protection_ui.unavailable'), 'bad') }}{% endif %}{% if p.local_runtime_refused %}{{ note(t('protection_ui.local_runtime_refused'), 'bad') }}{% endif %}
             {% if not p.new and p.available and not off %}

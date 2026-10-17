@@ -698,7 +698,25 @@
     };
   };
 
-  window.TowSync = { createSyncClient, createRowSync, createReloader };
+  // A field the owner changed: what it holds differs from what the page drew. A select draws the
+  // option its markup marks (the last one, if several are) or else its first one that can be
+  // chosen; a select of many values (or a list box) draws exactly the ones marked. Pages.js and
+  // this file decide the same way (a fresh Settings page is no draft: final QA 1.33.0 F1).
+  const changedField = (field) => {
+    if (["hidden", "submit", "button", "reset", "image"].includes(field.type) || field.disabled) return false;
+    if (field.type === "checkbox" || field.type === "radio") return field.checked !== field.defaultChecked;
+    if (field.type === "file") return Boolean(field.files?.length);
+    if (field.tagName === "SELECT") {
+      const options = [...(field.options || [])];
+      if (field.multiple || field.size > 1) return options.some((option) => option.selected !== option.defaultSelected);
+      const marked = options.reduce((last, option, index) => (option.defaultSelected ? index : last), -1);
+      const drawn = marked >= 0 ? marked : options.findIndex((option) => !option.disabled);
+      return options.findIndex((option) => option.selected) !== drawn;
+    }
+    return typeof field.defaultValue === "string" && field.value !== field.defaultValue;
+  };
+
+  window.TowSync = { createSyncClient, createRowSync, createReloader, changedField };
   if (typeof document === "undefined" || !document.getElementById?.("msg-host")) return;
 
   // ------------------------------------------------------------------ the page
@@ -806,13 +824,6 @@
 
   // What the page is doing that a reload or a row drawn again would destroy.
   const FIELDS = "input, select, textarea, [contenteditable]";
-  const changedField = (field) => {
-    if (field.type === "hidden" || field.type === "submit" || field.type === "button" || field.disabled) return false;
-    if (field.type === "checkbox" || field.type === "radio") return field.checked !== field.defaultChecked;
-    if (field.type === "file") return Boolean(field.files?.length);
-    if (field.tagName === "SELECT") return [...(field.options || [])].some((option) => option.selected !== option.defaultSelected);
-    return typeof field.defaultValue === "string" && field.value !== field.defaultValue;
-  };
   const drafts = () => [...document.querySelectorAll("form")].some((form) =>
     (form.getAttribute("method") || "").toLowerCase() === "post"
     && !form.matches("[data-theme-form], [data-auto-submit]")

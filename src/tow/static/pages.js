@@ -285,13 +285,7 @@
     if (name === "pointerdown") pressed = event.target;
   }, true));
   ["pointerup", "pointercancel"].forEach((name) => document.addEventListener(name, () => { pressed = null; }, true));
-  const changedField = (field) => {
-    if (["hidden", "submit", "button", "reset"].includes(field.type) || field.disabled) return false;
-    if (field.type === "checkbox" || field.type === "radio") return field.checked !== field.defaultChecked;
-    if (field.type === "file") return Boolean(field.files?.length);
-    if (field.tagName === "SELECT") return [...(field.options || [])].some((option) => option.selected !== option.defaultSelected);
-    return typeof field.defaultValue === "string" && field.value !== field.defaultValue;
-  };
+  const { changedField } = window.TowSync; // sync.js's: one rule of what the owner changed
   const drafted = (element) => [...element.querySelectorAll("form")].some((form) => !form.matches("[data-theme-form], [data-auto-submit]")
     && [...form.querySelectorAll("input, select, textarea")].some(changedField));
   const protectedElement = (element) => {

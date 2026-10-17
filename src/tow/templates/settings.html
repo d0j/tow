@@ -156,7 +156,7 @@
               <label for="client-add-kind">{{ t('settings.clients.add_label') }}</label>
               <div class="client-add-row">
                 <select id="client-add-kind" name="kind" class="w-m">
-                  {% for t in client_types %}<option value="{{ t.kind }}">{{ t.title }}</option>{% endfor %}
+                  {% for t in client_types %}<option value="{{ t.kind }}"{% if loop.first %} selected{% endif %}>{{ t.title }}</option>{% endfor %}
                 </select>
                 <button type="submit">{{ t('settings.clients.add') }}</button>
               </div>
