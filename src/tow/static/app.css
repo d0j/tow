@@ -1256,8 +1256,9 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .field:has(> .w-xl, > .folder-input > .w-xl) > .field-hint { max-width: 36rem; }
 .settings-panel .notice { max-width: 46rem; }
 /* Clients and connected messengers: two open cards side by side on a wide screen, in their own
-   order; a folded card takes the whole line. */
-@media (min-width: 1200px) {
+   order; a folded card takes the whole line. From 1280 px: a column then holds a long field
+   (.w-xl, 576 px) and its card's padding - at 1200 the Discord webhook got 545 px. */
+@media (min-width: 80rem) {
   .integration-list.cards-2:has(> details[open] ~ details[open]) { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .integration-list.cards-2 > :not(details[open]) { grid-column: 1 / -1; }
 }
