@@ -258,7 +258,9 @@ main() {
     case $os-$arch in
         linux-x86_64 | linux-amd64) target=x86_64-unknown-linux ;;
         linux-aarch64 | linux-arm64) target=aarch64-unknown-linux ;;
-        linux-armv7l | linux-armv7*) target=armv7-unknown-linux ;;
+        # 32-bit ARM: six packages have no wheel there (glibc) or uv has no Python at all (musl),
+        # so the setup would fail half way (docs/PORTABLE.md, 1b): refused before anything is written.
+        linux-arm*) die "this computer ($system $arch) is not supported: TOW needs a 64-bit system (a 64-bit Raspberry Pi OS works)" ;;
         macos-arm64) target=aarch64-apple-darwin ;;
         macos-x86_64)
             target=x86_64-apple-darwin
@@ -271,10 +273,7 @@ main() {
         if ldd --version 2>&1 | grep -qi -e glibc -e 'gnu libc'; then
             libc=gnu
         fi
-        case $target in
-            armv7-*) target=$target-${libc}eabihf ;;
-            *) target=$target-$libc ;;
-        esac
+        target=$target-$libc
     fi
 
     created=no
