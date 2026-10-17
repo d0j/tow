@@ -82,6 +82,10 @@
   let pollTimer = null;
   let pollFailed = false;
   let rollbackVersion = "";
+  // A job runs as the page's poll said last (the release area of sync.js), and this page lost TOW
+  // while one ran: it then says TOW is restarting, never an older update's result as the current one.
+  let releaseActive = false;
+  let restarting = false;
   // The version installed now (the page's, then the update status's): an older target is a step back.
   let installed = /^\d+\.\d+\.\d+$/.test(pageVersion) ? pageVersion : "";
   let busy = false;
@@ -191,17 +195,33 @@
   document.addEventListener?.("visibilitychange", () => {
     if (!document.hidden && updating && pollTimer !== null) schedulePoll();
   });
+  // TOW stopped for the update (or went away) while a job ran: "TOW is restarting…" until it answers
+  // again; then the job's result as before. An install whose answer was lost keeps "confirming".
+  const showRestarting = () => {
+    if (!progress || pendingTarget) return;
+    restarting = true;
+    progress.hidden = false;
+    progress.textContent = t("js.releases.reconnecting");
+    if (!updating) { updating = true; controls(); }
+  };
   const pollJob = async () => {
     if (!progress) return;
     if (pollRequest?.generation === generation) return;
     const request = { generation };
     pollRequest = request;
+    let answered = false;
+    // A read of a running job TOW leaves unanswered for 3 s (a browser may hold it while the port
+    // has no server, instead of failing it) is a restart too; its answer, if it comes, says more.
+    const quiet = (updating || releaseActive) && !pendingTarget ?
+      window.setTimeout(() => { if (pollRequest === request) showRestarting(); }, 3000) : 0;
     try {
       const response = await fetch("/updates/status", { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(10000) });
+      answered = true;
       if (!response.ok) throw new Error("update status unavailable");
       const job = await response.json();
       if (request.generation !== generation) return;
       pollFailed = false;
+      restarting = false;
       // An old terminal result is not evidence that a new POST was accepted.
       if (pendingTarget) {
         if (!job.id || job.id === pendingBaseline || job.target !== pendingTarget) {
@@ -231,6 +251,7 @@
         previous.textContent = rollbackVersion ? t("js.releases.previous", { version: rollbackVersion }) : "";
       }
       updating = job.active === true;
+      releaseActive = updating;
       const installedVersion = typeof job.current === "string" && job.current ? job.current :
         (job.status === "ok" && typeof job.target === "string" ? job.target : "");
       if (/^\d+\.\d+\.\d+$/.test(installedVersion)) installed = installedVersion;
@@ -277,10 +298,12 @@
     } catch {
       if (request.generation !== generation) return;
       pollFailed = true;
-      if (updating) {
+      if (updating || (releaseActive && !answered)) {
         progress.hidden = false;
-        progress.textContent = t(pendingTarget ? "js.releases.confirming" : "js.releases.reconnecting");
-        if (pendingTarget && reload) reload.hidden = false;
+        if (pendingTarget) {
+          progress.textContent = t("js.releases.confirming");
+          if (reload) reload.hidden = false;
+        } else showRestarting();
       } else {
         supported = false;
         controls();
@@ -289,6 +312,7 @@
       }
       schedulePoll();
     } finally {
+      if (quiet) window.clearTimeout(quiet);
       if (pollRequest === request) pollRequest = null;
     }
   };
@@ -420,9 +444,17 @@
       if (!status) render(data);
       else if (!first) refresh();
       first = false;
+      releaseActive = data.job?.active === true;
       const job = JSON.stringify(data.job ?? null);
       if (lastJob !== null && job !== lastJob) pollJob();
       lastJob = job;
+    });
+    // The poll lost TOW (no answer at all; a refusal - busy, limiting - is an answer) while a job
+    // ran: TOW is restarting. Its first answer after that reads the job at once.
+    synced.onPoll?.((_, ok, answer = 0) => {
+      if (ok) {
+        if (restarting) { restarting = false; pollJob(); }
+      } else if (!answer && (updating || releaseActive)) showRestarting();
     });
     if (status) refresh();
     pollJob();

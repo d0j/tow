@@ -88,6 +88,24 @@ def test_the_tab_that_starts_an_update_tells_its_sibling_tabs_at_once():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_page_that_loses_tow_during_an_update_says_it_restarts_not_an_older_result():
+    # 1.33.1 B25 F-1: through the restart such a page kept the previous update's refusal as current.
+    verdict = _verdict("update_restarting.mjs")
+    assert verdict == dict.fromkeys(
+        (
+            "lostWhileTheNewJobRuns",
+            "followsTheResultWhenBack",
+            "pollLostWhileAJobRuns",
+            "refusedPollIsNoRestart",
+            "quietTowIsARestart",
+            "noJobNoRestart",
+        ),
+        True,
+    )
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_a_page_not_reloaded_after_an_update_says_to_reload_not_that_it_is_the_latest():
     # 1.33.1 QA O-2: "You have the latest version" beside "Reload the page" on a 1.33.0 page.
     verdict = _verdict("update_status_page_version.mjs")
@@ -417,6 +435,7 @@ def test_the_sync_poll_keeps_its_schedule_backoff_hints_and_sign_out():
         "hintsCoalescedNeverThroughBackoff",
         "unauthorizedEnds",
         "lateAnswerRejected",
+        "pollersLearnTheStatus",
     )
     assert verdict == dict.fromkeys(keys, True)
 

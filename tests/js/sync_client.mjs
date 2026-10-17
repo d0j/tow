@@ -228,6 +228,22 @@ verdict.hungReaderGivenUp = true;
 }
 verdict.backoffFiveToSixty = true;
 
+// The page's readers learn how each poll ended: its HTTP status, 0 when there was no answer at all
+// (TOW unreachable: updates.js then says TOW is restarting while a job runs).
+{
+  const test = harness();
+  const told = [];
+  test.client.onPoll((_, ok, status) => told.push([ok, status]));
+  test.queue.push(async () => { throw new TypeError("Failed to fetch"); });
+  test.queue.push(async () => ({ status: 503, retryAfter: 2 }));
+  test.queue.push(async () => ({ status: 304 }));
+  test.queue.push(async () => ({ status: 200, body: { ok: true, now_ts: 1, areas: {} } }));
+  test.client.start();
+  await test.run(2600 + 5000 + 10000 + 5000 + 100);
+  assert.deepEqual(told, [[false, 0], [false, 503], [true, 304], [true, 200]]);
+}
+verdict.pollersLearnTheStatus = true;
+
 // Jitter stays within ±20 % of each step.
 {
   const test = harness({ random: () => 0.999, answer: () => ({ status: 503 }) });
