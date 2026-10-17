@@ -202,6 +202,16 @@ def test_the_owner_runs_only_as_the_copy_of_that_install(tmp_path, monkeypatch, 
     assert "runs only as the copy" in capsys.readouterr().out
 
 
+def test_the_windows_start_flags_are_the_documented_values_on_every_system():
+    # Before: the test read subprocess.DETACHED_PROCESS, which exists only on Windows, so the
+    # Windows branch of spawn_owner could not be checked on Linux and macOS.
+    assert updater.DETACHED_PROCESS == 0x00000008
+    assert updater.NEW_PROCESS_GROUP == 0x00000200
+    assert updater.BREAKAWAY_FROM_JOB == 0x01000000
+    for name, value in (("DETACHED_PROCESS", 0x00000008), ("CREATE_NEW_PROCESS_GROUP", 0x00000200)):
+        assert getattr(subprocess, name, value) == value
+
+
 @pytest.mark.parametrize(
     ("in_job", "denied", "how"),
     [(False, False, "detached"), (True, True, "broker"), (False, True, "refused")],
@@ -233,8 +243,8 @@ def test_windows_starts_the_owner_detached_or_through_the_broker(tmp_path, monke
     assert [kind for kind, _ in started] == [how]
     if how == "detached":
         flags = started[0][1]["creationflags"]
-        assert flags & subprocess.DETACHED_PROCESS
-        assert flags & subprocess.CREATE_NEW_PROCESS_GROUP
+        assert flags & updater.DETACHED_PROCESS
+        assert flags & updater.NEW_PROCESS_GROUP
         assert flags & updater.BREAKAWAY_FROM_JOB
         assert started[0][1]["stdin"] is subprocess.DEVNULL
         assert owned.pid == 4321

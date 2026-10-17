@@ -131,6 +131,9 @@ SWITCH_BACK_PAUSE = 5.0
 UNIT_NAME = "tow.service"
 AGENT_LABEL = "io.tow"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+# Windows process creation flags, with their documented values where subprocess has none (POSIX).
+DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
 BREAKAWAY_FROM_JOB = 0x01000000
 # The update's own process (X41): <TOW>/runtime/update-run/<id>/ holds its copy of this file, its
 # log and its result; the newest RUNS_KEPT finished ones are kept. TOW_UPDATE_HERE=1 runs the update
@@ -990,7 +993,7 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
                     start_new_session=True,
                 )
             )
-        flags = getattr(subprocess, "DETACHED_PROCESS", 0x8) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
+        flags = DETACHED_PROCESS | NEW_PROCESS_GROUP
         try:
             return Owned(
                 subprocess.Popen(
@@ -1155,8 +1158,8 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
         env = self.env
         if self.windows:
             argv = [str(venv / "Scripts" / "pythonw.exe"), "-m", "tow", "run"]
-            flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-            for extra in (0x01000000, 0):  # CREATE_BREAKAWAY_FROM_JOB when the job allows it
+            flags = DETACHED_PROCESS | NEW_PROCESS_GROUP
+            for extra in (BREAKAWAY_FROM_JOB, 0):  # when the job allows it
                 try:
                     subprocess.Popen(
                         argv,
