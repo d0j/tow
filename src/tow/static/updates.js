@@ -318,11 +318,20 @@
     updating = true; controls();
     progress.hidden = false; progress.textContent = t("js.releases.backup");
     let refused = false;
+    // The other tabs of this browser poll at once (sync.js: a hint without any data) and follow the
+    // job from its first step; a tab elsewhere sees it within its own 5 s (TOW waits for it).
+    let told = false;
+    const tellTabs = () => {
+      if (told) return;
+      told = true;
+      try { window.towSync?.hint?.(); } catch { /* they see it within 5 s */ }
+    };
     try {
       const body = new URLSearchParams({ version });
       const response = await fetch("/updates/install", { method: "POST", body, credentials: "same-origin", signal: AbortSignal.timeout(60000) });
       const job = await response.json();
       if (!response.ok || !job.ok) { refused = true; throw new Error(job.error || t("js.releases.failed")); }
+      tellTabs();
       if (typeof job.id !== "string" || !job.id) throw new Error("missing update identity");
       operation = job.id;
       pendingTarget = "";
@@ -335,6 +344,7 @@
         progress.textContent = error.message || t("js.releases.failed");
         updating = false; controls(); return;
       }
+      tellTabs(); // the answer was lost: the job may run
       progress.textContent = t("js.releases.confirming");
       await pollJob();
     }

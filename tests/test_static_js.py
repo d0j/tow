@@ -78,6 +78,16 @@ def test_a_running_update_is_followed_every_two_seconds_only_while_seen_and_read
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_the_tab_that_starts_an_update_tells_its_sibling_tabs_at_once():
+    # 1.33.1 B25 F-1: the other tabs of the same browser learned of the job on their own 5 s poll.
+    verdict = _verdict("update_sibling_hint.mjs")
+    assert verdict == dict.fromkeys(
+        ("acceptedStartHintsSiblings", "lostAnswerHintsSiblings", "refusedStartSaysNothing"), True
+    )
+
+
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_a_page_not_reloaded_after_an_update_says_to_reload_not_that_it_is_the_latest():
     # 1.33.1 QA O-2: "You have the latest version" beside "Reload the page" on a 1.33.0 page.
     verdict = _verdict("update_status_page_version.mjs")
