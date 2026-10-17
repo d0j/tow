@@ -283,4 +283,37 @@ verdict.jobsRedrawRows = true;
 }
 verdict.signedOutStops = true;
 
+// 50 changed rows of 2,000: the page's rows are read once for the answer, not once per row (a
+// scan of 2,000 rows for each of them), and every read comes before the first write - a read
+// between writes laid the page out again for each row (1.33.1 QA-12: 128 ms to apply 50 rows).
+{
+  const ids = Array.from({ length: 2000 }, (_, i) => `t${i}`);
+  let rows = ids.map((id) => ({ id: `row-${id}`, dataset: { rowHash: `h-${id}` }, html: id }));
+  const changed = ids.filter((_, i) => i % 40 === 0);
+  let scans = 0;
+  const steps = [];
+  const sync = createRowSync({
+    rows: () => { scans += 1; return rows; },
+    fetchRows: async (asked, rev) => ({
+      status: 200,
+      body: { ok: true, rev, order: ids, rows: asked.map((id) => ({ id, html: `${id} new`, hash: `h2-${id}` })), missing: [], deferred: [] },
+    }),
+    isProtected: () => { steps.push("read"); return false; },
+    place: (row, fragment) => {
+      steps.push("write");
+      const fresh = { id: `row-${fragment.id}`, dataset: { rowHash: fragment.hash }, html: fragment.html };
+      rows = rows.map((each) => (each === row ? fresh : each));
+      return fresh;
+    },
+    removeRow: () => {},
+  });
+  const done = await sync.topics({ rev: REV(3), full: false, order: ids, changed, removed: [] });
+  assert.equal(done, true);
+  assert.equal(changed.length, 50);
+  assert.equal(steps.filter((step) => step === "write").length, 50);
+  assert.ok(scans <= 4, `the rows were read ${scans} times`);
+  assert.equal(steps.indexOf("write"), steps.lastIndexOf("read") + 1, "every read before the first write");
+}
+verdict.fiftyRowsReadOnceThenWritten = true;
+
 console.log(JSON.stringify(verdict));

@@ -21,6 +21,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   for nightly backups, and when the messenger message about a topic that failed to add could not be sent.
 - An open page that finds nothing new asks TOW less work: Recent messages are put into words once per change,
   not again for every check of every tab every 5 seconds (with 2,000 topics most of the time of such a check).
+- **Home** puts many changed rows in faster (50 of 2,000: about 60 ms instead of 110): it finds them once for
+  all, and changes the page only after it has read it.
 
 ### Fixed
 
