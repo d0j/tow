@@ -104,9 +104,10 @@ def _log_time(value: object) -> str:
 
 
 @router.get("/updates/log")
-def updates_log() -> Response:
+def updates_log(request: Request) -> Response:
     try:
-        logs = services.web_update_logs()
+        # A network device reads them without folders outside the install; this PC whole.
+        logs = services.web_update_logs(local=access.is_local(request))
     except WebUpdateError as exc:
         return JSONResponse({"ok": False, "error": _said(exc)}, status_code=503)
     if not any(log["kind"] == "terminal" for log in logs):

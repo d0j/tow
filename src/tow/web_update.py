@@ -22,6 +22,7 @@ from tow.log import log_event, scrub_text
 from tow.paths import repo_root, root, runtime_dir
 from tow.platform import locks
 from tow.restore_points import CREATE_FAILED, MASTER_KEY, RestorePointError, create_restore_point
+from tow.scrub import paths_out
 from tow.store import StoreCorruptionError, atomic_write_bytes, decode_json_bytes, persistence_lock
 
 MINIMUM_WEB_VERSION = (1, 22, 21)
@@ -375,10 +376,22 @@ def terminal_run() -> dict[str, Any] | None:
     return {"started_at": started, "code": code, "in_job": in_job, "text": text}
 
 
-def update_logs() -> list[dict[str, Any]]:
+def update_logs(*, local: bool = True) -> list[dict[str, Any]]:
     """The latest update of this page (``kind`` "web") and the latest one from a terminal
     ("terminal"), newest first, each with ``started_at`` and ``text`` (``log_tail``,
-    ``terminal_run``). Read-only: polling it takes no lock."""
+    ``terminal_run``). Read-only: polling it takes no lock.
+
+    ``local``: read on this computer, which keeps the whole diagnostics. A network device gets
+    the texts without a folder or file outside the install (an archive given with ``--source``
+    names the account's folders); the install's own, said as ``<TOW>``, stay."""
+    logs = _update_logs()
+    if not local:
+        for log in logs:
+            log["text"] = paths_out(log["text"], kept=INSTALL_PLACEHOLDER)
+    return logs
+
+
+def _update_logs() -> list[dict[str, Any]]:
     job = _read(_job_file())
     _active(job)  # validate the stored identifier and dates before using them
     logs: list[dict[str, Any]] = []

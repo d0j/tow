@@ -177,6 +177,17 @@ def scrub_display(text: str, limit: int = 600) -> str:
     return " ".join(value.split())[:limit]
 
 
+def paths_out(text: str, *, kept: str = "") -> str:
+    """``text`` with every folder or file path "…", line by line (a log keeps its lines and its
+    words): what a network device is shown of a diagnostic. A path that starts with ``kept`` (the
+    install as a log names it, ``<TOW>``) stays: it names no folder of the computer."""
+    parts = re.split(f"({re.escape(kept)}[^\\s\"'<>]*)", text) if kept else [text]
+    for index in range(0, len(parts), 2):  # the kept paths are the odd parts
+        for pattern in PATH_RES:
+            parts[index] = pattern.sub("…", parts[index])
+    return "".join(parts)
+
+
 def without_paths(params: Any, depth: int = 0) -> Any:
     """A stored message's values (and those of the messages among them) without a folder or a
     file: a value named as one (``PATH_PARAMS``) or holding one is "…", before the words are
