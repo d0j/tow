@@ -288,8 +288,10 @@ jobs:
   # setting is read when a process starts): a folder of the long-paths-off length (110,
   # docs/PORTABLE.md 3) starts offline and moves without a warning, one character more is warned
   # about and still starts, a folder over the hard limit (172, long paths on or off) is refused
-  # before uv runs, and an archive update fits the updater's staging at a long root. (A folder of
-  # 172 cannot run with long paths off: Python's own modules lie up to 115 characters below it.)
+  # before uv runs, and an archive update fits the updater's staging at a root of that same 110.
+  # (A folder of 172 cannot run with long paths off: Python's own modules lie up to 115 characters
+  # below it; the previous release's zip holds files 148 characters below it, so from 110 they end
+  # at 259, the most Windows allows without long paths.)
   longpaths:
     name: long paths off (Windows)
     needs: build
@@ -337,13 +339,13 @@ jobs:
           for name in SHA256SUMS TOW-windows-x64.zip; do
             gh release download --dir "$RUNNER_TEMP/previous" --pattern "$name"
           done
-      - name: An archive update at a 120-character root fits the updater's staging
+      - name: An archive update at a 110-character root fits the updater's staging
         timeout-minutes: 30
         shell: pwsh
         run: |
           $value = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem').LongPathsEnabled
           if ($value -ne 0) { throw "LongPathsEnabled is $value in this new process, not 0" }
-          uv run --no-project python scripts/update-smoke.py --previous "$env:RUNNER_TEMP/previous" --source artifacts/tow-source.tar.gz --root-length 120
+          uv run --no-project python scripts/update-smoke.py --previous "$env:RUNNER_TEMP/previous" --source artifacts/tow-source.tar.gz --root-length 110
           if ($LASTEXITCODE) { throw "update-smoke.py exited with $LASTEXITCODE" }
 
   # D01: TOW seen from the network - separate network stacks on one runner, not a second device.
