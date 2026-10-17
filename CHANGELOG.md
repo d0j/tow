@@ -52,6 +52,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - An open page that was hidden and shown again while TOW had asked it to wait ("too many requests") no longer
   stops following changes until a reload; the same after the computer's clock was set back. It asks again when
   the wait ends.
+- In **Settings**, two open messenger or torrent client cards stand side by side only from 1280 px wide: at
+  1200 px a long field, such as the Discord webhook, was narrower than its size.
 
 ### Security
 

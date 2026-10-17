@@ -637,3 +637,18 @@ def test_one_label_gap_and_one_pair_gap_everywhere():
             assert re.search(r'type="(checkbox|radio|file)"', label), (path.name, label[:120])
     picker = (TEMPLATES / "_content_picker.html").read_text(encoding="utf-8")
     assert '<div class="field"><label for="{{ search_id }}">' in picker
+
+
+def test_two_open_cards_sit_side_by_side_only_where_a_long_field_fits():
+    """At 1200 px two open messenger cards side by side squeezed the Discord webhook (.w-xl, 576
+    px) to 545 px on every engine (1.33.1 QA-07): a column holds a 576 px field and its card's
+    padding only from 1280 px (measured: 576 there)."""
+    css = re.sub(r"/\*.*?\*/", "", CSS, flags=re.DOTALL)
+    found = re.search(
+        r"@media \(min-width: ([\d.]+)(px|rem)\) \{\s*"
+        r"\.integration-list\.cards-2:has\(> details\[open\] ~ details\[open\]\)",
+        css,
+    )
+    assert found, "the two-column rule of .integration-list.cards-2"
+    width = float(found.group(1)) * (16 if found.group(2) == "rem" else 1)
+    assert width >= 1280
