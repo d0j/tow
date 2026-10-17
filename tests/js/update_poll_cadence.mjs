@@ -70,8 +70,9 @@ assert.match(elements.get("[data-update-progress]").textContent, /js.releases.ba
 assert.deepEqual(waits(), [2000]);
 verdict.everyTwoSecondsWhileActive = true;
 
-// Hidden: back to 5 s; seen again: 2 s at once.
+// Hidden: back to 5 s at once - also the read already planned in 2 s; seen again: 2 s at once.
 shown(true);
+assert.deepEqual(waits(), [5000]);
 state.job = { ...state.job, status: "installing" };
 await poll();
 assert.deepEqual(waits(), [5000]);
