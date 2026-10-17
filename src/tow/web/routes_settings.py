@@ -71,6 +71,8 @@ def settings_view(request: Request, *, live: bool) -> Response:
         restore_points_error = True
     for point in restore_points:
         point["size_label"] = format_bytes(point["bytes"])
+    backups = backup_view(cfg, request)
+    service = service_view()
     return TEMPLATES.TemplateResponse(
         request,
         "settings.html",
@@ -100,11 +102,11 @@ def settings_view(request: Request, *, live: bool) -> Response:
             "lan_hint": password_hint(s.get("lan_auth")),
             "hint_max": MAX_HINT_LENGTH,
             "access_local": access.is_local(request),
-            "service": service_view(),
+            "service": service,
             "restore_points": restore_points,
             "restore_points_size": format_bytes(sum(point["bytes"] for point in restore_points)),
             "restore_points_error": restore_points_error,
-            "backups": backup_view(cfg, request),
+            "backups": backups,
             "language_setting": _language_setting(cfg),
             "theme_setting": cfg.get("theme") if cfg.get("theme") in THEMES else "auto",
             "log_rows": []
@@ -117,14 +119,17 @@ def settings_view(request: Request, *, live: bool) -> Response:
             "notes": issue_notes(state, cfg, "settings"),
             # Each form's base (edit_base): what it shows, saved now; a refused save's ?conflict=
             # brings back the owner's draft, both values and the base to save it against.
-            "bases": _bases(cfg, s),
+            "bases": _bases(cfg, s, backup_folders=backups["folders"], service=service),
             "edit_conflict": edit_base.any_conflict(request),
         },
     )
 
 
-def _bases(cfg: dict[str, Any], secrets: dict[str, Any]) -> dict[str, str]:
-    """The hidden ``base`` of each Settings form that merges its save (``settings_merge``)."""
+def _bases(
+    cfg: dict[str, Any], secrets: dict[str, Any], *, backup_folders: dict[str, Any], service: dict[str, Any]
+) -> dict[str, str]:
+    """The hidden ``base`` of each Settings form that merges its save (``settings_merge``), and
+    the network access card's revision (one guard for the whole card)."""
     from tow.clients.factory import client_configurations, client_secret_block
     from tow.clients.spec import get as client_get
     from tow.notifiers import kinds as notifier_kinds
@@ -133,7 +138,25 @@ def _bases(cfg: dict[str, Any], secrets: dict[str, Any]) -> dict[str, str]:
         "intervals": edit_base.encode(settings_merge.INTERVALS, "intervals", settings_merge.intervals_now(cfg)),
         "language": edit_base.encode(settings_merge.LANGUAGE, "language", settings_merge.language_now(cfg)),
         "updates": edit_base.encode(settings_merge.UPDATES, "updates", settings_merge.updates_now(cfg)),
+        "protection": edit_base.encode(
+            settings_merge.PROTECTION,
+            "protection",
+            settings_merge.protection_now(services.validate_protection_settings(cfg.get("protection"))),
+        ),
+        "backup_automatic": edit_base.encode(
+            settings_merge.BACKUP_AUTOMATIC, "backup-automatic", settings_merge.backup_automatic_now(cfg)
+        ),
+        "backup_retention": edit_base.encode(
+            settings_merge.BACKUP_RETENTION, "backup-retention", settings_merge.backup_retention_now(cfg)
+        ),
+        "autostart": edit_base.encode(settings_merge.AUTOSTART, "autostart", settings_merge.autostart_now(service)),
+        "access": edit_base.encode(
+            settings_merge.ACCESS, "access", settings_merge.access_now(cfg, access.password_record(secrets))
+        ),
     }
+    for kind, folder in backup_folders.items():
+        now = settings_merge.backup_folder_now(str(folder.get("value") or ""))
+        bases[f"folder:{kind}"] = edit_base.encode(settings_merge.BACKUP_FOLDER, kind, now)
     for row in client_configurations(cfg):
         client_id = str(row["id"])
         spec = client_get(str(row.get("kind") or "").lower())
@@ -186,28 +209,6 @@ def _language_setting(cfg: dict[str, Any]) -> dict[str, Any]:
 _UPDATES_TARGET = "/settings?open=updates#acc-updates"
 
 
-def _merged(
-    spec: edit_base.Spec,
-    target: str,
-    base: str,
-    now: dict[str, Any],
-    wanted: dict[str, Any],
-    resolutions: dict[str, str],
-    labels: dict[str, str],
-    draft: dict[str, str],
-) -> edit_base.Merge | RedirectResponse:
-    """A plain settings form merged with what is saved now: the merge, or the refusal (a missing
-    or invalid base: "reload"; a conflict: the form again with the draft and both values)."""
-    got = edit_base.read(spec, spec.kind, base, now)
-    if got is None:
-        return edit_base.reload_redirect(target)
-    merged = edit_base.merge(spec, got, now, wanted, resolutions)
-    if merged.conflicts:
-        rows = settings_merge.value_rows(spec, merged.conflicts, labels, now, wanted)
-        return edit_base.conflict_redirect(spec, spec.kind, target, now=now, merged=merged, draft=draft, rows=rows)
-    return merged
-
-
 @router.post("/settings/updates")
 @services.locked_state_mutation
 def settings_updates(
@@ -216,7 +217,7 @@ def settings_updates(
     resolutions: dict[str, str] = edit_base.RESOLUTIONS,
 ) -> Response:
     cfg = services.load_config()
-    merged = _merged(
+    merged = settings_merge.merged(
         settings_merge.UPDATES,
         _UPDATES_TARGET,
         base,
@@ -252,7 +253,7 @@ def settings_language(
         return flash_redirect("/settings?open=language", "settings.language.unknown", "err")
     cfg = services.load_config()
     wanted = settings_merge.language_wanted(auto, language)
-    merged = _merged(
+    merged = settings_merge.merged(
         settings_merge.LANGUAGE,
         "/settings?open=language",
         base,
@@ -300,11 +301,15 @@ def settings_access(
     lan_password: Annotated[str, Form()] = "",
     lan_password2: Annotated[str | None, Depends(repeated_password)] = None,
     hint: Annotated[str, Form()] = "",
+    base: Annotated[str, Form()] = "",
 ) -> Response:
     """Network access on or off, on this PC only; the network always needs the password. With a
     password set the box saves alone. Without one, "Save and enable" sends the box with the new
-    password and its reminder: both are saved together, with one Undo, or neither (F1)."""
+    password and its reminder: both are saved together, with one Undo, or neither (F1). The card
+    is indivisible: a form opened before another device changed it saves nothing."""
     cfg = services.load_config()
+    if refused := _access_guard(cfg, base):
+        return refused
     old_bind = str(cfg.get("bind") or "127.0.0.1")
     old_allow_lan = as_bool(cfg.get("allow_lan"))
     enabled = as_bool(allow_lan)
@@ -368,6 +373,16 @@ def settings_access(
     )
 
 
+def _access_guard(cfg: dict[str, Any], base: str) -> Response | None:
+    """The network access card's guard; passwords and tokens that cannot be read count as no
+    password (the route then refuses on its own)."""
+    try:
+        record = access.password_record(services.load_secrets())
+    except SecretStoreError:
+        record = None
+    return settings_merge.access_guard(cfg, record, base)
+
+
 def _interval_label(seconds: int) -> str:
     minutes = max(1, seconds // 60)
     if minutes % 60 == 0:
@@ -422,7 +437,7 @@ def settings_interval(
     old_ttl_sec = flash_ttl(cfg_before.get("flash_ttl_sec"))
     # Only what this form changed since it was rendered: a field another device changed meanwhile
     # comes back as this page showed it and must not put the old value back.
-    merged = _merged(
+    merged = settings_merge.merged(
         settings_merge.INTERVALS,
         "/settings?open=intervals",
         base,

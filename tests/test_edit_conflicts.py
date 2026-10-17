@@ -791,3 +791,196 @@ def test_a_settings_save_without_a_base_is_refused(settings_two, strict_edit_bas
     response = a.post("/settings/interval", data={"interval_min": "30", "flash_ttl_min": "1"})
     assert load_config().get("interval_sec") != 1800
     assert "this form is out of date" in response.text
+
+
+# --- The other Settings forms (final review 1.33.0 #7) -----------------------------------------
+
+
+def form_items(html: str, action: str) -> dict:
+    """A form's fields as a browser sends them, repeated names as lists (the protection cards)."""
+    parser = _Forms()
+    parser.feed(html)
+    out: dict[str, list[str]] = {}
+    for name, value in parser.forms[action]:
+        out.setdefault(name, []).append(value)
+    return {name: values if name.startswith("provider_") else values[0] for name, values in out.items()}
+
+
+PROTECTION = {
+    "enabled": "1",
+    "timeout_sec": "30",
+    "min_interval_sec": "1800",
+    "max_attempts": "2",
+    "provider_id": ["first", "second"],
+    "provider_kind": ["flaresolverr", "byparr"],
+    "provider_url": ["http://127.0.0.1:8191", "http://127.0.0.1:8192"],
+    "provider_order": ["1", "2"],
+    "provider_enabled": ["first", "second"],
+}
+
+
+def protection_form(client: TestClient, address: str = "/settings") -> dict:
+    return form_items(client.get(address).text, "/settings/protection")
+
+
+def providers() -> list[str]:
+    return [item["id"] for item in load_config()["protection"]["providers"]]
+
+
+@pytest.fixture
+def protection_two(settings_two):
+    a, _b = settings_two
+    assert post(a, "/settings/protection", PROTECTION).status_code == 303
+    assert providers() == ["first", "second"]
+    return settings_two
+
+
+def test_two_tabs_editing_different_protection_fields_both_keep_their_change(protection_two):
+    """The second save replaced the whole configuration and lost the first change."""
+    a, b = protection_two
+    b_form = protection_form(b)
+    post(a, "/settings/protection", {**protection_form(a), "timeout_sec": "45"})
+    assert load_config()["protection"]["timeout_sec"] == 45
+    response = post(b, "/settings/protection", {**b_form, "max_attempts": "3"})
+    assert "conflict=" not in response.headers["location"]
+    saved = load_config()["protection"]
+    assert (saved["timeout_sec"], saved["max_attempts"]) == (45, 3)
+
+
+def test_a_stale_protection_form_never_restores_a_connection_removed_elsewhere(protection_two):
+    a, b = protection_two
+    b_form = protection_form(b)
+    post(a, "/settings/protection/remove", {"provider_id": "second"})
+    assert providers() == ["first"]
+    post(b, "/settings/protection", {**b_form, "timeout_sec": "60"})  # connections untouched
+    assert providers() == ["first"]
+    assert load_config()["protection"]["timeout_sec"] == 60
+    # Its connection edited in the stale form: refused, the removal stays.
+    urls = list(b_form["provider_url"])
+    urls[1] = "http://127.0.0.1:8193"
+    response = post(b, "/settings/protection", {**b_form, "provider_url": urls})
+    assert "conflict=" in response.headers["location"]
+    assert providers() == ["first"]
+    assert "Saved now:" in b.get(response.headers["location"]).text
+
+
+def test_protection_fields_changed_on_both_sides_are_a_conflict_with_the_draft_kept(protection_two):
+    a, b = protection_two
+    b_form = protection_form(b)
+    post(a, "/settings/protection", {**protection_form(a), "timeout_sec": "45", "max_attempts": "4"})
+    location = post(b, "/settings/protection", {**b_form, "timeout_sec": "60"}).headers["location"]
+    assert "conflict=" in location
+    assert load_config()["protection"]["timeout_sec"] == 45
+    again = protection_form(b, location)
+    assert (again["timeout_sec"], again["max_attempts"]) == ("60", "4")
+    post(b, "/settings/protection", {**again, "resolve_timeout": "mine"})
+    saved = load_config()["protection"]
+    assert (saved["timeout_sec"], saved["max_attempts"]) == (60, 4)
+
+
+def test_backup_retention_changed_on_both_sides_is_a_conflict(settings_two):
+    a, b = settings_two
+    b_form = settings_form(b, "/settings/backup/retention")
+    post(a, "/settings/backup/retention", {**settings_form(a, "/settings/backup/retention"), "days": "10"})
+    assert load_config()["backup_days"] == 10
+    response = post(b, "/settings/backup/retention", {**b_form, "days": "20"})
+    assert "conflict=" in response.headers["location"]
+    assert load_config()["backup_days"] == 10
+
+
+def test_a_stale_backup_folder_form_does_not_put_back_its_folder(settings_two, tmp_path):
+    a, b = settings_two
+    # Outside the data folder (night copies never go there), as tests/test_backup_locations does.
+    first, second = tmp_path.parent / f"{tmp_path.name}-a", tmp_path.parent / f"{tmp_path.name}-b"
+    first.mkdir()
+    second.mkdir()
+    b_form = form_items(b.get("/settings").text, "/settings/backup/location")
+    a_form = form_items(a.get("/settings").text, "/settings/backup/location")
+    post(a, "/settings/backup/location", {**a_form, "path": str(first), "action": "save"})
+    key = next(key for key, value in load_config().items() if value == str(first))
+    response = post(b, "/settings/backup/location", {**b_form, "path": str(second), "action": "save"})
+    assert "conflict=" in response.headers["location"]
+    assert load_config()[key] == str(first)
+    # "Use the default" from a page that showed another folder is a change of the folder too.
+    b_form = form_items(b.get("/settings").text, "/settings/backup/location")  # shows `first`
+    post(
+        a,
+        "/settings/backup/location",
+        {**form_items(a.get("/settings").text, "/settings/backup/location"), "path": str(second), "action": "save"},
+    )
+    assert load_config()[key] == str(second)
+    response = post(b, "/settings/backup/location", {**b_form, "action": "default"})
+    assert "conflict=" in response.headers["location"]
+    assert load_config()[key] == str(second)
+    # A page that showed the default folder, unchanged: "Save" keeps the folder saved now.
+    post(
+        b,
+        "/settings/backup/location",
+        {
+            **form_items(b.get(response.headers["location"]).text, "/settings/backup/location"),
+            "resolve_folder": "current",
+            "action": "save",
+        },
+    )
+    assert load_config()[key] == str(second)
+
+
+def test_automatic_backups_saved_on_both_sides_to_one_value_is_no_conflict(settings_two):
+    a, b = settings_two
+    b_form = settings_form(b, "/settings/backup/automatic")
+    flipped = "" if b_form.get("enabled") else "1"
+    post(a, "/settings/backup/automatic", {**settings_form(a, "/settings/backup/automatic"), "enabled": flipped})
+    response = post(b, "/settings/backup/automatic", {**b_form, "enabled": flipped})
+    assert "conflict=" not in response.headers["location"]
+    assert "base" in b_form  # the box carries its base too
+
+
+def test_network_access_is_refused_when_the_access_card_changed_meanwhile(settings_two, monkeypatch):
+    """Network access and the password are one card guarded as a whole: a form opened before
+    another device changed it saves nothing."""
+    from tow.store import load_secrets
+
+    monkeypatch.setattr("tow.web.services.sign_out_everywhere", lambda *a, **k: None)
+    a, b = settings_two
+    b_access = settings_form(b, "/settings/access")
+    a_access = settings_form(a, "/settings/access")
+    first = {"allow_lan": "1", "lan_password": "first-pass-1", "lan_password2": "first-pass-1"}
+    post(a, "/settings/access", {**a_access, **first})
+    assert load_config()["allow_lan"] is True
+    record = load_secrets()["lan_auth"]
+    second = {"allow_lan": "1", "lan_password": "second-pass-2", "lan_password2": "second-pass-2"}
+    response = post(b, "/settings/access", {**b_access, **second})
+    assert load_secrets()["lan_auth"] == record  # B's password is not written over A's
+    assert "flash=" in response.headers["location"]
+    b_password = settings_form(b, "/settings/password")
+    fourth = {"lan_password": "fourth-pass-4", "lan_password2": "fourth-pass-4"}
+    post(a, "/settings/password", {**settings_form(a, "/settings/password"), **fourth})
+    assert load_secrets()["lan_auth"] != record
+    record = load_secrets()["lan_auth"]
+    post(b, "/settings/password", {**b_password, "lan_password": "third-pass-3", "lan_password2": "third-pass-3"})
+    assert load_secrets()["lan_auth"] == record
+    b_box = settings_form(b, "/settings/access")
+    post(a, "/settings/access", {**settings_form(a, "/settings/access"), "allow_lan": ""})
+    assert load_config()["allow_lan"] is False
+    post(b, "/settings/access", {**b_box, "allow_lan": "1"})  # B's page still showed it on
+    assert load_config()["allow_lan"] is False
+
+
+def test_a_stale_autostart_box_does_not_put_back_without_signing_in(settings_two, monkeypatch):
+    status = {"autostart": True, "without_login": True, "supports_without_login": True}
+
+    def set_autostart(enabled, *, without_login=False):
+        status.update(autostart=enabled, without_login=without_login)
+        return {"ok": True}
+
+    monkeypatch.setattr("tow.web.services.set_autostart", set_autostart)
+    monkeypatch.setattr("tow.web.services.service_status", lambda: dict(status))
+    a, b = settings_two
+    b_form = settings_form(b, "/settings/service/autostart")
+    a_form = settings_form(a, "/settings/service/autostart")
+    post(a, "/settings/service/autostart", {**a_form, "enabled": "1", "without_login": "0"})  # A: sign-in needed
+    assert status["without_login"] is False
+    post(b, "/settings/service/autostart", {**b_form, "enabled": ""})  # B (stale): autostart off
+    assert status["autostart"] is False
+    post(b, "/settings/service/autostart", {**b_form, "enabled": "1"})  # and on again, same page
+    assert status["without_login"] is False  # the hidden stale "1" is not put back

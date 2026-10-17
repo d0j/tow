@@ -5,14 +5,15 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from fastapi import APIRouter, Form
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from tow.config import as_bool
-from tow.web import services
+from tow.web import edit_base, services, settings_merge
 from tow.web.messages import flash_redirect
 from tow.web.text import t
 
 router = APIRouter()
+_TARGET = "/settings?open=service"
 
 
 @router.get("/settings/service/status.json")
@@ -21,9 +22,28 @@ def settings_service_status() -> Response:
 
 
 @router.post("/settings/service/autostart")
-def settings_service_autostart(enabled: str = Form(""), without_login: str = Form("")) -> Response:
-    requested = as_bool(enabled)
-    unattended = requested and as_bool(without_login)
+def settings_service_autostart(
+    enabled: str = Form(""),
+    without_login: str = Form(""),
+    base: str = Form(""),
+    resolutions: dict[str, str] = edit_base.RESOLUTIONS,
+) -> Response:
+    # Each box on its own: a page opened before "without signing in" was changed on another
+    # device sends that box back as it showed it, which must not put the old value back.
+    merged = settings_merge.merged(
+        settings_merge.AUTOSTART,
+        _TARGET,
+        base,
+        settings_merge.autostart_now(services.service_status()),
+        {"enabled": as_bool(enabled), "without_login": as_bool(without_login)},
+        resolutions,
+        {"autostart": t("settings.service.autostart"), "without_login": t("settings.service.without_login")},
+        {},
+    )
+    if isinstance(merged, RedirectResponse):
+        return merged
+    requested = bool(merged.values["enabled"])
+    unattended = requested and bool(merged.values["without_login"])
     result = services.set_autostart(requested, without_login=unattended)
     read_back = services.service_status()
     confirmed = bool(read_back.get("autostart")) == requested

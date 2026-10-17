@@ -23,19 +23,36 @@ from tow.paths import tmp_dir
 from tow.restore_points import CREATE_FAILED, INVALID_FILE, ROLLBACK_FAILED, RestorePointError, invalid_file
 from tow.snapshots import SnapshotError
 from tow.store import StoreCorruptionError
-from tow.web import services
+from tow.web import edit_base, services, settings_merge
 from tow.web.messages import flash_redirect
 from tow.web.templating import TEMPLATES
 from tow.web.text import format_bytes, t
 
 router = APIRouter()
+_TARGET = "/settings?open=transfer"
 
 
 @router.post("/settings/backup/automatic")
 @services.locked_state_mutation
-def settings_backup_automatic(enabled: str = Form("")) -> Response:
+def settings_backup_automatic(
+    enabled: str = Form(""), base: str = Form(""), resolutions: dict[str, str] = edit_base.RESOLUTIONS
+) -> Response:
     cfg = services.load_config()
-    cfg["backup_enabled"] = as_bool(enabled)
+    # One switch: a stale page asks for a value, never "the other one"; the base still refuses a
+    # page from before the update and keeps the rule of every Settings form.
+    merged = settings_merge.merged(
+        settings_merge.BACKUP_AUTOMATIC,
+        _TARGET,
+        base,
+        settings_merge.backup_automatic_now(cfg),
+        {"backup_enabled": as_bool(enabled)},
+        resolutions,
+        {"automatic": t("settings.backups.automatic")},
+        {"backup_enabled": "1" if as_bool(enabled) else ""},
+    )
+    if isinstance(merged, RedirectResponse):
+        return merged
+    cfg["backup_enabled"] = bool(merged.values["backup_enabled"])
     services.save_config(cfg)
     services.log_event("settings_backup_automatic", enabled=cfg["backup_enabled"], how="manual")
     return _backup_redirect("web.backup.automatic_on" if cfg["backup_enabled"] else "web.backup.automatic_off")
@@ -43,12 +60,26 @@ def settings_backup_automatic(enabled: str = Form("")) -> Response:
 
 @router.post("/settings/backup/retention")
 @services.locked_state_mutation
-def settings_backup_retention(days: str = Form("")) -> Response:
+def settings_backup_retention(
+    days: str = Form(""), base: str = Form(""), resolutions: dict[str, str] = edit_base.RESOLUTIONS
+) -> Response:
     age = whole_number(days)  # not int(): it also takes "٧" and "1_0"
     if age is None or not 1 <= age <= 3650:
         return _backup_redirect("web.backup.retention_invalid", "err")
     cfg = services.load_config()
-    cfg["backup_days"] = age
+    merged = settings_merge.merged(
+        settings_merge.BACKUP_RETENTION,
+        _TARGET,
+        base,
+        settings_merge.backup_retention_now(cfg),
+        {"backup_days": age},
+        resolutions,
+        {"retention": t("settings.backups.retention_days_label")},
+        {"backup_days": str(age)},
+    )
+    if isinstance(merged, RedirectResponse):
+        return merged
+    cfg["backup_days"] = age = int(merged.values["backup_days"])
     services.save_config(cfg)
     services.log_event("settings_backup_retention", days=age, how="manual")
     return _backup_redirect("web.backup.retention_saved")
@@ -159,16 +190,43 @@ def _restore_outcome(key: str, result: dict[str, Any]) -> tuple[str, str]:
 @router.post("/settings/backup/location")
 @services.locked_state_mutation
 def settings_backup_location(
-    request: Request, kind: str = Form(""), path: str = Form(""), action: str = Form("save")
+    request: Request,
+    kind: str = Form(""),
+    path: str = Form(""),
+    action: str = Form("save"),
+    base: str = Form(""),
+    resolutions: dict[str, str] = edit_base.RESOLUTIONS,
 ) -> Response:
     from tow import access
-    from tow.locations import LOCATIONS, is_network_share, problem, resolve
+    from tow.locations import LOCATIONS, is_default, is_network_share, problem, resolve
 
     location = LOCATIONS.get(kind)
     if location is None:
         return _backup_redirect("web.backup.unknown_folder", "err")
     cfg = services.load_config()
-    old = resolve(str(cfg.get(location.key) or ""), location)
+    saved = str(cfg.get(location.key) or "")
+    old = resolve(saved, location)
+    if action in {"save", "default"}:
+        # The folder as this form showed it: a folder set on another device meanwhile is never
+        # replaced by a stale page's save or "Use the default" (a conflict instead).
+        wanted = "" if action == "default" else path.strip().strip('"')
+        merged = settings_merge.merged(
+            settings_merge.BACKUP_FOLDER,
+            _TARGET,
+            base,
+            settings_merge.backup_folder_now("" if is_default(saved, location) else saved),
+            {"path": wanted},
+            resolutions,
+            {"folder": t("settings.backups.folder", title=location.title)},
+            {"path": wanted},
+            ident=kind,
+        )
+        if isinstance(merged, RedirectResponse):
+            return merged
+        if "folder" not in merged.changed:  # as this form showed it: the folder saved now stays
+            if action == "default":
+                return _backup_redirect("web.common.no_changes")
+            path = str(merged.values["path"])
     if action == "default":
         cfg.pop(location.key, None)
         services.save_config(cfg)
