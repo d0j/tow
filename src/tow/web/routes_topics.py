@@ -111,26 +111,6 @@ def topics_edit_panel(request: Request, tid: str) -> Response:
     return TEMPLATES.TemplateResponse(request, "_topic_edit.html", context)
 
 
-@router.get("/topics/{tid}/row", response_class=HTMLResponse)
-def topics_row(request: Request, tid: str) -> Response:
-    """One topic's Home row as Home draws it (``_topic_row.html``), closed: checks.js puts it in
-    place of the row whose check has ended, so its dot, site icon, event and progress are the
-    check's without a reload. Reads only."""
-    from tow.web import check_jobs
-
-    state = _context.state()
-    topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == tid), None)
-    if topic is None:
-        from markupsafe import escape
-
-        return HTMLResponse(f'<p class="form-error">{escape(t("web.topics.not_found"))}</p>', status_code=404)
-    row = topic_rows({**state, "topics": [topic]}, local=access.is_local(request))[0]
-    row["manual_job"] = check_jobs.pending_topic(str(row["id"]))
-    return TEMPLATES.TemplateResponse(
-        request, "_topic_row.html", {"topic": row, "landing_topic": ""}, headers={"Cache-Control": "no-store"}
-    )
-
-
 @router.get("/topics/{tid}/edit", response_class=HTMLResponse)
 def topics_edit_page(request: Request, tid: str) -> Response:
     """The edit panel as a page of its own: the no-script way to open it."""

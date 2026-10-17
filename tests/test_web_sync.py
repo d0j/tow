@@ -829,7 +829,7 @@ def test_a_network_device_never_sees_a_rows_raw_error(monkeypatch, clock):
         start = html.index('id="row-t1"')
         return html[start : html.index("</details>", start)]
 
-    for address in ("/", "/topics/rows?ids=t1", "/topics/t1/edit-panel", "/topics/t1/row"):
+    for address in ("/", "/topics/rows?ids=t1", "/topics/t1/edit-panel"):
         page = lan.get(address).text
         shown = row_of(page) if address == "/" else page
         assert "tracker.example" in shown, address  # the link's host stays

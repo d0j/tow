@@ -1,5 +1,5 @@
-{#- One topic's row on Home: index.html draws every row with it, and /topics/<id>/row draws one again
-    (checks.js puts it in place of a row whose check has ended). ``topic`` is a row of
+{#- One topic's row on Home: index.html draws every row with it, and POST /topics/rows draws the
+    rows of a newer topics revision again (sync.js, the one writer of Home's rows). ``topic`` is a row of
     views.topic_rows (with its ``manual_job``); ``landing_topic`` the topic a link opened. -#}
 {% from "_icons.html" import icon %}
   {#- topic_rows projects every status channel (tow.status.project_home_status). -#}
