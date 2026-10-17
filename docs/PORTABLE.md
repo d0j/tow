@@ -618,10 +618,20 @@ same steps, with the code from the release instead of git.
   files refuse to start TOW (`app/` may hold half of the new code) and say to run the update
   again; the start files read the record and the lock with PowerShell, or with grep and
   `flock` (`perl` where there is none), since the code in `app/` may not run. Ctrl+C and
-  Ctrl+Break do not cut the switch off: it finishes or rolls back first. Closing the console
-  window on Windows still ends the updater within seconds (Windows allows no longer), and a
-  killed process or a power cut ends it at once: the next run of the update reads the switch
-  record and tries to put the previous code back first. That needs the record and the moved
+  Ctrl+Break do not cut the switch off: it finishes or rolls back first. Since 1.33.1 an update
+  started from a terminal (the update files, `deploy.ps1`, the command `tow update` prints) runs
+  in its own process: `update.py` copies itself to `<TOW>/runtime/update-run/<id>/` and starts
+  that copy with the same base Python, detached from the terminal's console, process group and
+  session (Windows: breaking away from the terminal's job, else started through the local broker
+  outside every job; the copy changes nothing while it is still in a job). That process takes
+  `.update.lock` and does the whole update - stop, snapshot, switch record, sync, health check,
+  rollback, `update-state.json` - and writes its exit code to `result.json` there; the terminal
+  only shows its `update.log` and ends with that code. Closing the window, Ctrl+C (the window
+  stops following, the update goes on) or killing the terminal's process no longer stops the
+  update; only an update that could not get such a process runs in the window as before
+  (`TOW_UPDATE_HERE=1` asks for that) and is said so. A killed update process or a power cut
+  ends it at once: the next run of the update reads the switch record and tries to put the
+  previous code back first. That needs the record and the moved
   code (`app.prev/`) to be readable; when they are not, it says so and changes nothing. The updater is copied to `<TOW>/runtime/update.py` before moving files so the
   launchers can run it even if `app/scripts` is temporarily absent. A rollback moves back the
   entries recorded on disk (the failed code goes to `app.failed/` and is removed), so the old

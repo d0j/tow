@@ -724,6 +724,13 @@ def test_deploy_gives_the_new_version_as_long_as_update_does():
 # --- texts, versions and the CLI ---------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _update_in_this_process(monkeypatch):
+    """main() hands a terminal update to its own process (X41, tests/test_update_owner.py); these
+    tests are about the update itself, so it runs in the test's process (TOW_UPDATE_HERE=1)."""
+    monkeypatch.setenv("TOW_UPDATE_HERE", "1")
+
+
 @pytest.mark.parametrize("encoding", ["cp1251", "cp1252", "ascii", "utf-8"])
 @pytest.mark.parametrize("result", [0, 1, 2])
 def test_cli_output_is_utf8_without_changing_arguments_or_result(tmp_path, monkeypatch, encoding, result):

@@ -34,6 +34,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 - `config.yaml` can set how often open pages may ask TOW what changed: `web: {rate_burst: 40, rate_per_sec: 4}`
   (each tab of this computer and each signed-in device on its own). A wrong value is named when TOW starts.
+- Closing the window of an update ("Update TOW.cmd", `update-tow`, `deploy.ps1`) no longer stops the update
+  halfway: it runs in its own process, which stops TOW, switches the code, starts TOW again or rolls back by
+  itself; the window only shows its progress.
 - TOW's own uv no longer reads the account's or the computer's `uv.toml`: an index, a mirror, a cache or a
   Python preference set there for other projects could break TOW's setup and updates. An install now has its own
   `runtime/uv.toml`; settings of yours (`native-tls`, an index) go below its marked line and are kept.
