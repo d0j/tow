@@ -25,6 +25,17 @@ installer=$here/install/install.sh
 base=${RUNNER_TEMP:-${TMPDIR:-/tmp}}
 # Cyrillic folder names, as many owners have.
 dir="$base/tow smoke Тест $$"
+# TOW_SMOKE_NFD=1 (TC-17): the names hold "й" decomposed - и and U+0306 COMBINING BREVE, as
+# macOS programs may write it - so the install, its move and every path TOW reads back keep NFD.
+nfd=
+if [ "${TOW_SMOKE_NFD:-}" = 1 ]; then
+    nfd=" $(printf '\320\270\314\206')"
+    dir="$base/tow smoke Тест$nfd $$"
+    printf '%s' "$dir" | od -An -tx1 | tr -d ' \n' | grep -q 'd0b8cc86' || {
+        echo "install-smoke: the folder name is not NFD" >&2
+        exit 2
+    }
+fi
 sums="$base/SHA256SUMS.smoke.$$"
 sentinel="$base/tow smoke temp $$"
 
@@ -87,6 +98,12 @@ curl -fsS --noproxy '*' "http://127.0.0.1:$port/healthz"
 echo
 tested "$dir/app/scripts/tow" status
 tested "$dir/app/scripts/tow" status --json | grep -q '"running": true' || fail "tow status: not running"
+if [ -n "$nfd" ]; then # the folder TOW reads back is the NFD one it runs from (no NFC copy appeared)
+    [ "$(ls -A "$base" | grep -c '^tow smoke Тест')" = 1 ] || fail 'a second, NFC folder appeared'
+    tested "$dir/app/.venv/bin/python" -c 'import sys; from tow import paths; print(paths.root())' >"$base/nfd-root.$$"
+    [ "$(cat "$base/nfd-root.$$")" = "$dir" ] || fail "TOW names its folder $(cat "$base/nfd-root.$$"), not $dir"
+    rm -f "$base/nfd-root.$$"
+fi
 
 say "second start: it finds TOW running"
 tested env TOW_NO_BROWSER=1 "$start" </dev/null || fail "the second start exited with $?"
@@ -105,6 +122,7 @@ say 'move the stopped install, keeping its old absolute-path environment'
 key_before=$(sha "$dir/keys/master.key")
 config_before=$(sha "$dir/config.yaml")
 moved="$base/tow relocated Тест $$"
+[ -z "$nfd" ] || moved="$base/tow relocated Тест$nfd $$"
 case $dir in "$base"/*) ;; *) fail 'move source is outside the owned test base' ;; esac
 case $moved in "$base"/*) ;; *) fail 'move destination is outside the owned test base' ;; esac
 [ ! -e "$moved" ] || fail 'move destination exists'

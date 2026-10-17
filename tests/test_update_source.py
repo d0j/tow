@@ -191,6 +191,16 @@ def test_the_adapted_updater_downloads_from_the_origin_only(tmp_path, monkeypatc
     assert [handler.proxies for handler in proxies if handler.proxies] == []  # HTTP_PROXY is not used
 
 
+def test_the_adapted_updater_is_adapted_before_it_runs_as_a_script():
+    # TC-16: the entry files run update.py itself, which copies itself into its own process; the
+    # suffix after `if __name__ == "__main__":` came too late there, and the update went to GitHub.
+    text = adapter.adapt_updater(SCRIPT.read_text(encoding="utf-8"), "http://127.0.0.1:18999")
+    guard = 'if __name__ == "__main__":'
+    assert text.index(adapter.MARKER) < text.rindex(guard)
+    assert text.rstrip().endswith("sys.exit(main())")
+    assert adapter.adapt_updater("x = 1\n", "http://127.0.0.1:18999").startswith("x = 1\n")  # no guard: appended
+
+
 def test_discovery_answers_the_test_release_only():
     fake = SimpleNamespace(version_parts=releases.version_parts)
     adapter.patch_releases(fake, "1.99.0")
