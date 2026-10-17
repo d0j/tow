@@ -143,25 +143,16 @@ const towTime = (() => {
   };
   document.addEventListener("visibilitychange", () => { if (!document.hidden) rewrite(); });
   if (document.querySelector(SHORT)) keepToday();
-  // TOW's offset now changes with summer and winter time while a page stays open: a page that
-  // shows times asks the server again (/health.json's tz_now, its signed-in poll: healthPoll
-  // below) when the tab is shown again and after each midnight, and writes every time again.
-  let askAt = 0; // when to ask next: after the coming midnight (set once a page shows a time)
+  // TOW's offset now changes with summer and winter time while a page stays open: every answer of
+  // the page's poll (sync.js: healthPoll below) brings it (tz_now), and every time is written again
+  // when it changes.
   const reader = {
-    shown: () => Boolean(document.querySelector(SHORT)),
-    due: () => {
-      if (!document.querySelector(SHORT)) return null;
-      if (!askAt) askAt = Date.now() + untilMidnight() + 1000;
-      return askAt;
-    },
     receive: (data) => {
-      askAt = Date.now() + untilMidnight() + 1000;
       const minutes = data && typeof data.tz_now === "number" ? data.tz_now : NaN;
       if (!Number.isFinite(minutes) || minutes === offsetNow) return;
       offsetNow = minutes;
       if (midnight > 0) window.clearTimeout(midnight);
       midnight = 0;
-      askAt = Date.now() + untilMidnight() + 1000;
       rewrite();
       if (document.querySelector(SHORT)) keepToday();
     },
@@ -705,80 +696,28 @@ document.querySelectorAll("dialog.credential-prompt[open]").forEach((dialog) => 
 
 // A message after an action, its Undo and the header's recent messages are messages.js's.
 
-// One poll serves the header countdown, every personal timer, "Needs attention" and TOW's zone.
-// With sync.js (every signed-in page) it is /sync.json's: each answer (a 304 too) hands every
-// reader what /health.json said, from the areas the page has; a failed one hands null. Without
-// it, /health.json's own: each reader says when it next needs fresh data (null: not now); one
-// answer updates them all. A hidden tab never polls; showing it again asks at once.
+// One poll serves the header countdown, every personal timer, "Needs attention" and TOW's zone:
+// sync.js's, which every signed-in page loads (base.html). Each /sync.json answer (a 304 too) hands
+// every reader what /health.json said, from the areas the page has; a failed one hands null. A page
+// without it (sign-in, first start) shows none of these and asks nothing. /health.json itself
+// stays for monitoring and older pages.
 const healthPoll = (() => {
   const synced = typeof window !== "undefined" ? window.towSync : null;
-  if (synced?.onPoll) {
-    const listening = [];
-    synced.onPoll((_, ok) => {
-      const data = ok ? synced.health() : null;
-      listening.forEach((reader) => {
-        try {
-          reader.receive(data);
-        } catch {
-          // one failed view never stops the others; the next answer is its next try
-        }
-      });
-    });
-    return { add: (reader) => { listening.push(reader); }, plan: () => {}, now: () => synced.now() };
-  }
-  const readers = [];
-  const failedUntil = new Map();
-  let timer = 0;
-  let inFlight = false;
-  const plan = () => {
-    window.clearTimeout(timer);
-    timer = 0;
-    const due = readers.map((reader) => {
-      const at = reader.due();
-      return at === null ? null : Math.max(at, failedUntil.get(reader) || 0);
-    }).filter((at) => at !== null);
-    if (document.hidden || inFlight || !due.length) return;
-    timer = window.setTimeout(poll, Math.max(0, Math.min(...due) - Date.now()));
-  };
-  const poll = async () => {
-    timer = 0;
-    if (inFlight) return;
-    inFlight = true;
-    let data = null;
-    try {
-      const response = await fetch("/health.json", { cache: "no-store" });
-      const body = await response.json();
-      if (response.ok && body.ok) data = body;
-    } catch {
-      // No answer: every reader keeps what it knows and retries later.
-    }
-    inFlight = false;
-    readers.forEach((reader) => {
+  const listening = [];
+  synced?.onPoll?.((_, ok) => {
+    const data = ok ? synced.health() : null;
+    listening.forEach((reader) => {
       try {
         reader.receive(data);
-        failedUntil.delete(reader);
       } catch {
-        // One failed view must neither stop other readers nor spin on its overdue deadline.
-        failedUntil.set(reader, Date.now() + 60000);
+        // one failed view never stops the others; the next answer is its next try
       }
     });
-    plan();
-  };
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      window.clearTimeout(timer);
-      timer = 0;
-    } else if (readers.filter((reader) => reader.shown()).length) {
-      poll();
-    } else {
-      plan();
-    }
   });
   return {
-    add: (reader) => { readers.push(reader); plan(); },
-    plan,
+    add: (reader) => { listening.push(reader); },
     // Now (a check has ended: the header's health and "Needs attention" are asked at once).
-    now: () => { if (!inFlight && !document.hidden) poll(); },
+    now: () => synced?.now?.(),
   };
 })();
 
@@ -799,12 +738,8 @@ if (clock) {
   let last = Number(clock.dataset.last) * 1000;
   let iv = Number(clock.dataset.interval) * 1000;
   let checkOk = clock.dataset.checkOk !== "0";
-  // Why the last attempt failed, in words: the page's, then each /health.json answer's.
+  // Why the last attempt failed, in words: the page's, then each poll answer's.
   let checkError = clock.dataset.errorText || clock.dataset.error || "";
-  // While the check is overdue or failed, the countdown asks for /health.json: after 5 s,
-  // then doubling up to 60 s while nothing changes (F6: it used to poll every 5 s forever).
-  let pollDue = null;
-  let pollDelay = 5000;
   const fmt = (ms) => {
     const s = Math.max(0, Math.floor(ms / 1000));
     const h = Math.floor(s / 3600);
@@ -812,12 +747,6 @@ if (clock) {
     const r = s % 60;
     const p = (n) => String(n).padStart(2, "0");
     return `${p(h)}:${p(m)}:${p(r)}`;
-  };
-  const ensurePoll = () => {
-    if (pollDue !== null) return;
-    pollDelay = 5000;
-    pollDue = Date.now() + pollDelay;
-    healthPoll.plan();
   };
   const tick = () => {
     if (!last) {
@@ -836,35 +765,20 @@ if (clock) {
       showClock("00:00:00");
       clock.classList.add("bad");
       showWords(checkError ? t("js.clock.last_attempt", { error: checkError }) : t("js.clock.overdue_title"));
-      ensurePoll();
       return;
     }
     clock.classList.toggle("bad", !checkOk);
     showClock(fmt(left));
     showWords(checkOk ? t("js.clock.until_next") : (checkError ? t("js.clock.last_attempt", { error: checkError }) : t("js.clock.last_attempt_failed")));
-    if (!checkOk) ensurePoll();
   };
   healthPoll.add({
-    due: () => pollDue,
-    shown: () => {
-      if (pollDue === null) return false;
-      pollDelay = 5000;
-      return true;
-    },
     receive: (data) => {
-      const waiting = pollDue !== null;
-      if (data) {
-        if (Number.isFinite(Number(data.next_from_ts))) last = Number(data.next_from_ts) * 1000;
-        if (Number.isFinite(Number(data.interval_sec)) && Number(data.interval_sec) > 0) iv = Number(data.interval_sec) * 1000;
-        checkOk = data.check_ok !== false;
-        checkError = data.check_error_text || data.check_error || "";
-        if (checkOk && last && last + iv > Date.now()) pollDue = null;
-        tick();
-      }
-      if (waiting && pollDue !== null) {
-        pollDelay = Math.min(pollDelay * 2, 60000);
-        pollDue = Date.now() + pollDelay;
-      }
+      if (!data) return; // no answer: the countdown keeps what it knows
+      if (Number.isFinite(Number(data.next_from_ts))) last = Number(data.next_from_ts) * 1000;
+      if (Number.isFinite(Number(data.interval_sec)) && Number(data.interval_sec) > 0) iv = Number(data.interval_sec) * 1000;
+      checkOk = data.check_ok !== false;
+      checkError = data.check_error_text || data.check_error || "";
+      tick();
     },
   });
   tick();
@@ -918,8 +832,6 @@ let topicTimerNodes = Array.from(document.querySelectorAll("[data-topic-timer]")
 if (topicTimerNodes.length || (window.towSync && document.getElementById("topics"))) {
   let serverNow = topicTimerNodes.length ? Number(topicTimerNodes[0].dataset.timerNow) * 1000 : Date.now();
   let sampledAt = performance.now();
-  let timersDue = Date.now();
-  let failedPolls = 0;
   const phaseKeys = {
     scheduled: "js.timer.scheduled", paused: "js.timer.paused", done: "js.timer.done",
     stopped: "js.timer.stopped", waiting: "js.timer.waiting", queued: "js.timer.queued", running: "js.timer.running",
@@ -990,11 +902,8 @@ if (topicTimerNodes.length || (window.towSync && document.getElementById("topics
     tickTimers();
   };
   healthPoll.add({
-    due: () => timersDue,
-    shown: () => timersDue !== null,
     receive: (data) => {
       if (data && Number.isFinite(data.now_ts)) {
-        failedPolls = 0;
         serverNow = data.now_ts * 1000;
         sampledAt = performance.now();
         for (const node of topicTimerNodes) {
@@ -1006,18 +915,11 @@ if (topicTimerNodes.length || (window.towSync && document.getElementById("topics
         }
       } else {
         // No response does not create a new deadline or report a successful check.
-        failedPolls += 1;
         for (const node of topicTimerNodes) {
           if (!["paused", "done"].includes(node.dataset.timerState)) node.dataset.timerState = "stopped";
         }
       }
       tickTimers();
-      if (!topicTimerNodes.some((node) => node.isConnected)) {
-        timersDue = null;
-        return;
-      }
-      const urgent = topicTimerNodes.some((node) => node.isConnected && (["queued", "running", "waiting"].includes(node.dataset.timerState) || (node.dataset.timerState === "scheduled" && Number(node.dataset.timerAt) <= serverNow / 1000)));
-      timersDue = Date.now() + (failedPolls ? Math.min(5000 * 2 ** Math.min(failedPolls - 1, 4), 60000) : urgent ? 5000 : 30000);
     },
   });
   tickTimers();

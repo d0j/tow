@@ -1,4 +1,6 @@
-// F6: the home countdown polls /health.json with backoff and never in a hidden tab.
+// F6: the home countdown asks nothing of its own while a check is overdue (it once polled /health.json
+// every 5 s); sync.js's poll, whose cadence and hidden-tab rule are its own (sync_client.mjs), hands it
+// each answer: a healthy one brings the countdown back, a failed one keeps what it shows.
 // Runs the checked-in app.js with a tiny DOM and fake timers; prints a JSON verdict.
 import { createRequire } from "node:module";
 
@@ -33,15 +35,17 @@ const window = {
   location: { assign() {}, origin: "http://127.0.0.1", href: "http://127.0.0.1/" },
   addEventListener() {},
 };
+const polls = [];
+window.towSync = {
+  onPoll: (fn) => polls.push(fn), now() {},
+  health: () => ({ ok: true, next_from_ts: healthy ? now / 1000 : (now - 13 * 3600 * 1000) / 1000, interval_sec: 43200, check_ok: true }),
+};
+const answer = (ok) => polls.forEach((fn) => fn(null, ok));
 const context = {
   window, document, location: window.location, console, URL, URLSearchParams, FormData: class {},
   setInterval: window.setInterval, setTimeout: window.setTimeout, clearInterval: window.clearInterval,
   Date: { now: () => now },
-  fetch: async (url) => {
-    fetches.push({ url: String(url), at: now });
-    const next = healthy ? now / 1000 : (now - 13 * 3600 * 1000) / 1000;
-    return { ok: true, json: async () => ({ ok: true, next_from_ts: next, interval_sec: 43200, check_ok: true }) };
-  },
+  fetch: async (url) => { fetches.push({ url: String(url), at: now }); return { ok: false, json: async () => ({}) }; },
 };
 Object.assign(globalThis, context);
 require("../../src/tow/static/app.js");
@@ -59,27 +63,13 @@ const advance = async (ms) => {
   }
   now = end;
 };
-const polls = () => fetches.filter((f) => f.url.includes("/health.json"));
-
-await advance(1000); // first tick sees the overdue check and starts polling
+await advance(1000);
 await advance(10 * 60 * 1000);
-const overdueGaps = polls().map((f, i, all) => (i ? (f.at - all[i - 1].at) / 1000 : 0)).slice(1);
-const beforeHide = polls().length;
-document.hidden = true;
-(listeners.visibilitychange || []).forEach((fn) => fn());
-await advance(30 * 60 * 1000);
-const whileHidden = polls().length - beforeHide;
-document.hidden = false;
-(listeners.visibilitychange || []).forEach((fn) => fn());
-await new Promise((r) => setImmediate(r));
-const onShow = polls().length - beforeHide - whileHidden;
+const overdue = clock.textContent;
+const ownRequests = fetches.length;
+answer(false); // a failed answer keeps what it shows
+const afterFailed = clock.textContent;
 healthy = true; // the scheduled check ran
-await advance(5 * 60 * 1000);
-const afterRecovery = polls().length;
-await advance(30 * 60 * 1000);
-console.log(JSON.stringify({
-  overdueGaps,
-  whileHidden,
-  onShow,
-  pollsAfterRecovery: polls().length - afterRecovery,
-}));
+answer(true);
+await advance(1000);
+console.log(JSON.stringify({ overdue, ownRequests, afterFailed, recovered: clock.textContent }));

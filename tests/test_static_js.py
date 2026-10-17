@@ -115,17 +115,18 @@ def test_the_add_form_records_the_title_it_guessed():
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_home_countdown_polls_with_backoff_and_never_in_a_hidden_tab():
-    # F6: /health.json was polled every 5 s forever while a check was overdue, in every tab.
+def test_the_home_countdown_asks_nothing_itself_and_follows_the_pages_poll():
+    # F6: /health.json was polled every 5 s forever while a check was overdue, in every tab. Since
+    # 1.33.1 (A23) the countdown has no poll of its own: sync.js's (its cadence and hidden-tab rule
+    # are tested in sync_client.mjs) hands it every answer.
     script = Path(__file__).parent / "js" / "clock_poll.mjs"
     result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=60, check=True)
     verdict = json.loads(result.stdout.strip().splitlines()[-1])
 
-    assert verdict["overdueGaps"][:4] == [10, 20, 40, 60]
-    assert max(verdict["overdueGaps"]) == 60
-    assert verdict["whileHidden"] == 0
-    assert verdict["onShow"] == 1
-    assert verdict["pollsAfterRecovery"] == 0
+    assert verdict["ownRequests"] == 0
+    assert verdict["overdue"] == "00:00:00"
+    assert verdict["afterFailed"] == "00:00:00"  # a failed answer keeps what it shows
+    assert verdict["recovered"] not in ("00:00:00", "—")
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
@@ -147,17 +148,18 @@ def test_the_clock_names_why_the_last_attempt_failed_in_words():
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_countdown_and_personal_timers_share_one_health_poll():
-    # Two independent pollers asked /health.json at 0, 5, 15, 31, 35, 61 and 75 s.
+    # Two independent pollers asked /health.json at 0, 5, 15, 31, 35, 61 and 75 s. Since 1.33.1
+    # (A23) both take sync.js's one poll: one listener, one answer for both, nothing asked of their own.
     script = Path(__file__).parent / "js" / "health_poll.mjs"
     result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=60, check=True)
     verdict = json.loads(result.stdout.strip().splitlines()[-1])
 
-    assert verdict["firstMinute"] == [0, 10, 30, 60]
+    assert verdict["readers"] == 1
+    assert verdict["ownRequests"] == 0
     assert verdict["timerUpdated"] is True
     assert verdict["timerWords"] is True
     assert verdict["clock"] == "00:00:00"
-    assert verdict["whileHidden"] == 0
-    assert verdict["onShow"] == 1
+    assert verdict["failedStops"] is True
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes

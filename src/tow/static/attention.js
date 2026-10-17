@@ -21,8 +21,6 @@
       if (event.relatedTarget && !menu.contains(event.relatedTarget)) menu.open = false;
     });
     if (typeof healthPoll === "undefined") return;
-    let due = Date.now() + (menu.hidden ? 30000 : 15000);
-    let failures = 0;
     const valid = (value) => value && typeof value === "object" && Number.isSafeInteger(value.count) && value.count >= 0
       && typeof value.label === "string" && typeof value.fingerprint === "string"
       && ["", "warn", "bad"].includes(value.tone) && Array.isArray(value.entries)
@@ -32,13 +30,7 @@
         && entry.href.startsWith("/") && !entry.href.startsWith("//") && !/[\\\x00-\x1f]/.test(entry.href));
     const update = (data) => {
       const value = data?.attention;
-      if (!valid(value)) {
-        failures += 1;
-        due = Date.now() + Math.min(15000 * 2 ** Math.min(failures, 2), 60000);
-        return; // Missing or malformed observations never pretend everything recovered.
-      }
-      failures = 0;
-      due = Date.now() + (value.count ? 15000 : 30000);
+      if (!valid(value)) return; // Missing or malformed observations never pretend everything recovered.
       const focused = menu.contains(document.activeElement);
       if (menu.dataset.fingerprint !== value.fingerprint) {
         const focusedId = focused ? document.activeElement?.closest?.("[data-issue-id]")?.dataset.issueId : null;
@@ -80,6 +72,6 @@
       }
       menu.hidden = !value.count;
     };
-    healthPoll.add({ due: () => due, shown: () => true, receive: update });
+    healthPoll.add({ receive: update });
   });
 })();

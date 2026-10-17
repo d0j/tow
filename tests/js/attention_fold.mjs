@@ -39,7 +39,7 @@ function fixture({ polling = true } = {}) {
   vm.runInNewContext(source, context);
   listeners.DOMContentLoaded();
   return { menu, toggle, counter, list, log, document, listeners, registrations,
-    receive: value => reader.receive(value), due: () => reader.due(), advance: value => { now = value; } };
+    receive: value => reader.receive(value), advance: value => { now = value; } };
 }
 const entry = (id = "a") => ({ id, text: "<Show A> — rate limited", severity: "warn", href: "/?open=a#row-a" });
 const snapshot = (entries = [entry()], fingerprint = "new") => ({ attention: {
@@ -48,7 +48,6 @@ const snapshot = (entries = [entry()], fingerprint = "new") => ({ attention: {
 const test = fixture();
 assert.equal(test.menu.open, false);
 assert.equal(test.registrations, 1);
-assert.equal(test.due(), 15000);
 test.receive(snapshot());
 assert.equal(test.menu.hidden, false);
 assert.equal(test.menu.open, false);
@@ -77,9 +76,9 @@ for (const invalid of [null, {}, { attention: null }, { attention: { ...snapshot
   assert.equal(test.menu.hidden, false);
   assert.equal(test.counter.textContent, "1");
 }
-assert.equal(test.due(), 60000);
-test.advance(60000); test.receive(snapshot());
-assert.equal(test.due(), 75000);
+// The next valid answer of the page's poll (sync.js's cadence, not this list's) is taken again.
+test.advance(60000); test.receive(snapshot([entry("a"), entry("b")]));
+assert.equal(test.counter.textContent, "2");
 test.menu.open = true;
 test.menu.events.keydown({ key: "Escape", preventDefault() {}, stopPropagation() {} });
 assert.equal(test.menu.open, false);
@@ -99,5 +98,5 @@ native.menu.open = true;
 native.menu.events.keydown({ key: "Escape", preventDefault() {}, stopPropagation() {} });
 assert.equal(native.menu.open, false);
 console.log(JSON.stringify({ closedInitially: true, sharedPoll: true, safeText: true, retainedFocus: true,
-  recoveryHides: true, recurrenceClosed: true, invalidPreserves: true, backoff: true,
+  recoveryHides: true, recurrenceClosed: true, invalidPreserves: true, nextAnswerTaken: true,
   escapeAndOutside: true, nativeFallback: true, cappedCount: true }));

@@ -138,6 +138,30 @@ def test_every_signed_in_page_loads_sync_before_the_scripts_that_read_it(path):
     assert order.index("sync") < order.index("messages") < order.index("app") < order.index("updates")
 
 
+def test_every_template_with_app_js_but_without_sync_js_is_a_page_before_signing_in():
+    """1.33.1 A23: app.js has no /health.json poll of its own any more; the header clock, the
+    personal timers, Needs attention and TOW's zone take sync.js's poll. Every authenticated page
+    is drawn on base.html, which loads sync.js; the only templates that load app.js without it are
+    the sign-in and first-start pages, which draw none of what that poll feeds."""
+    from pathlib import Path
+
+    folder = Path(templating.__file__).resolve().parents[1] / "templates"
+    texts = {path.name: path.read_text(encoding="utf-8") for path in folder.glob("*.html")}
+    assert "/static/sync.js" in texts["base.html"]
+    pages = {name for name, text in texts.items() if not name.startswith("_") and name != "base.html"}
+    on_base = {name for name in pages if '{% extends "base.html" %}' in texts[name]}
+    alone = pages - on_base
+    assert alone == {"login.html", "setup.html"}, alone
+    for name in alone:
+        assert "/static/app.js" in texts[name]
+        assert "/static/sync.js" not in texts[name]
+        for fed in ('id="next-check"', "data-topic-timer", "data-attention", "data-short"):
+            assert fed not in texts[name], (name, fed)
+    for name, text in texts.items():
+        if name.startswith("_"):  # partials: drawn inside a page, never a page of their own
+            assert "/static/app.js" not in text, name
+
+
 def test_the_static_version_follows_sync_js(monkeypatch, tmp_path):
     """A changed sync.js is a new static version: an open page sees it and reloads."""
     for path in templating.STATIC_DIR.iterdir():
