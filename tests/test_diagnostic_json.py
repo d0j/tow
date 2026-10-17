@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -261,8 +262,17 @@ def test_settings_displays_unreadable_watchdog_without_fabricated_date():
     _write("watchdog", b'{"last_problem":{"at":1e999}}')
     response = TestClient(app, raise_server_exceptions=False).get("/settings")
     assert response.status_code == 200
-    assert "неизвестно, работал ли сторож без перерывов" in response.text
-    assert "1970" not in response.text
+    # Only the watchdog's own lines: the page's random form tokens may hold "1970" by chance.
+    block = re.search(
+        r'<p class="action-hint">[^<]*<b>(.*?)</b>:</p>\s*<ul class="watchdog-lines">(.*?)</ul>',
+        response.text,
+        re.DOTALL,
+    )
+    assert block is not None
+    when, lines = block.groups()
+    assert when == "—"
+    assert "неизвестно, работал ли сторож без перерывов" in lines
+    assert "1970" not in block.group(0)
 
 
 @pytest.mark.parametrize("failed_at", [1800000000, 1799999000])
