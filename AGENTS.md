@@ -126,7 +126,9 @@ tracker degradation from a client or TOW failure before changing state.
   `os.name`/`sys.platform` checks, system temp, `%LOCALAPPDATA%` or `~` paths elsewhere. `scripts/update.py` is
   the exception: standard library only and Python 3.11 syntax (it runs with the install's base Python, outside
   TOW); its uv/Python environment comes from `launcher_env`, kept in step with `scripts/tow` and
-  `scripts/tow-env.cmd`.
+  `scripts/tow-env.cmd`. uv reads only `<runtime>/runtime/uv.toml` (`UV_CONFIG_FILE`): its lines above the marker
+  come from `[tool.uv]` of `pyproject.toml` and `scripts/runtime-uv.toml`, so a new `[tool.uv]` setting goes into
+  both (`tests/test_update_uv_config.py` compares them); the owner's lines below the marker are never rewritten.
 - On a development machine never register autostart or change scheduled tasks (read-only queries are fine): the
   names are one per user and would take over a real install. Code refuses a development checkout, and tests inject
   the OS runner and an isolated home.
