@@ -103,12 +103,12 @@ def healthz(request: Request) -> dict[str, Any]:
 
 
 @router.get("/health.json", response_model=None)
-def health_json() -> dict[str, Any]:
+def health_json(request: Request) -> dict[str, Any]:
     import time
 
     return {
         "ok": True,
-        **header_health(),
+        **header_health(local=access.is_local(request)),  # a network device's words are scrubbed
         "now_ts": time.time(),
         # TOW's UTC offset now, in minutes: a page open across a summer/winter time change keeps
         # "today" right (app.js towTime; it asks when the tab is shown again and at midnight).

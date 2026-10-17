@@ -158,7 +158,7 @@ def test_the_header_site_follows_the_latest_check_or_probe():
 
     def sites(topic, *probes):
         save_state({"topics": [topic], "doctor": {"probes": list(probes)}})
-        return header_health()["sites"]
+        return header_health(local=True)["sites"]
 
     assert sites(answered) == {"rutor": "ok"}  # no probe ever: the check says it answered
     assert sites(down, {**probe, "at": t1}) == {"rutor": "warn"}  # the check came later

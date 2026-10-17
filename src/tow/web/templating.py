@@ -134,7 +134,9 @@ def _site_tones() -> tuple[dict[str, str], list[str]]:
     return tones, list(watched)
 
 
-def header_health() -> dict[str, Any]:
+def header_health(*, local: bool) -> dict[str, Any]:
+    """The header's state and its Needs attention; ``local``: for this PC (every word of an
+    error), else for a network device (scrubbed, ``views.issue_text``)."""
     state = _context.state()
     h = state.get("health") or {}
     doc = state.get("doctor") or {}
@@ -194,13 +196,14 @@ def header_health() -> dict[str, Any]:
         "check_error_text": check_error_label(check_error) if check_error else "",
         "interval_sec": interval_sec,
         "ver": __version__,
-        "attention": attention_view(state, cfg),
+        "attention": attention_view(state, cfg, local=local),
     }
 
 
-def _header_health_once() -> dict[str, Any]:
-    """The header is rendered once per page but asked for twice on /settings: compute it once."""
-    return _context.memo("header", header_health)
+def _header_health_once(request: Request) -> dict[str, Any]:
+    """The header is rendered once per page but asked for twice on /settings: compute it once
+    (a request comes from one device: this PC or a network one)."""
+    return _context.memo("header", lambda: header_health(local=access.is_local(request)))
 
 
 # The "Undo" bar (base.html) asks these; the engine and every kind live in tow.undo.

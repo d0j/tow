@@ -116,7 +116,7 @@ def settings_view(request: Request, *, live: bool) -> Response:
                 for e in services.read_events(limit=200)
             ],
             # What needs the owner and is said in its card ("Needs attention" lands there).
-            "notes": issue_notes(state, cfg, "settings"),
+            "notes": issue_notes(state, cfg, "settings", local=access.is_local(request)),
             # Each form's base (edit_base): what it shows, saved now; a refused save's ?conflict=
             # brings back the owner's draft, both values and the base to save it against.
             "bases": _bases(cfg, s, backup_folders=backups["folders"], service=service),

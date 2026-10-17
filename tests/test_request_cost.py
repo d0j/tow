@@ -260,7 +260,7 @@ def test_home_and_the_header_name_the_same_sites_after_the_lookup_is_kept(monkey
     first = client.get("/", headers={"Accept": "text/html"}).text
     second = client.get("/", headers={"Accept": "text/html"}).text
     assert first.count('class="topic-tracker"') == second.count('class="topic-tracker"') == 20
-    assert _in_a_request(header_health)["sites"] == {"rutor": "mut"}
+    assert _in_a_request(lambda: header_health(local=True))["sites"] == {"rutor": "mut"}
 
 
 def test_a_site_title_is_built_once_per_request_and_follows_a_saved_config(monkeypatch):

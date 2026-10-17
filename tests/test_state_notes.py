@@ -66,7 +66,7 @@ def test_issue_notes_carry_their_severity_and_identity(client, monkeypatch):
 
     _state(auto_at_ts=int(time.time()) - 10 * 24 * 3600)
     monkeypatch.setattr(services, "data_lost", lambda: {"at": 1, "folder": "D:\\TOW\\data"})
-    notes = {note["issue"]: note for note in issue_notes(load_state(), load_config(), "settings")}
+    notes = {note["issue"]: note for note in issue_notes(load_state(), load_config(), "settings", local=True)}
     assert notes["check_stale"]["severity"] == "warn"
     assert notes["data_lost"]["severity"] == "bad"
     assert notes["data_lost"]["at"] == "backup-night"
@@ -133,7 +133,7 @@ def test_the_master_key_problem_is_one_red_note_with_its_command(client):
     assert copy["data-copy-text"].endswith(" keys status")
     assert note.select_one("#copy-command-status") is None  # copied or not: a message (messages.js)
     # Needs attention still names it, and lands on this note.
-    [entry] = attention_view(load_state(), load_config())["entries"]
+    [entry] = attention_view(load_state(), load_config(), local=True)["entries"]
     assert (entry["kind"], entry["severity"]) == ("check_blocked", "bad")
 
 

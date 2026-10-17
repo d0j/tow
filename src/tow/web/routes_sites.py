@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from tow import access
 from tow.guess import GuessError
 from tow.jsonish import as_dict
 from tow.web import _context, edit_base, page_sync, services, site_merge
@@ -157,7 +158,7 @@ def sites_view(request: Request) -> Response:
             "edit_field": str(request.query_params.get("field") or ""),
             # And what was typed in that card (never the password).
             "edit_draft": site_edit_draft(request) or {},
-            "notes": issue_notes(state, _context.config(), "sites"),
+            "notes": issue_notes(state, _context.config(), "sites", local=access.is_local(request)),
         },
     )
 

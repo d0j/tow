@@ -9,7 +9,7 @@
 {{ sprite() }}
 <a class="skip" href="#main">{{ t('base.skip') }}</a>
 {% set path = request.url.path %}
-{% set h = header_health() %}
+{% set h = header_health(request) %}
 <header class="app">
   <nav aria-label="{{ t('base.nav.label') }}">
     <a href="/" class="ico{% if path == '/' %} on{% endif %}" {% if path == '/' %}aria-current="page"{% endif %} title="{{ t('base.nav.home') }}" aria-label="{{ t('base.nav.home') }}">{{ icon('home') }}</a>

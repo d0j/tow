@@ -420,9 +420,12 @@ def test_a_corrupt_download_history_does_not_block_the_check(monkeypatch):
     assert health["history_rebuilt_at"] == health["at_ts"]
     from tow.config import load_config
 
-    assert not any("download_history.json.corrupt" in item["text"] for item in attention(load_state(), load_config()))
+    assert not any(
+        "download_history.json.corrupt" in item["text"] for item in attention(load_state(), load_config(), local=True)
+    )
     assert any(
-        "download_history.json.corrupt" in item["text"] for item in issue_notes(load_state(), load_config(), "history")
+        "download_history.json.corrupt" in item["text"]
+        for item in issue_notes(load_state(), load_config(), "history", local=True)
     )
 
     check.run_check(apply=True, notify=False)  # the next run reads the new file; the notice stays a while
@@ -525,7 +528,7 @@ def test_current_files_alone_too_large_start_the_topics_record_over_and_say_so(m
     assert any(event.get("kind") == "download_history_trimmed" for event in read_events(limit=50))
     health = load_state()["health"]
     assert health["history_trimmed_at"] == health["at_ts"]
-    notes = [item["text"] for item in attention(load_state(), load_config())]
+    notes = [item["text"] for item in attention(load_state(), load_config(), local=True)]
     assert t("issues.history_trimmed", "ru") in notes
     restore_points.create_restore_point()
 

@@ -35,7 +35,7 @@ def _entries(client: TestClient) -> dict[str, dict]:
     from tow.store import load_state
     from tow.web.views import attention_view
 
-    view = attention_view(load_state(), load_config())
+    view = attention_view(load_state(), load_config(), local=True)
     return {entry["kind"]: entry for entry in view["entries"]}
 
 

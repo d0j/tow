@@ -517,15 +517,30 @@ def issues_now(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[Issue]:
     return services.collect_issues(snapshot)
 
 
-def issue_text(issue: Issue) -> str:
-    """The issue's message in the page's language; a time in the page's way of writing times."""
-    params = dict(issue.message.params)
+def _without_folders(params: Mapping[str, Any]) -> dict[str, Any]:
+    """A message's values for a network device, as Recent messages has them: a value that names
+    a folder or a file is "…" (``scrub.without_paths``). A plain sentence (a topic's error in the
+    words it came with) stays whole: the scrub after formatting takes its paths and its links'
+    queries, as on the topic's row."""
+    kept: dict[str, Any] = services.without_paths(params)
+    return {
+        name: params[name] if isinstance(params[name], str) and name not in services.PATH_PARAMS else value
+        for name, value in kept.items()
+    }
+
+
+def issue_text(issue: Issue, *, local: bool) -> str:
+    """The issue's message in the page's language; a time in the page's way of writing times.
+    ``local``: for this PC (every word), else for a network device (scrubbed as Recent messages
+    and Home's rows are: a link keeps its host, a folder or file path goes)."""
+    params = dict(issue.message.params) if local else _without_folders(issue.message.params)
     if isinstance(params.get("at"), (int, float)):
         params["at"] = ui_time(datetime.fromtimestamp(params["at"], UTC).isoformat())
     if issue.kind == "topic_error":
         params["title"] = services.short_series_title(str(params.get("title") or ""), owner_language())
     rendered = render_stored(issue.message.key, params, t(issue.message.key, **params))
-    return services.scrub_text(humanize(rendered)) if issue.kind == "topic_error" else rendered
+    text = services.scrub_text(humanize(rendered)) if issue.kind == "topic_error" else rendered
+    return text if local else services.scrub_display(text, limit=8192)
 
 
 # The page a Target names -> its address.
@@ -560,8 +575,9 @@ def issue_href(issue: Issue) -> str:
     return f"{ISSUE_PAGES[target.page]}?{urlencode(params)}"
 
 
-def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, Any]:
-    """Current header problems, worst first, with stable identities and links to their fixes."""
+def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any], *, local: bool) -> dict[str, Any]:
+    """Current header problems, worst first, with stable identities and links to their fixes;
+    their words for this PC (``local``) or a network device (``issue_text``)."""
     # Past history loss remains a note on History, not an active failure counter (tow.issues).
     found = needing_attention(issues_now(state, cfg))
     return {
@@ -571,7 +587,7 @@ def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str
                 "kind": issue.kind,
                 "severity": issue.severity,
                 "subjects": list(issue.subjects),
-                "text": issue_text(issue),
+                "text": issue_text(issue, local=local),
                 "href": issue_href(issue),
                 "fix": issue.fix.ref if issue.fix else "",
                 "fix_label": t(issue.fix.label) if issue.fix and issue.fix.label else "",
@@ -586,18 +602,19 @@ def attention_view(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str
     }
 
 
-def issue_notes(state: Mapping[str, Any], cfg: Mapping[str, Any], page: str) -> list[dict[str, str]]:
+def issue_notes(state: Mapping[str, Any], cfg: Mapping[str, Any], page: str, *, local: bool) -> list[dict[str, str]]:
     """The issues ``page`` says in words: those whose link lands on their own note (a Target
     without an anchor: ``at`` is "", ``id`` the note's) and those whose spot does not say what is
     wrong by itself (``Target.note``: ``at`` is that spot's id, the note goes inside it). Each
-    note keeps its issue's ``severity`` (its colour) and id (``issue``, stable while it lasts)."""
+    note keeps its issue's ``severity`` (its colour) and id (``issue``, stable while it lasts);
+    its words for this PC (``local``) or a network device (``issue_text``)."""
     return [
         {
             "id": issue_note_id(issue),
             "issue": issue.id,
             "severity": issue.severity,
             "at": issue.target.anchor,
-            "text": issue_text(issue),
+            "text": issue_text(issue, local=local),
         }
         for issue in issues_now(state, cfg)
         if issue.target.page == page and (issue.target.note or not issue.target.anchor)
@@ -615,9 +632,9 @@ def client_notes(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, 
     }
 
 
-def attention(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[dict[str, Any]]:
+def attention(state: Mapping[str, Any], cfg: Mapping[str, Any], *, local: bool) -> list[dict[str, Any]]:
     """The entries of ``attention_view``."""
-    items: list[dict[str, Any]] = attention_view(state, cfg)["entries"]
+    items: list[dict[str, Any]] = attention_view(state, cfg, local=local)["entries"]
     return items
 
 

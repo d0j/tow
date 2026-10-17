@@ -540,13 +540,13 @@ def _health(sample: Sample, who: Viewer, now: float) -> Computed:
         from tow.web.templating import header_health, site_title
 
         with sample.seeded():
-            health = header_health()
+            health = header_health(local=who.local)  # a network device's words are scrubbed
             # The header names a site by its title: a site a new topic brings is drawn with it.
             health["site_titles"] = {name: site_title(name) for name in health.get("sites") or {}}
         attention = health.pop("attention")
         health.pop("ver", None)  # the version area
-        header_rev = revision("header", health, {"lang": who.lang})
-        attention_rev = revision("attention", attention, {"lang": who.lang})
+        header_rev = revision("header", health, {"lang": who.lang, "local": who.local})
+        attention_rev = revision("attention", attention, {"lang": who.lang, "local": who.local})
         # A scheduled check becomes late (tow.issues check_stale) at next + interval + slack.
         deadline = None
         if health.get("next_at_ts"):
@@ -554,7 +554,7 @@ def _health(sample: Sample, who: Viewer, now: float) -> Computed:
             deadline = stale_at if stale_at > now else None
         return Computed({"header": health, "attention": attention}, header_rev, deadline, extra=attention_rev)
 
-    return AREAS_MEMO.get("health", (who.lang,), key, now, build)
+    return AREAS_MEMO.get("health", (who.lang, who.local), key, now, build)
 
 
 def _timers(sample: Sample, now: float) -> Computed:

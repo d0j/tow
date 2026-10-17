@@ -679,23 +679,23 @@ def test_the_header_counts_down_to_the_real_next_check(tmp_path, monkeypatch):
 
     save_state({"topics": [], "health": save_health})
     interval = int(load_config()["interval_sec"])
-    h = header_health()
+    h = header_health(local=True)
     assert (h["next_at_ts"], h["next_from_ts"]) == (int(T0 - 600 + interval), int(T0 - 600))
 
     layout.write_json(layout.schedule_path(), {"check_started_at": T0 - 60})
-    h = header_health()
+    h = header_health(local=True)
     assert h["next_at_ts"] == int(T0 - 60 + interval)  # the supervisor's own start wins
 
     monkeypatch.setattr(layout, "running", lambda: {"pid": 1})
     layout.write_json(layout.status_path(), {"next": {"check": "2026-10-01T13:30:00+00:00"}})
-    h = header_health()
+    h = header_health(local=True)
     assert h["next_at_ts"] == int(datetime(2026, 10, 1, 13, 30, tzinfo=UTC).timestamp())
     assert h["next_from_ts"] == h["next_at_ts"] - interval
 
     monkeypatch.setattr(layout, "running", lambda: None)
     layout.schedule_path().unlink()
     save_state({"topics": [], "health": {"at_ts": int(T0)}})  # manual checks only
-    h = header_health()
+    h = header_health(local=True)
     assert (h["next_at_ts"], h["next_from_ts"]) == (0, 0)
 
 

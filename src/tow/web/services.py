@@ -88,7 +88,7 @@ from tow.restore_points import (
     restore_portable_bundle,
 )
 from tow.restore_points import cleanup_status as restore_point_cleanup_status
-from tow.scrub import scrub_display
+from tow.scrub import PATH_PARAMS, scrub_display, without_paths
 from tow.snapshots import (
     check_snapshot,
     create_snapshot,
@@ -143,6 +143,7 @@ from tow.web_update import start as start_web_update
 from tow.web_update import status as web_update_status
 
 __all__ = [
+    "PATH_PARAMS",
     "MessageMarkerRefused",
     "adopt_topic",
     "apply_undo",
@@ -264,6 +265,7 @@ __all__ = [
     "watchdog_problem",
     "web_update_log",
     "web_update_status",
+    "without_paths",
     "write_generation",
 ]
 
