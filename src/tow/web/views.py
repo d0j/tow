@@ -1001,7 +1001,7 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     for kind, location in LOCATIONS.items():
         raw = str(cfg.get(location.key) or "")
         path = resolve(raw, location)
-        free = services.free_bytes(path)
+        free = services.free_bytes(path, state=_context.state())  # the request's state: read once
         folders[kind] = {
             "kind": kind,
             "title": location.title,
