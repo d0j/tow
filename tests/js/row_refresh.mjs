@@ -1,134 +1,104 @@
-// checks.js draws a Home row again when its check has ended - one at a time, never while the
-// owner works in it (edit panel open, a field focused or unsaved, the pointer on its buttons);
-// such a row is marked stale and drawn when that ends or at the next try. Prints a JSON verdict.
+// checks.js on Home: a row whose check ended is drawn again by sync.js's row sync (towSync.rows), the
+// one writer of Home's rows - for the topics revision the page has, never over a row the owner works
+// in (sync_rows.mjs and sync_page.mjs test that writer) - and never by a request of its own
+// (/topics/<id>/row): a late answer of that request replaced a row another device had changed since,
+// unchecked. After Check all: the rows in sight at once, the others as they come into sight.
+// Prints a JSON verdict.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
-import { build, fakeDocument } from "./fake_dom.mjs";
+import { build, fakeDocument, fakeTimers, memoryStorage } from "./fake_dom.mjs";
 
 const source = readFileSync(new URL("../../src/tow/static/checks.js", import.meta.url), "utf8");
-const window = {};
-vm.runInNewContext(source, { window, crypto: globalThis.crypto, Math, JSON, Array, Uint8Array, Number, String, Set, Boolean });
-const { createRowRefresher, rowBusy } = window.TowRowRefresher;
-const flush = async () => { for (let i = 0; i < 10; i += 1) await Promise.resolve(); };
+const settle = async () => { for (let i = 0; i < 20; i += 1) await Promise.resolve(); };
 
-const harness = ({ answer = async (topic) => `<row ${topic}>` } = {}) => {
-  const rows = new Map([["a", { id: "row-a", dataset: {} }], ["b", { id: "row-b", dataset: {} }]]);
-  const busyRows = new Set();
+const page = ({ withSync = true } = {}) => {
+  const document = fakeDocument();
+  const timers = fakeTimers();
+  const row = (id, top) => {
+    const element = build(document, ["div", { class: "row-wrap", id: `row-${id}` },
+      ["span", { class: "row-ops" }, ["form", { method: "post", action: `/topics/${id}/check` }, ["button", { class: "row-ico" }, ["svg", {}, ["use", { href: "#i-refresh" }]]]]]]);
+    element.rect = { top, bottom: top + 40, height: 40 };
+    return element;
+  };
+  const list = build(document, ["div", { id: "topics" }]);
+  list.append(row("a", 100), row("b", 140), row("far", 5000));
+  document.body.append(build(document, ["div", { id: "msg-host", "data-namespace": "ns" }]), list);
   const fetched = [];
-  const placed = [];
-  const timers = [];
-  const refresher = createRowRefresher({
-    fetchRow: (topic) => { fetched.push(topic); return answer(topic); },
-    findRow: (topic) => rows.get(topic) || null,
-    busy: (row) => busyRows.has(row.id),
-    place: (row, html) => placed.push([row.id, html]),
-    setTimer: (fn) => { timers.push(fn); return timers.length; },
-    clearTimer: () => {},
-  });
-  return { refresher, rows, busyRows, fetched, placed, timers };
+  const redrawn = [];
+  const listRefreshed = [];
+  const status = new Map(); // job -> the body /check/status answers
+  const window = {
+    setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+    setInterval: timers.setInterval, clearInterval: timers.clearInterval,
+    addEventListener() {}, innerHeight: 800,
+    sessionStorage: memoryStorage(),
+    towMessages: { showMessage() {}, remove() {}, refresh() {}, signOut() {} },
+    towRows: { health() {} },
+    towList: { refresh: (options) => listRefreshed.push(options) },
+    ...(withSync ? { towSync: { rows: { redraw: (ids) => { redrawn.push([...ids]); return Promise.resolve(); } } } } : {}),
+  };
+  const context = {
+    window, document, URL, URLSearchParams, JSON, Math, Number, String, Array, Object, Map, Set, Boolean, Promise, Uint8Array,
+    crypto: globalThis.crypto,
+    Date: { now: timers.now },
+    setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+    location: { href: "http://127.0.0.1/" },
+    history: { state: null, replaceState() {} },
+    fetch: async (url) => {
+      fetched.push(String(url));
+      const job = new URLSearchParams(String(url).split("?")[1] || "").get("job");
+      const body = status.get(job) || { status: "running", job };
+      return { ok: true, status: 200, json: async () => body, text: async () => "<div class='row-wrap' id='row-a'>old</div>" };
+    },
+  };
+  vm.runInNewContext(source, context);
+  const follow = async (job, topic) => {
+    window.towChecks.scheduler.adopt(job, { subject: "Show", topic, first: 0 });
+    timers.advance(10);
+    await settle();
+  };
+  return { document, timers, fetched, redrawn, listRefreshed, status, follow, window };
 };
 const verdict = {};
 
-// A free row is drawn again; one TOW no longer has, or that did not answer, stays as it is.
+// A check of one topic ends: its row is drawn again through towSync.rows, and the list's tools
+// follow; nothing asks /topics/<id>/row.
 {
-  const test = harness({ answer: async (topic) => (topic === "b" ? null : `<row ${topic}>`) });
-  test.refresher.refresh("a");
-  test.refresher.refresh("b");
-  test.refresher.refresh("gone");
-  await flush();
-  assert.deepEqual(test.placed, [["row-a", "<row a>"]]);
-  assert.deepEqual(test.fetched, ["a", "b"]);
-  assert.equal(JSON.stringify(test.refresher.stale()), "[]");
+  const test = page();
+  test.status.set("J1", { status: "done", job: "J1", topic_id: "a", message: { id: "check-J1", kind: "ok", subject: "Show", text: "no changes" } });
+  await test.follow("J1", "a");
+  assert.deepEqual(test.redrawn, [["a"]]);
+  assert.ok(test.fetched.every((url) => !url.includes("/row")), String(test.fetched));
+  assert.equal(JSON.stringify(test.listRefreshed.at(-1)), '{"keep":true}');
 }
-verdict.freeRowReplaced = true;
+verdict.oneWriterForTheEndedCheck = true;
 
-// A busy row is not asked for: it is stale until the work ends (settle), then drawn once.
+// Check all ends: the rows in sight are drawn again at once (one request of the row sync), a row
+// further down when it comes into sight.
 {
-  const test = harness();
-  test.busyRows.add("row-a");
-  test.refresher.refresh("a");
-  await flush();
-  assert.deepEqual(test.fetched, []);
-  assert.equal(test.rows.get("a").dataset.stale, "1");
-  assert.equal(JSON.stringify(test.refresher.stale()), JSON.stringify(["a"]));
-  test.refresher.settle("a"); // still busy: nothing
-  await flush();
-  assert.deepEqual(test.fetched, []);
-  test.busyRows.delete("row-a");
-  test.refresher.settle("a");
-  await flush();
-  assert.deepEqual(test.placed, [["row-a", "<row a>"]]);
-  assert.equal(JSON.stringify(test.refresher.stale()), "[]");
-  test.refresher.settle("a"); // not stale any more: nothing again
-  await flush();
-  assert.equal(test.fetched.length, 1);
+  const test = page();
+  test.status.set("J2", { status: "done", job: "J2", topic_id: "", message: { id: "check-J2", kind: "ok", text: "checked" } });
+  await test.follow("J2", "");
+  assert.deepEqual(test.redrawn, [["a", "b"]]);
+  test.document.getElementById("row-far").rect = { top: 300, bottom: 340, height: 40 };
+  (test.document.listeners.click || []).forEach(({ fn }) => fn({ target: test.document.body }));
+  test.timers.advance(250);
+  await settle();
+  assert.deepEqual(test.redrawn, [["a", "b"], ["far"]]);
+  assert.ok(test.fetched.every((url) => !url.includes("/row")), String(test.fetched));
 }
-verdict.busyRowWaits = true;
+verdict.checkAllRowsInSightThenLater = true;
 
-// The owner starts working in the row while it is fetched: it is not replaced under the hands.
+// A page without the row sync (no list: Sites, Settings…): nothing is drawn, nothing asked.
 {
-  let release;
-  const test = harness({ answer: (topic) => new Promise((resolve) => { release = () => resolve(`<row ${topic}>`); }) });
-  test.refresher.refresh("a");
-  await flush();
-  test.busyRows.add("row-a");
-  release();
-  await flush();
-  assert.deepEqual(test.placed, []);
-  assert.equal(JSON.stringify(test.refresher.stale()), JSON.stringify(["a"]));
-  // The next try (every 3 s) draws it once the row is free.
-  test.busyRows.delete("row-a");
-  test.timers.at(-1)();
-  await flush();
-  release();
-  await flush();
-  assert.deepEqual(test.placed, [["row-a", "<row a>"]]);
+  const test = page({ withSync: false });
+  test.status.set("J3", { status: "failed", job: "J3", topic_id: "a", message: { id: "check-J3", kind: "err", subject: "Show", text: "failed" } });
+  await test.follow("J3", "a");
+  assert.deepEqual(test.redrawn, []);
+  assert.ok(test.fetched.every((url) => !url.includes("/row")), String(test.fetched));
 }
-verdict.busyDuringFetchWaits = true;
-
-// One at a time, each row once however often it is asked for.
-{
-  let open = 0;
-  let most = 0;
-  const test = harness({ answer: async (topic) => { open += 1; most = Math.max(most, open); await flush(); open -= 1; return `<row ${topic}>`; } });
-  test.refresher.refresh("a");
-  test.refresher.refresh("b");
-  test.refresher.refresh("b"); // asked again while waiting: drawn once
-  await flush();
-  await flush();
-  await flush();
-  assert.equal(most, 1);
-  assert.deepEqual(test.fetched, ["a", "b"]);
-}
-verdict.oneAtATime = true;
-
-// What makes a row busy: its edit panel open, unsaved or submitting words, a focused field, the
-// pointer on its buttons. A focused Check button alone does not (the owner watches the result).
-{
-  const document = fakeDocument();
-  const make = (extra = []) => {
-    const row = build(document, ["div", { class: "row-wrap", id: "row-a" },
-      ["details", { class: "row-edit" }, ["summary", {}, "Show"], ["form", { action: "/topics/a/edit" }, ["input", { name: "title" }]]],
-      ["span", { class: "row-ops" }, ["form", { action: "/topics/a/check" }, ["button", {}, "Check"]]], ...extra]);
-    document.body.append(row);
-    return row;
-  };
-  const row = make();
-  assert.equal(rowBusy(row, document.body), false);
-  assert.equal(rowBusy(row, row.querySelector("button")), false);
-  assert.equal(rowBusy(row, row.querySelector("input")), true);
-  row.querySelector("details").open = true;
-  assert.equal(rowBusy(row, null), true);
-  row.querySelector("details").open = false;
-  row.querySelector("details form").dataset.dirty = "1";
-  assert.equal(rowBusy(row, null), true);
-  delete row.querySelector("details form").dataset.dirty;
-  assert.equal(rowBusy(row, null), false);
-  row.querySelector(".row-ops").hovered = true;
-  assert.equal(rowBusy(row, null), true);
-}
-verdict.busyRules = true;
+verdict.noRowSyncNoRowRequest = true;
 
 console.log(JSON.stringify(verdict));
