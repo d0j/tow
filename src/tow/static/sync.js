@@ -1284,6 +1284,8 @@
     },
     onPoll: (fn) => client.onPoll(fn),
     request,
+    // This tab's name for the server's rate: messages.js names its requests with it too.
+    tab,
     onSignOut,
     health,
     now: () => client.now(),

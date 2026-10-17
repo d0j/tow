@@ -709,6 +709,12 @@
   // Every request takes 10 s at most, its body included: a longer one is aborted and answers as
   // failed (``read`` is not called again, and ``current()`` says false to a body still read).
   const TIMEOUT_MS = 10000;
+  // This tab's name for the server's rate, the one sync.js made for its poll: the list and its
+  // markers count in this tab's bucket on this computer (without sync.js: the computer's).
+  const tabHeader = () => {
+    const tab = window.towSync?.tab;
+    return typeof tab === "string" && tab ? { "X-TOW-Tab": tab } : {};
+  };
   const within = (url, init, read) => {
     const mine = session;
     const ending = requests; // this session's: a sign-out aborts it
@@ -771,7 +777,7 @@
     }, wait);
   };
   const ask = () => {
-    const headers = { Accept: "application/json" };
+    const headers = { Accept: "application/json", ...tabHeader() };
     if (shared.etag) headers["If-None-Match"] = shared.etag;
     const read = async (response, current) => {
       if (response.status === 304) return shared.loaded;
@@ -828,7 +834,8 @@
     if (typeof fetch !== "function" || !cursor) return Promise.resolve();
     const mine = session;
     const body = new URLSearchParams({ cursor });
-    return fetch(path, { method: "POST", credentials: "same-origin", headers: { Accept: "application/json" }, body, signal: requests?.signal })
+    const headers = { Accept: "application/json", ...tabHeader() };
+    return fetch(path, { method: "POST", credentials: "same-origin", headers, body, signal: requests?.signal })
       .then(async (response) => {
         if (mine !== session) return;
         let data = null;
