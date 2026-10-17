@@ -234,3 +234,82 @@ def test_install_smoke_builds_its_nfd_name_from_code_points():
     assert "nfd=\" $(printf '\\320\\270\\314\\206')\"" in text  # и + U+0306 in UTF-8
     assert 'dir="$base/tow smoke Тест$nfd $$"' in text
     assert '[ -z "$nfd" ] || moved="$base/tow relocated Тест$nfd $$"' in text
+
+
+def _netns_views():
+    """What the D01 smoke's clients report when TOW tells the two stacks apart as it should."""
+    clean = {"status": 200, "markers": []}
+    network = {
+        "page": {"status": 303, "location": "/login", "session": ""},
+        "json": {"status": 401, "location": "", "session": ""},
+        "wrong": 401,
+        "signin": [
+            {"status": 303, "location": "/", "session": "s1"},
+            {"status": 303, "location": "/", "session": "s2"},
+        ],
+        "sessions": [True, True, True],
+        "signed_in": 200,
+        "surfaces": {"/": dict(clean), "/log.json": dict(clean)},
+        "local_only": {"status": 303, "location": "/settings?open=access", "session": ""},
+        "after_signout": {"signed_out": {"status": 303, "location": "/login?again=1", "session": ""}, "other": 200},
+    }
+    local = {"page": 200, "surfaces": {"/": {"status": 200, "markers": ["e01.mkv"]}, "/log.json": dict(clean)}}
+    return network, local
+
+
+def test_the_netns_smoke_passes_only_two_views_told_apart():
+    """D01: the network sees the sign-in page, its own sessions and no path or key; this computer
+    sees the paths and no key."""
+    smoke = _script("netns-smoke.py")
+    network, local = _netns_views()
+    assert smoke.judge(network, local) == []
+    broken = [
+        ("page", {"status": 200, "location": "", "session": ""}, "sign-in page"),
+        ("sessions", [True, True, False], "two sessions"),
+        ("local_only", {"status": 200, "location": "", "session": ""}, "was not refused"),
+        ("surfaces", {"/": {"status": 200, "markers": ["/home/owner-netns"]}}, "must not"),
+    ]
+    for key, value, said in broken:
+        changed, _ = _netns_views()
+        changed[key] = value
+        assert any(said in problem for problem in smoke.judge(changed, local)), key
+    changed, _ = _netns_views()
+    changed["after_signout"]["other"] = 303
+    assert any("the other out too" in problem for problem in smoke.judge(changed, local))
+    _, unplanted = _netns_views()
+    unplanted["surfaces"]["/"]["markers"] = []
+    assert any("was not planted" in problem for problem in smoke.judge(network, unplanted))
+    _, keys = _netns_views()
+    keys["surfaces"]["/"]["markers"] = ["e01.mkv", "SECRETUK"]
+    assert any("keys are shown" in problem for problem in smoke.judge(network, keys))
+
+
+def test_the_netns_smoke_runs_its_programs_as_this_account_with_a_minimal_environment(monkeypatch):
+    smoke = _script("netns-smoke.py")
+    monkeypatch.setenv("TOW_ROOT", "/somewhere")
+    monkeypatch.setenv("UV_CACHE_DIR", "/cache")
+    env = smoke.minimal_env()
+    assert not [name for name in env if name.startswith(("TOW_ROOT", "UV_"))]
+    assert env["TOW_NO_BROWSER"] == "1"
+    argv = smoke.as_me_in("tow-a-1", ["/x/tow", "start"], {"HOME": "/home/runner"}, ids=(1001, 118))
+    assert argv[:6] == ["sudo", "-n", "ip", "netns", "exec", "tow-a-1"]
+    assert argv[6] == "setpriv"
+    assert argv[7:10] == ["--reuid=1001", "--regid=118", "--init-groups"]
+    assert argv[-5:] == ["env", "-i", "HOME=/home/runner", "/x/tow", "start"]
+    # B reaches A by a private address: TOW's Host check lets it in, its peer is not loopback.
+    import ipaddress
+
+    for address in (smoke.ADDRESS_A, smoke.ADDRESS_B):
+        assert ipaddress.ip_address(address).is_private
+        assert not ipaddress.ip_address(address).is_loopback
+
+
+def test_the_netns_smoke_refuses_8787_and_other_systems(monkeypatch, capsys):
+    smoke = _script("netns-smoke.py")
+    with pytest.raises(SystemExit):
+        smoke.main(["--source", "x.tar.gz", "--port", "8787"])
+    assert "never on 8787" in capsys.readouterr().err
+    monkeypatch.setattr(smoke.sys, "platform", "win32")
+    with pytest.raises(SystemExit):
+        smoke.main(["--source", "x.tar.gz"])
+    assert "need Linux" in capsys.readouterr().err

@@ -80,7 +80,18 @@ def test_the_release_publishes_only_after_the_smokes_of_its_own_artifacts():
 def test_every_smokes_job_is_bounded_on_its_own_port_and_on_the_given_commit():
     _text, flow = _flow("smokes")
     jobs = flow["jobs"]
-    assert set(jobs) == {"build", "web-update", "crash", "arch", "alpine", "nonadmin", "tls", "longpaths", "macos"}
+    assert set(jobs) == {
+        "build",
+        "web-update",
+        "crash",
+        "arch",
+        "alpine",
+        "nonadmin",
+        "tls",
+        "longpaths",
+        "macos",
+        "netns",
+    }
     assert jobs["build"]["if"] == "${{ !inputs.release }}"
     for job_id, job in jobs.items():
         assert job["timeout-minutes"] <= 60, job_id
@@ -100,7 +111,7 @@ def test_every_smokes_job_is_bounded_on_its_own_port_and_on_the_given_commit():
     runs = "\n".join(_runs(job) for job in jobs.values())
     found = {int(port) for port in re.findall(r"\b(1[89]\d{3})\b", runs)}
     assert not re.search(r"\b8787\b", runs)
-    assert {18958, 18959, 18961, 18962, 18963, 18964, 18965, 18966, 18967} <= found
+    assert {18958, 18959, 18961, 18962, 18963, 18964, 18965, 18966, 18967, 18968} <= found
 
 
 def test_the_always_on_smokes_keep_their_logs_and_use_the_scripts():
@@ -114,7 +125,7 @@ def test_the_always_on_smokes_keep_their_logs_and_use_the_scripts():
     assert crash["strategy"]["matrix"]["os"] == ["windows-latest", "ubuntu-24.04", "macos-latest"]
     assert "scripts/crash-smoke.py" in _runs(crash)
     assert "--strict" in _runs(crash)  # the permissions failure leg must run on a runner
-    for job_id in ("web-update", "crash", "alpine"):
+    for job_id in ("web-update", "crash", "alpine", "netns"):
         uploads = [step for step in jobs[job_id]["steps"] if "upload-artifact" in step.get("uses", "")]
         assert uploads, job_id
         assert uploads[-1]["if"] == "always()", job_id
@@ -177,6 +188,12 @@ def test_the_substitutes_say_what_they_stand_for():
     assert "--nfd" in macos
     nfd = next(step for step in jobs["macos"]["steps"] if "install-smoke.sh" in step.get("run", ""))
     assert nfd["env"] == {"TOW_SMOKE_NFD": "1"}
+    # D01: two network namespaces of one runner, labelled as such (not a second device).
+    netns = jobs["netns"]
+    assert netns["runs-on"] == "ubuntu-24.04"
+    assert netns["name"] == "separate network stacks on one runner (Linux)"
+    assert "scripts/netns-smoke.py --source" in _runs(netns)
+    assert "set -o pipefail" in _runs(netns)
 
 
 def test_the_update_jobs_have_time_for_the_entry_file_legs():
