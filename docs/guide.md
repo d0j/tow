@@ -298,6 +298,9 @@ once it is connected, **Send a test** sends a test message and **Disconnect** re
 - Folders: Settings → Backups → Nightly backups or Backups made by hand → **Folder**; an empty field says where the
   copies go (“Default: …”). Another drive or a network share (`\\server\share`) is fine; a network share is chosen on
   the computer running TOW, not from another device.
+- TOW remembers the disk a backup folder is on once a copy was written and checked there. When that disk is not
+  connected later (or the folder is on another disk), the copy is not written to the disk below and the folder's free
+  space is not shown until the disk is back.
 
 **Keep a copy of `keys/master.key` away from the computer.** TOW creates it on the first start (`tow keys ensure`
 does it on its own) and says once to back it up. Without it, saved passwords and tokens cannot be read and copies

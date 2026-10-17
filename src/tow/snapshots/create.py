@@ -99,6 +99,11 @@ def create_snapshot(*, how: str = "auto") -> dict[str, Any]:
                 last_error="",
                 **fields,
             )
+            # The verified copy proves its folder's volume (recorded once; a missing note goes).
+            with contextlib.suppress(OSError, ValueError, UnicodeError, RecursionError, RuntimeError):
+                from tow.locations import NIGHT, remember_volume
+
+                remember_volume(NIGHT, location)
     except SnapshotError as exc:
         record_failure(str(exc))
         raise
@@ -222,8 +227,14 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
     ``proven``: the sha256 of live stores whose contents already passed the payload checks
     (``_proven_sources``); a copied store with another hash is checked here, from the copy.
     """
+    from tow.locations import NIGHT, LocationError, refuse_unseen_volume
+
     cfg = load_config()
     root = backup_root(cfg)
+    try:
+        refuse_unseen_volume(NIGHT, root)  # its disk unmounted: no copy onto the disk below
+    except LocationError as exc:
+        raise SnapshotError(str(exc)) from exc
     policy = retention_settings(cfg)
     stamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
     target = root / f"{PREFIX}{stamp}"
