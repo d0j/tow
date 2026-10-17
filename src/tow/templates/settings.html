@@ -13,20 +13,24 @@
     <h1 id="page-title">{{ t('settings.page.title') }}</h1>
   </header>
 
-  {#- Also while the last check stayed blocked by them ("Needs attention" lands here): the
-      command that says why is one copy away. A red note while it lasts, not a message. -#}
-  {% if secret_store_error or hh.check_error == 'secrets_migration_required' %}
-  {% call note(tm('settings.page.secret_store', help='/settings/help#export-import', launcher=os_launcher()), 'bad', id='secret-store', cls='secret-store', tag='div') -%}
-    <span class="secret-store-copy"><button type="button" class="ghost sm" data-copy-text="{{ os_launcher() }} keys status"{{ fix_attrs('copy_keys_status') }}>{{ t('settings.page.copy_command') }}</button></span>
-  {%- endcall %}
-  {% endif %}
-
   {# The owner's order: what TOW needs first (clients, messengers, checks), then access, copies and
      updates, then the rarely changed (the service, language and theme, optional site access). #}
   {#- What another device or TOW changes is drawn again in place (tow.web.page_sync, static/pages.js):
       each section between its comments. Updates and the Log follow the server by themselves
       (updates.js, /log.json) and are no fragments. -#}
   <div class="settings-content" id="settings-acc"><!--frags:/settings-->
+    <!--frag:settings-alerts-->
+    {#- The page's alerts: a fragment of their own, present and empty while nothing is wrong, so
+        another device's breakage or fix appears and goes in place. The passwords and tokens that
+        cannot be opened, also while the last check stayed blocked by them ("Needs attention"
+        lands here): the command that says why is one copy away. A red note while it lasts, not a
+        message. -#}
+    {%- if secret_store_error or hh.check_error == 'secrets_migration_required' %}
+    {% call note(tm('settings.page.secret_store', help='/settings/help#export-import', launcher=os_launcher()), 'bad', id='secret-store', cls='secret-store', tag='div') -%}
+      <span class="secret-store-copy"><button type="button" class="ghost sm" data-copy-text="{{ os_launcher() }} keys status"{{ fix_attrs('copy_keys_status') }}>{{ t('settings.page.copy_command') }}</button></span>
+    {%- endcall %}
+    {% endif -%}
+    <!--/frag:settings-alerts-->
     <!--frag:acc-clients-->
     <details class="settings-section settings-accordion acc" id="acc-clients"{% if open_section == 'clients' %} open{% endif %} data-q="{{ t('settings.clients.title') }} {{ clients | map(attribute='title') | unique | join(' ') }} {{ search_words.clients }}">
       <summary>

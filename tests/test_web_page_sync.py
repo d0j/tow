@@ -217,6 +217,43 @@ def test_a_messenger_connected_in_another_browser_changes_only_its_section(monke
     assert "notifier-test-telegram" in bots
 
 
+def test_the_secret_store_warning_appears_and_goes_live(clock):
+    """The red "passwords and tokens cannot be opened" note is a fragment of its own
+    (``settings-alerts``, present and empty while nothing is wrong): another device's breakage
+    or ``tow keys`` fix shows on an open Settings page without a reload. Other sections may
+    change with it (an unreadable store changes the messenger cards too)."""
+    from tow.storage.secrets import encrypted_secrets_path
+
+    _seed()
+    secrets = load_secrets()
+    secrets["telegram"] = {"token": "123456:fake-token", "chat_ids": ["1001"]}
+    save_secrets(secrets)
+    local = TestClient(app, headers=ORIGIN)
+    html = local.get("/settings").text
+    rev, digests = _marks(html)
+    assert next(iter(digests)) == "settings-alerts"
+    assert 'id="secret-store"' not in html
+    store = encrypted_secrets_path()
+    readable = store.read_bytes()
+    store.write_bytes(b"not a secrets file")  # what a broken store or a foreign key reads as
+    clock.tick()
+    broken = _page_rev(local, "/settings")
+    assert broken != rev
+    found = local.get("/page/fragments", params={"page": "/settings", "rev": broken}).json()
+    alerts = next(item for item in found["fragments"] if item["id"] == "settings-alerts")
+    assert alerts["hash"] != digests["settings-alerts"]
+    assert 'id="secret-store"' in alerts["html"]
+    assert " keys status" in alerts["html"]
+    store.write_bytes(readable)  # fixed elsewhere
+    clock.tick()
+    fixed = _page_rev(local, "/settings")
+    assert fixed == rev
+    found = local.get("/page/fragments", params={"page": "/settings", "rev": fixed}).json()
+    alerts = next(item for item in found["fragments"] if item["id"] == "settings-alerts")
+    assert alerts["hash"] == digests["settings-alerts"]
+    assert "secret-store" not in alerts["html"]
+
+
 def test_a_site_saved_in_another_browser_is_a_new_row_of_the_sites_list(clock):
     _seed()
     local = TestClient(app, headers=ORIGIN)

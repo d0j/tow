@@ -641,8 +641,8 @@ time[data-short][tabindex]:focus-visible { outline: 2px solid var(--acc); outlin
   overflow-wrap: anywhere; /* a long pattern wraps on a phone instead of running off the edge */
 }
 
-/* Settings: calm, explicit sections instead of an admin-table accordion. The title, a note and the
-   sections 9 px apart; the sections and the links below them 6 px. */
+/* Settings: calm, explicit sections instead of an admin-table accordion. The title and the sections
+   9 px apart; the sections, the page's alerts above them and the links below them 6 px. */
 .settings-page {
   max-width: 72rem; margin-inline: auto;
   display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3);
