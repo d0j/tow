@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 import yaml
 
@@ -99,7 +101,8 @@ def test_cli_bad_yaml_has_a_localized_message_not_a_traceback_or_private_values(
     monkeypatch.setattr(cli, "_use_language", lambda _argv: i18n.use(language))
     assert cli.main(["doctor", "--json"]) == cli.EXIT_CANNOT_RUN
     output = capsys.readouterr()
-    assert i18n.translate("yaml_limits.references", language) in output.out
+    # --json is ASCII (X27): the message is read back, not searched in the escaped text.
+    assert i18n.translate("yaml_limits.references", language) in json.loads(output.out)["error"]
     assert "private-marker" not in output.out + output.err
     assert "Traceback" not in output.out + output.err
 
