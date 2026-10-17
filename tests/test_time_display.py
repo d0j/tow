@@ -209,3 +209,39 @@ def test_the_log_and_download_answers_carry_the_servers_words(monkeypatch):
     answer = client.get("/topics/t1/downloads.json").json()
     assert answer["items"][0]["completed_time"]["full"] == "2026-01-10 13:00:00 UTC+01:00"  # winter in Berlin
     assert answer["last_event"]["time"]["iso"] == "2026-01-10T13:00:00+01:00"
+
+
+def test_a_tz_variable_names_the_zone_only_when_it_is_this_computers(monkeypatch):
+    """B34 (1.33.1): TOW without a named zone of its own takes the ``TZ`` variable's name only
+    when that zone has this computer's offsets (now and half a year ago); a page script otherwise
+    takes each moment's own offset."""
+    from datetime import timedelta, tzinfo
+
+    from tow.web import text
+
+    class AsThisComputer(tzinfo):
+        """A zone with this computer's offsets, whatever they are."""
+
+        def fromutc(self, dt):
+            return dt.replace(tzinfo=UTC).astimezone().replace(tzinfo=self)
+
+        def utcoffset(self, dt):
+            return dt.replace(tzinfo=None).astimezone().utcoffset()
+
+        def dst(self, dt):
+            return timedelta(0)
+
+    monkeypatch.setattr(tow.clock, "local_zone", lambda: None)
+    monkeypatch.setenv("TZ", ":Somewhere/Here")
+    monkeypatch.setattr(text, "ZoneInfo", lambda name: AsThisComputer())
+    assert text.zone_name() == "Somewhere/Here"
+
+    class FarAway(AsThisComputer):
+        def fromutc(self, dt):
+            return (dt.replace(tzinfo=UTC).astimezone() + timedelta(minutes=17)).replace(tzinfo=self)
+
+        def utcoffset(self, dt):
+            return super().utcoffset(dt) + timedelta(minutes=17)
+
+    monkeypatch.setattr(text, "ZoneInfo", lambda name: FarAway())
+    assert text.zone_name() == ""
