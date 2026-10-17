@@ -83,9 +83,11 @@ case $mode in
         install arch -x86_64
         grep -q 'runs under Rosetta' "$record/$mode-install.log" || fail 'install.sh did not notice Rosetta'
         grep -q '(aarch64-apple-darwin)' "$record/$mode-install.log" || fail 'install.sh did not choose aarch64-apple-darwin'
-        uv_archs=$(lipo -archs "$dir/runtime/bin/uv")
-        python=$(find "$dir/runtime/python" -path '*/bin/python3*' -type f | head -n 1)
-        python_archs=$(lipo -archs "$python")
+        uv_archs=$(lipo -archs "$dir/runtime/bin/uv") || fail "lipo cannot read $dir/runtime/bin/uv"
+        # The interpreter itself: bin/ also holds python3.X-config, a shell script lipo cannot read.
+        python=$(find "$dir/runtime/python" -path '*/bin/python3*' ! -name '*-config' -type f | sort | head -n 1)
+        [ -n "$python" ] || fail "no Python interpreter under $dir/runtime/python"
+        python_archs=$(lipo -archs "$python") || fail "lipo cannot read $python"
         say "uv: $uv_archs; Python ($python): $python_archs"
         [ "$uv_archs" = arm64 ] || fail "uv is $uv_archs, not arm64"
         case $python_archs in *arm64*) ;; *) fail "Python is $python_archs, not arm64" ;; esac
