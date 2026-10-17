@@ -109,15 +109,19 @@ def config() -> dict[str, Any]:
 
 def state(*, quarantine: bool = True) -> dict[str, Any]:
     """A read-only snapshot of the state. ``quarantine=False`` (the middleware's pre-check) only
-    matters when the file has to be read and turns out damaged: it is then left in place."""
-    return memo(
-        "state", (lambda: services.load_state()) if quarantine else (lambda: services.load_state(quarantine=False))
-    )
+    matters when the file has to be read and turns out damaged: it is then left in place. A
+    request that must only read (the synchronization poll: ``services.read_only_paths``) never
+    quarantines - doing so takes the data lock, whose taking runs the recovery steps."""
+    if quarantine and not services.read_only_now():
+        return memo("state", lambda: services.load_state())
+    return memo("state", lambda: services.load_state(quarantine=False))
 
 
 def history() -> dict[str, Any]:
-    """A read-only snapshot of the download history."""
-    return memo("history", lambda: services.load_download_history())
+    """A read-only snapshot of the download history (never quarantined by a poll, as ``state``)."""
+    if not services.read_only_now():
+        return memo("history", lambda: services.load_download_history())
+    return memo("history", lambda: services.load_download_history(quarantine=False))
 
 
 def secrets() -> dict[str, Any]:

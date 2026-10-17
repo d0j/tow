@@ -79,6 +79,13 @@ def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         return cleanup_status_in_lock(cfg=cfg)
 
 
+def cleanup_status_unlocked(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """``cleanup_status`` for a reader that must not take the data lock (whose taking runs the
+    recovery steps) - the web's synchronization poll. The same reading without the lock: a copy
+    committed at that very moment may read as unknown until the next look."""
+    return cleanup_status_in_lock(cfg=cfg)
+
+
 def cleanup_status_in_lock(*, cfg: dict[str, Any] | None) -> dict[str, Any]:
     result: dict[str, Any] = {"pending": None, "read_error": False, "location": "", "legacy": False}
     try:

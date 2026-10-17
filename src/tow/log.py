@@ -549,12 +549,17 @@ _TITLE_REF_RE = re.compile(r'"(topic_id|topic|hash)":\s*"((?:[^"\\]|\\.)*)"')
 _BLOCK_BYTES = 256 * 1024
 
 
-def _lines_newest_first(path: Path, *, live: bool, skip: Callable[[bytes], bool] | None = None) -> Generator[str]:
+def _lines_newest_first(
+    path: Path, *, live: bool, skip: Callable[[bytes], bool] | None = None, lock_live: bool = True
+) -> Generator[str]:
     """The lines of one log file from its end, read in blocks: the history page usually needs
     only the newest events, not the whole file (the live one can be tens of MiB). ``skip``: a
-    test of a block's whole lines (raw) that says none of them is wanted."""
+    test of a block's whole lines (raw) that says none of them is wanted. ``lock_live=False``:
+    the live file's size is taken without the log's lock, and a line still being appended at its
+    end (no newline yet) is left out - the next look has it."""
+    partial = live and not lock_live
     try:
-        if live:
+        if live and lock_live:
             with _log_file_lock():  # the size between two appends: no half-written line
                 handle = path.open("rb")
                 end = handle.seek(0, os.SEEK_END)
@@ -575,6 +580,12 @@ def _lines_newest_first(path: Path, *, live: bool, skip: Callable[[bytes], bool]
                 return
             end = start
             lines = block.split(b"\n")
+            if partial:  # the newest block: what follows its last newline is not a whole line yet
+                partial = False
+                lines.pop()
+                if not lines:
+                    rest = b""
+                    continue
             rest = lines.pop(0) if start > 0 else b""  # maybe the end of a line in the block before
             if skip is not None and skip(block[len(rest) + 1 :] if start > 0 else block):
                 continue
@@ -652,9 +663,16 @@ def _may_match(line: str, needle: str, refs: tuple[set[str], set[str]]) -> bool:
 
 
 def history_events(
-    *, group: str = "", text: str = "", limit: int = 300, title_index: Mapping[str, str] | None = None
+    *,
+    group: str = "",
+    text: str = "",
+    limit: int = 300,
+    title_index: Mapping[str, str] | None = None,
+    lock_live: bool = True,
 ) -> list[dict[str, Any]]:
-    """Newest first, across the current log and its rotated files (G7)."""
+    """Newest first, across the current log and its rotated files (G7). ``lock_live=False``: a
+    snapshot without the log's lock (the web's synchronization poll), its newest line only once
+    it is whole."""
     kinds = HISTORY_GROUPS.get(group) or frozenset().union(*HISTORY_GROUPS.values())
     needle = text.strip().casefold()
     # A quote or a backslash in the search text is escaped in the raw line: no shortcut then.
@@ -667,7 +685,7 @@ def history_events(
     for index, candidate in enumerate(files):
         # Only the live file is being written: rotated files are read without the log lock,
         # so a running check is not held up by the history page.
-        with closing(_lines_newest_first(candidate, live=index == 0, skip=skip)) as lines:
+        with closing(_lines_newest_first(candidate, live=index == 0, skip=skip, lock_live=lock_live)) as lines:
             for line in lines:
                 kind = _KIND_RE.search(line)
                 if kind is None or kind.group(1) not in kinds:

@@ -780,6 +780,7 @@ def history_fragments(request: Request, filters: Mapping[str, str]) -> dict[str,
             text=filters["q"],
             limit=page_sync.HISTORY_LIMIT,
             title_index=index_event_titles(sample.state.get("topics") or []),
+            lock_live=False,  # a snapshot: the checker appending meanwhile is never waited for
         )
         rows = page_sync.history_rows(events, sample.state, sample.config)
         entries = page_sync.history_entries(page_sync.page_request(request, "/history"), rows)
@@ -795,7 +796,8 @@ def _backup_inventory(cfg: dict[str, Any]) -> Any:
         for name, read in (
             ("night", lambda: services.snapshot_status()),
             ("copies", lambda: services.list_snapshots(limit=None)),
-            ("night_cleanup", lambda: services.night_cleanup_status(cfg=cfg)),
+            # Without the data lock (whose taking runs the recovery steps): a poll only looks.
+            ("night_cleanup", lambda: services.night_cleanup_status_unlocked(cfg=cfg)),
             ("points", lambda: services.list_restore_points()),
             ("points_cleanup", lambda: services.restore_point_cleanup_status(cfg=cfg)),
             ("service", lambda: services.service_status()),
