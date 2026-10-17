@@ -27,7 +27,13 @@ otherwise.
   are refused, and so is a `Host` TOW does not answer (DNS rebinding): on this computer only `localhost` and
   loopback addresses, from other devices an IP address of the home network or the VPN, the computer's plain name or
   `name.local`. Writes require a matching `Origin` (CSRF) and a stated size (forms at most 512 KiB); pages are
-  served with a strict Content-Security-Policy.
+  served with a strict Content-Security-Policy. The requests that keep open pages up to date are read-only and
+  limited per session of a device and per tab of this computer (`web.rate_burst`, `web.rate_per_sec`).
+- **What a device on the network sees.** Errors and diagnostics shown to a device on the network leave out folder
+  and file paths and the private part of a link; a user name and password inside a link are hidden from every
+  viewer, this computer included. The folders you configured stay visible as settings. Turning network access on
+  or off, Site access connections, choosing a network share as a backup folder and accepting a disk as the same one
+  (**Same disk — accept**) are done only on this computer.
 - **Secrets at rest.** Site logins, client passwords, messenger tokens, cookies and the password record are
   encrypted in `data/secrets.enc` with the master key in `keys/master.key`, which no backup or export contains.
   Every start closes the TOW folder to other accounts of the computer, so they can neither change the program
@@ -55,7 +61,11 @@ otherwise.
   `tow import --accept-security-settings` takes the file's. An import made while this computer's saved passwords
   cannot be opened brings in no password for other devices and turns network access off.
 - **Your torrents and folders.** TOW changes only torrents it added (tag `tow`) and refuses system and profile
-  folders as download or backup targets.
+  folders as download or backup targets. A backup is not written to a folder that is no longer on the disk TOW
+  recorded for it.
+- **Setup and updates.** TOW's uv reads only the install's own `runtime/uv.toml`, never the account's or the
+  computer's `uv.toml`, so a package index, mirror or Python source set there for other projects does not reach
+  TOW's setup and updates.
 
 ## What it does not protect
 

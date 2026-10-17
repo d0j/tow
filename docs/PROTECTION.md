@@ -22,7 +22,9 @@ a separately operated service. Selecting its type in TOW does not install it. An
    from LAN, link-local and cloud metadata destinations. The browser is outside TOW's network sandbox.
 2. On the TOW computer, open the local web address → Settings → Site access → Add a connection. Choose its type, enter
    its loopback/private IP address and, with two or more connections, its order. Only `/v1` is accepted; localhost
-   becomes 127.0.0.1. A saved connection is removed by its own **Remove** button.
+   becomes 127.0.0.1. A saved connection is removed by its own **Remove** button. From another device the section
+   is read-only. Two Settings tabs that each add a connection at the same time both keep theirs; any other field
+   changed in both asks which value to keep.
 3. Tick **Use this connection** and **Use challenge recovery**, then Save. Saving does not contact or validate the
    service; the API remains unchecked until a real applying check has a reason to use it. An API answer is not proof of
    site access; its observed status and any service cooldown are shown separately.
