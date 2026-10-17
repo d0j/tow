@@ -714,6 +714,32 @@ def test_a_catalog_read_once_is_kept_and_a_broken_one_warns_once(locales, monkey
     assert "de" in i18n.codes()
 
 
+def test_a_language_folder_that_could_not_be_listed_for_a_moment_is_listed_again(locales, monkeypatch):
+    """Before: a failed listing of the language folder was cached as "no languages" (English
+    keys only, no language in the picker) until TOW restarted."""
+    clock = _Clock()
+    monkeypatch.setattr(i18n, "_clock", clock)
+    aside = locales.with_name("locales-aside")
+    locales.rename(aside)  # the folder cannot be listed for a moment
+    try:
+        i18n.reload()
+        assert i18n.codes() == ["en"]
+        assert i18n.translate("common.save", "ru") == "common.save"
+        assert i18n.canonical("ru") is None
+    finally:
+        aside.rename(locales)
+    version = i18n.version()
+    clock.now += i18n.RETRY_SEC - 0.1
+    assert i18n.codes() == ["en"]  # not listed again inside the window
+    assert i18n.translate("common.save", "ru") == "common.save"
+    clock.now += 0.2
+    assert i18n.codes() == ["en", "ru"]  # no reload()
+    assert i18n.canonical("RU") == "ru"
+    assert i18n.translate("common.save", "ru") == "Сохранить"
+    assert i18n.translate("common.save", "en") == "Save"
+    assert i18n.version() != version
+
+
 def test_a_missing_language_stays_absent(locales, monkeypatch):
     clock = _Clock()
     monkeypatch.setattr(i18n, "_clock", clock)

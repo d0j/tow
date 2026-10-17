@@ -26,8 +26,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
-- If a language file could not be read for a moment at start (for example while an antivirus scanned it), TOW
-  showed text keys until it restarted; it now reads the file again.
+- If a language file, or the folder that holds them, could not be read for a moment at start (for example while
+  an antivirus scanned it), TOW showed text keys or offered English only until it restarted; it now reads it again.
 - Windows: TOW limits its folder to your account again when another account's rule sits on the folder itself
   (a copy an interrupted earlier attempt left, or one added by hand), and a file deep inside that refuses the
   change no longer stops it half way. Before, every start warned that other accounts can change the TOW folder.
