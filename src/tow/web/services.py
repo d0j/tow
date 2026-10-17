@@ -120,11 +120,11 @@ from tow.supervisor.layout import install_id, next_check_at, site_retry_status, 
 from tow.sync_sources import log_marker as sync_log_marker
 from tow.sync_sources import quarantined as sync_quarantined
 from tow.sync_sources import read as sync_read
+from tow.sync_sources import recovery_pending as sync_recovery_pending
 from tow.sync_sources import secrets_from_bytes
 from tow.sync_sources import source_paths as sync_source_paths
 from tow.sync_sources import stat_only as sync_stat
 from tow.sync_sources import supervisor_running as sync_supervisor_running
-from tow.sync_sources import transaction_pending as sync_transaction_pending
 from tow.title import guess_topic_title
 from tow.trackers.presets import defaults as tracker_site_defaults
 from tow.undo import apply as apply_undo
@@ -243,10 +243,10 @@ __all__ = [
     "sync_log_marker",
     "sync_quarantined",
     "sync_read",
+    "sync_recovery_pending",
     "sync_source_paths",
     "sync_stat",
     "sync_supervisor_running",
-    "sync_transaction_pending",
     "test_notifier",
     "topic_timer_status",
     "tracker_site_defaults",

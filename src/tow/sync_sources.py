@@ -158,6 +158,55 @@ def transaction_pending(journal: Path) -> bool:
         return True
 
 
+# Every journal or marker a writer leaves while the stores may not belong together, and that
+# the recovery steps of the data lock (``tow.storage.locks.RECOVERY_STEPS``) act on: the site
+# settings' (and every store) transaction, a check's commit, an import (a portable file or a
+# restore point) and a night-copy restore. Their names are their modules' (tests/test_web_sync).
+CHECK_JOURNAL = ".tow-check-transaction"
+NIGHT_RESTORE_MARKER = ".tow-night-restore.json"
+IMPORT_CHECKPOINTS = "import-checkpoints"
+IMPORT_TRANSACTION = "TRANSACTION.json"
+MAX_IMPORT_CHECKPOINTS = 256
+
+
+def recovery_pending() -> str:
+    """Which transaction is being written or waits for recovery ("" none): "site", "check",
+    "night_restore" or "import". Looked at without a lock, a write or a folder made; a marker
+    that cannot be looked at counts as there (the recovery refuses writes for it too)."""
+    from tow.site_journal import journal_root
+
+    with paths.read_only():
+        data = paths.data_dir()
+        markers = {"site": journal_root(), "check": data / CHECK_JOURNAL, "night_restore": data / NIGHT_RESTORE_MARKER}
+    for name, marker in markers.items():
+        if transaction_pending(marker):
+            return name
+    return "import" if _import_pending(data / IMPORT_CHECKPOINTS) else ""
+
+
+def _import_pending(root: Path) -> bool:
+    """An import's transaction still "prepared": the import runs, or a crash stopped it."""
+    import json
+
+    try:
+        entries = [entry for entry in os.scandir(root) if entry.is_dir(follow_symlinks=False)]
+    except FileNotFoundError, NotADirectoryError:
+        return False
+    except OSError:
+        return True
+    for entry in sorted(entries, key=lambda item: item.name, reverse=True)[:MAX_IMPORT_CHECKPOINTS]:
+        reading = read(Path(entry.path) / IMPORT_TRANSACTION, 64 * 1024)
+        if reading.status == "missing":
+            continue
+        try:
+            status = json.loads(reading.content or b"").get("status") if reading.status == "ok" else None
+        except ValueError, AttributeError, RecursionError:
+            status = None
+        if status not in {"committed", "rolled_back"}:
+            return True
+    return False
+
+
 def supervisor_running() -> bool:
     """``tow run`` of this install holds its lock (probed without waiting, nothing created)."""
     from tow.supervisor.layout import running

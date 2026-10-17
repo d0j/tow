@@ -182,7 +182,10 @@ class Sampler:
         generation = services.write_generation()
         for _attempt in range(3):
             paths = services.sync_source_paths()
-            if services.sync_transaction_pending(paths["journal"]):
+            # Every transaction's marker (the site settings', a check's commit, an import or a
+            # restore point, a night-copy restore): while one is there the stores may not belong
+            # together, and its recovery is the data lock's (``recover_later``), never the poll's.
+            if services.sync_recovery_pending():
                 raise Unavailable("recovery")
             readings = {
                 "state": services.sync_read(paths["state"], STORE_LIMIT),
@@ -196,9 +199,9 @@ class Sampler:
             readings["log"] = services.sync_log_marker(paths["log"])
             # The journal of a transaction is made before its first write and removed after its
             # last: none before and none after, and the stores unchanged since read, is one state.
-            if services.sync_transaction_pending(paths["journal"]):
+            if services.sync_recovery_pending():
                 raise Unavailable("recovery")
-            stores = ("state", "config", "secrets")
+            stores = ("state", "history", "config", "secrets")
             if all(
                 readings[name].status == "error" or services.sync_stat(paths[name]).stamp == readings[name].stamp
                 for name in stores
@@ -1055,6 +1058,10 @@ def recover_later() -> threading.Thread | None:
 
         def run() -> None:
             try:
+                # Taking the data lock runs every recovery step (a check's commit, an import, a
+                # night-copy restore, the site journal: tow.storage.locks.RECOVERY_STEPS).
+                with services.persistence_lock():
+                    pass
                 services.recover_store_transaction()
                 if services.undo_cleanup_needed():
                     services.cleanup_secret_undo()
