@@ -941,12 +941,16 @@
       rowSync.settle().then(() => window.towList?.refresh?.({ keep: true }), () => {});
     }, 300);
   };
-  ["input", "keydown", "pointerdown", "focusin", "submit", "change"].forEach((name) => document.addEventListener(name, (event) => {
+  // The owner's own gestures make a row "used" (a key - its keyup lands where Tab took the focus -,
+  // the pointer, typing, a change, a submit); a focus the page put back after a save (app.js) is
+  // no gesture: it never holds a row by itself.
+  ["input", "keydown", "keyup", "pointerdown", "submit", "change"].forEach((name) => document.addEventListener(name, (event) => {
     const row = event.target?.closest?.(".row-wrap[id^='row-']") || null;
     if (name === "pointerdown") pressed = row;
     if (row) touched = { row, at: Date.now() };
     activity();
   }, true));
+  document.addEventListener("focusin", activity, true);
   ["pointerup", "pointercancel", "focusout", "reset", "pointerout"].forEach((name) => document.addEventListener(name, () => {
     if (name !== "pointerout") pressed = null;
     activity();

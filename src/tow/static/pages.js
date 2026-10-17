@@ -278,7 +278,9 @@
   const FIELDS = "input, select, textarea, [contenteditable]";
   let touched = { node: null, at: 0 };
   let pressed = null;
-  ["input", "keydown", "pointerdown", "focusin", "change"].forEach((name) => document.addEventListener(name, (event) => {
+  // Only the owner's gestures (a key, the pointer, typing, a change): a focus the page put back
+  // after a save is not one.
+  ["input", "keydown", "keyup", "pointerdown", "change"].forEach((name) => document.addEventListener(name, (event) => {
     touched = { node: event.target, at: Date.now() };
     if (name === "pointerdown") pressed = event.target;
   }, true));
