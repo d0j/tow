@@ -57,6 +57,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - A status pill in **Settings** that wraps on a phone has its lines centred, as every pill's text is.
 - An empty rule field shows its example on one line, ending with "…", in every browser: some browsers made it
   scroll or cut it on a narrow phone.
+- The torrent client's name in its card in **Settings** is no longer cut at the bottom in some browsers.
 
 ### Security
 
