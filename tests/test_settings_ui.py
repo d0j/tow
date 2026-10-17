@@ -454,22 +454,23 @@ def test_a_secret_field_says_saved_only_when_a_secret_is_saved():
 
 
 def test_secret_fields_have_an_eye_and_the_right_autofill():
-    """A client's password is its own sign-in, a messenger's token, webhook or key is no password
-    at all: neither offers to generate a new password (new-password did). TOW's own new password
-    keeps new-password."""
+    """No secret field but TOW's own may be filled with a saved login: a browser that saved TOW's
+    sign-in filled it into the client's password and the messengers' secrets (1.33.1 QA-01), past
+    ``section-* current-password`` and ``off``. They ask for a new password, as TOW's own new
+    password does; only "current password" is TOW's sign-in. No user name pairs with it."""
     from tow.store import save_secrets
 
     save_secrets({"qbittorrent": {"host": "127.0.0.1", "port": 8080, "username": "admin", "password": "pw"}})
     page = TestClient(app, headers={"Origin": "http://127.0.0.1"}).get("/settings").text
-    assert 'autocomplete="section-client-0 username"' in _tag(page, "q_user-client-0")
-    assert 'autocomplete="section-client-0 current-password"' in _tag(page, "q_pass-client-0")
+    assert 'autocomplete="off"' in _tag(page, "q_user-client-0")
+    assert 'autocomplete="new-password"' in _tag(page, "q_pass-client-0")
     for field_id in ("nf-telegram-token", "nf-discord-webhook_url", "nf-whatsapp-apikey"):
         tag = _tag(page, field_id)
-        assert 'autocomplete="off"' in tag
+        assert 'autocomplete="new-password"' in tag
         assert 'spellcheck="false"' in tag
         assert 'autocapitalize="off"' in tag
     assert 'autocomplete="new-password"' in _tag(page, "lan-password")
-    assert "new-password" not in page.split('id="acc-access"', 1)[0]  # only TOW's own password
+    assert "current-password" not in page.split('id="acc-access"', 1)[0]  # TOW's sign-in only there
     for field_id in ("q_pass-client-0", "nf-telegram-token", "nf-discord-webhook_url", "lan-password"):
         assert re.search(
             rf'<span class="secret"><input id="{field_id}"[^>]*><button type="button" class="ico reveal" '

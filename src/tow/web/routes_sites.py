@@ -17,7 +17,7 @@ from tow.web import _context, edit_base, page_sync, services, site_merge
 from tow.web.messages import flash_redirect, request_flash
 from tow.web.site_actions import add_site, delete_site, edit_site, save_site, site_edit_base
 from tow.web.site_form import NewSite, SiteEdit
-from tow.web.site_store import with_login
+from tow.web.site_store import SIGN_IN_PASSWORD, is_sign_in_password, with_login
 from tow.web.templating import TEMPLATES, site_tones
 from tow.web.text import t
 from tow.web.views import add_draft, issue_notes, site_edit_draft, site_title_of
@@ -285,6 +285,8 @@ def sites_save(
 def sites_login(name: str, username: str = Form(""), password: str = Form("")) -> Response:
     if name not in (services.load_config().get("trackers") or {}):
         return flash_redirect("/sites", "web.sites.no_site", "err")
+    if is_sign_in_password(password):
+        return flash_redirect("/sites", SIGN_IN_PASSWORD, "err")
     if (username.strip() or password.strip()) and (
         refused := save_site(secrets=with_login(services.load_secrets(), name, username, password))
     ):

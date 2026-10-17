@@ -96,6 +96,18 @@ def save_secrets_with_undo(
     return save_together(target, write)
 
 
+SIGN_IN_PASSWORD = "web.secret.sign_in_password"
+
+
+def is_sign_in_password(*typed: str) -> bool:
+    """What a form that stores a secret (a client's or a site's password, a messenger's token,
+    webhook or key) carries is TOW's own sign-in: a browser that saved it may fill it into such a
+    field, and a Save would store it there. Such a form is refused with ``SIGN_IN_PASSWORD``."""
+    if not any(isinstance(value, str) and value.strip() for value in typed):
+        return False
+    return services.is_sign_in_secret(services.load_secrets(), *typed)
+
+
 def with_login(secrets: dict[str, Any], name: str, username: str, password: str) -> dict[str, Any]:
     """``secrets`` with the site's login as typed (an empty field keeps what is saved)."""
     updated = copy.deepcopy(secrets)

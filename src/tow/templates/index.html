@@ -128,9 +128,9 @@
     <div class="field">
     <div class="field-row">
       <div class="field"><label for="tracker-username-{{ credential_prompt.id }}">{{ t('home.auth.username') }}</label>
-        <input id="tracker-username-{{ credential_prompt.id }}" class="w-m" name="username" value="{{ credential_prompt.username }}" autocomplete="username" required></div>
+        <input id="tracker-username-{{ credential_prompt.id }}" class="w-m" name="username" value="{{ credential_prompt.username }}" autocomplete="off" required></div>
       <div class="field"><label for="{{ password_id }}">{{ t('home.auth.password') }}</label>
-        <span class="secret"><input id="{{ password_id }}" class="w-m" name="password" type="password" autocomplete="current-password" required aria-describedby="{{ password_id }}-note">{{ reveal(password_id, t('home.auth.password')) }}</span></div>
+        <span class="secret"><input id="{{ password_id }}" class="w-m" name="password" type="password" autocomplete="new-password" required aria-describedby="{{ password_id }}-note">{{ reveal(password_id, t('home.auth.password')) }}</span></div>
     </div>
     <p class="field-hint" id="{{ password_id }}-note">{{ t('home.auth.password_note') }}</p>
     </div>

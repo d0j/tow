@@ -53,6 +53,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - On **Settings**, a messenger's last delivery error and a failed nightly backup no longer show folders, files or
   a link's secret query to a device on the network, as everywhere else; and no device, this computer included, is
   shown the credentials in a link of such an error. Your configured folders still show as before.
+- A browser that saved TOW's sign-in password no longer fills it into a torrent client's or a site's password,
+  a messenger's token, webhook or key, or a site sign-in on **Home**, where a Save then stored it. These fields
+  now ask for their own password, and a save that carries TOW's password is refused with a note.
 
 ### Added
 
