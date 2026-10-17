@@ -162,3 +162,36 @@ def test_a_download_path_without_the_number_is_refused(path):
         valid_tracker_path(path, label="Download path", needs_id=True)
     assert valid_tracker_path("/download/{id}", label="Download path", needs_id=True) == "/download/{id}"
     assert valid_tracker_path("/login.php", label="Login path") == "/login.php"
+
+
+# --- B34: lines the Windows coverage never ran (1.33.1) ---------------------------------------
+
+
+def test_a_site_edit_takes_a_known_access_policy_and_names_an_unknown_one():
+    from tow.web.site_form import FieldRefused, SiteEdit, edit_site_paths
+
+    spec: dict = {}
+    edit_site_paths(spec, SiteEdit(protection="off", topic_path="/t/{id}"))
+    assert spec["protection"] == "off"
+    with pytest.raises(FieldRefused) as refused:
+        edit_site_paths({}, SiteEdit(protection="always", topic_path="/t/{id}"))
+    assert refused.value.field == "protection"
+
+
+def test_a_site_edit_checks_its_infohash_path_under_its_own_field():
+    from tow.web.site_form import FieldRefused, SiteEdit, edit_site_paths
+
+    spec: dict = {}
+    edit_site_paths(spec, SiteEdit(infohash_path="/hash/{id}", topic_path="/t/{id}"))
+    assert spec["infohash_path"] == "/hash/{id}"
+    with pytest.raises(FieldRefused) as refused:
+        edit_site_paths({}, SiteEdit(infohash_path="/hash/without-the-id", topic_path="/t/{id}"))
+    assert refused.value.field == "infohash_path"
+
+
+def test_a_refusal_that_names_its_own_field_keeps_it():
+    from tow.web import site_form
+
+    with pytest.raises(site_form.FieldRefused) as refused, site_form._about("outer"):
+        raise site_form.FieldRefused("inner reason", "inner")
+    assert refused.value.field == "inner"

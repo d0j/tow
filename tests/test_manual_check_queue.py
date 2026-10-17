@@ -1226,3 +1226,38 @@ def test_a_waiting_checks_words_follow_its_subject_in_lower_case():
         "Северное сияние — проверка в очереди"
     )
     assert message_text({"subject": "", "text": queued}).startswith("Проверка в очереди")
+
+
+def test_an_action_of_an_expired_job_is_forgotten_and_names_a_new_one(consumers):
+    """B34 (1.33.1): a click's action id whose job has expired (an hour after it ended) no longer
+    names it: the next submit with that id is a job of its own."""
+    first, added = check_jobs.submit(
+        topic_id="b", apply=True, lang="en", perform=check_actions.perform_check, action="click-1"
+    )
+    assert added
+    with check_jobs.LOCK:
+        check_jobs.JOBS[first["id"]].update(status="done", finished_at=time.monotonic() - check_jobs.RESULT_TTL - 1)
+        check_jobs.PENDING.clear()
+    again, added = check_jobs.submit(
+        topic_id="b", apply=True, lang="en", perform=check_actions.perform_check, action="click-1"
+    )
+    assert added
+    assert again["id"] != first["id"]
+    assert first["id"] not in check_jobs.JOBS
+
+
+def test_a_lane_that_cannot_start_leaves_no_job_behind(monkeypatch):
+    """B34 (1.33.1): when the lane's consumer cannot start, the job, its action and its follow-up
+    go again and the error reaches the caller: nothing waits for a consumer that never runs."""
+
+    def refuse(*_args, **_kwargs):
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(check_jobs, "_start", refuse)
+    monkeypatch.setattr(check_jobs, "_WORKERS", {})
+    before = dict(check_jobs.JOBS)
+    with pytest.raises(RuntimeError):
+        check_jobs.submit(topic_id="b", apply=True, lang="en", perform=check_actions.perform_check, action="click-2")
+    assert before == check_jobs.JOBS
+    assert "click-2" not in check_jobs.ACTIONS
+    assert all(job_id in check_jobs.JOBS for job_id in check_jobs.PENDING)

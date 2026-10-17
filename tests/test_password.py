@@ -566,3 +566,31 @@ def test_with_a_password_set_the_network_box_saves_alone():
     local.post("/settings/access", data={}, follow_redirects=False)  # the box cleared sends nothing
     assert load_config()["allow_lan"] is False
     assert lan_password_matches("old-horse-battery", load_secrets()["lan_auth"])
+
+
+def test_setup_says_so_when_the_password_cannot_be_stored(monkeypatch):
+    """B34 (1.33.1): the setup page's two store refusals ran on no Windows test: an unreadable
+    store (400) and a failed write of the password with its network setting (503). Nothing is
+    half saved: no password, first start not passed."""
+    from tow import access
+    from tow.store import SecretStoreError
+    from tow.store_transaction import TransactionError
+    from tow.web import services
+
+    data = {"lan_password": "pony-river-lamp", "lan_password2": "pony-river-lamp", "allow_lan": "1"}
+    for owner, name, error, status in (
+        (access, "web_record", SecretStoreError("store"), 400),
+        (services, "commit_stores", TransactionError("write"), 503),
+    ):
+        _fresh_install()
+
+        def refuse(*_args, error=error, **_kwargs):
+            raise error
+
+        with monkeypatch.context() as patched:
+            patched.setattr(owner, name, refuse)
+            response = TestClient(app, headers=ORIGIN).post("/setup", data=data, follow_redirects=False)
+        assert response.status_code == status, name
+        assert 'name="lan_password"' in response.text  # the setup page again, with its message
+        assert not load_config().get("setup_done")
+        assert access.RECORD_KEY not in load_secrets()
