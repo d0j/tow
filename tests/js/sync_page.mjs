@@ -282,6 +282,33 @@ verdict.focusKeptFieldProtects = true;
 }
 verdict.hungRowsGivenUpAndAskedAgain = true;
 
+// ---- a focus the page put back after the owner's own save (app.js: a focusin without a key, a
+// pointer or typing) does not hold the row: another device's change shows with the next answer, the
+// focus kept on the row's summary. A key pressed in the row is the owner's: that holds it.
+{
+  const summary = document.getElementById("row-a").querySelector("summary");
+  summary.focus();
+  (document.listeners.focusin || []).forEach(({ fn }) => fn({ target: summary }));
+  const next = build(document, ["div", { class: "row-wrap", id: "row-a", "data-q": "a" }, ["details", { class: "row-edit" }, ["summary", {}, "a next"], ["div", { class: "edit-panel" }]]]);
+  built.set("<a-next>", next);
+  answer({ topics: { rev: REV(6).replace(/6/g, "c"), full: false, order: ["n", "a", "b"], changed: ["a"], removed: [] } });
+  rowAnswers.push(({ rev: asked }) => respond(200, { ok: true, rev: asked, order: ["n", "a", "b"], rows: [{ id: "a", html: "<a-next>", hash: "h6-a" }], missing: [], deferred: [] }));
+  while (syncAnswers.length) await run(50);
+  await run(500);
+  assert.equal(document.getElementById("row-a"), next);
+  assert.equal(document.activeElement, next.querySelector("summary"));
+  (document.listeners.keydown || []).forEach(({ fn }) => fn({ target: next.querySelector("summary") }));
+  answer({ topics: { rev: REV(6).replace(/6/g, "d"), full: false, order: ["n", "a", "b"], changed: ["a"], removed: [] } });
+  rowAnswers.push(({ rev: asked }) => respond(200, { ok: true, rev: asked, order: ["n", "a", "b"], rows: [{ id: "a", html: "<a-later>", hash: "h7-a" }], missing: [], deferred: [] }));
+  while (syncAnswers.length) await run(50);
+  await run(500);
+  assert.equal(document.getElementById("row-a"), next);
+  assert.equal(next.dataset.syncState, "changed");
+  document.activeElement = document.body;
+  rowAnswers.length = 0;
+}
+verdict.restoredFocusDoesNotHoldTheRow = true;
+
 // ---- the version: 5 s later an idle page reloads; activity in those 5 s cancels it and says why
 const before = reloads;
 answer({ version: { rev: REV(1).replace("1", "b"), app: "1.33.0", static: "s2" } });
@@ -344,6 +371,21 @@ while (!releaseBody && clock.now() < 1_900_000_000_000) await run(50);
 assert.ok(sent.some((r) => r.url.startsWith("/page/fragments?page=%2Fhistory")));
 const ended = [];
 sync.onSignOut?.(() => ended.push("told"));
+
+// ---- pages.js the same: a focus put back by the page does not hold a fragment; the owner's key does.
+{
+  const section = build(document, ["section", { id: "acc-x" }, ["button", { id: "x-go" }, "Go"]]);
+  document.getElementById("main").append(section);
+  const button = section.querySelector("button");
+  button.focus();
+  (document.listeners.focusin || []).forEach(({ fn }) => fn({ target: button }));
+  assert.equal(window.towPages.protectedElement(section), false);
+  (document.listeners.keydown || []).forEach(({ fn }) => fn({ target: button }));
+  assert.equal(window.towPages.protectedElement(section), true);
+  document.activeElement = document.body;
+  section.remove();
+}
+verdict.restoredFocusDoesNotHoldAFragment = true;
 
 // ---- signing out by the form: nothing asked any more, nothing applied
 const polls = sent.filter((r) => r.url.startsWith("/sync.json")).length;
