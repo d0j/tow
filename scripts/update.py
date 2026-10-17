@@ -239,6 +239,12 @@ TEXTS = {
         "the data changed after the update was cut off ({path}): putting back the update snapshot ({snapshot}) would"
         " lose that, so nothing was changed. To go back to TOW {version} and that snapshot anyway, run: {command}"
     ),
+    "uv_settings_invalid": "the uv settings of {ref} cannot be written ({error}); nothing was updated",
+    "uv_config_failed": "uv's settings for this install were not written again: {error}",
+    "uv_config_invalid": (
+        'uv cannot use {path} ({error}): correct or remove your lines below "# --- your settings below ---";'
+        " nothing was updated"
+    ),
 }
 
 
@@ -385,10 +391,15 @@ def launcher_env(
     # modules; the owner's UV_OFFLINE and the like stay (as in the launchers).
     for name in ("UV_PYTHON", "PYTHONHOME", "PYTHONPATH"):
         env.pop(name, None)
+    # uv reads TOW's own settings file, never the account's or the system's uv.toml (``UV_CONFIG_FILE``,
+    # written by ``write_uv_config`` before uv runs). An inherited UV_NO_CONFIG would make uv drop
+    # .python-version too (measured): TOW's Python would be any Python.
+    env.pop("UV_NO_CONFIG", None)
     env.update(
         {
             "TOW_ROOT": str(root),
             "PYTHONIOENCODING": "utf-8",
+            "UV_CONFIG_FILE": str(runtime / UV_CONFIG),
             "UV_PYTHON_INSTALL_DIR": str(runtime / "python"),
             "UV_PYTHON_BIN_DIR": str(runtime / "bin"),
             "UV_CACHE_DIR": str(runtime / "cache"),
@@ -398,6 +409,111 @@ def launcher_env(
     )
     own = runtime / "bin" / ("uv.exe" if os.name == "nt" else "uv")
     return uv or (str(own) if own.is_file() else "uv"), env
+
+
+# --- uv's settings of the install: <TOW>/runtime/uv.toml -----------------------------------------
+#
+# ``UV_CONFIG_FILE`` makes uv read this file alone: not the account's or the system's uv.toml, and
+# not the project's [tool.uv] either (measured, uv 0.9.11 to 0.12.23), while .python-version still
+# counts. So the file carries every [tool.uv] setting of the code's pyproject.toml (the required uv
+# version, the pinned Python manifest), in a standalone uv.toml's syntax: no [tool.uv] header, which
+# uv refuses there. Those lines are TOW's and are written again from the code each time; the owner's
+# own settings (native-tls, an index, a mirror) go below ``UV_CONFIG_MARKER`` and are kept. The
+# launchers write the same head from scripts/runtime-uv.toml (tests/test_update.py keeps both equal).
+UV_CONFIG = "uv.toml"
+UV_CONFIG_MARKER = "# --- your settings below ---"
+UV_CONFIG_HEAD = (
+    "# uv's settings for this TOW install: uv reads this file instead of the account's uv.toml\n"
+    "# (docs/PORTABLE.md, section 1). TOW writes the lines above the marker again from\n"
+    "# app/pyproject.toml; settings of your own go below it and are kept. Do not repeat TOW's keys there.\n"
+)
+
+
+def _toml_value(value: Any) -> str:
+    """A [tool.uv] value as TOML: a string (JSON's escapes are TOML's), a Boolean, an integer, or a
+    list of those; anything else is refused, so the parity of the file is never guessed."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=True)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
+    raise ValueError(f"a {type(value).__name__} value")
+
+
+def uv_settings_text(pyproject: str) -> str:
+    """The managed head of runtime/uv.toml for a pyproject.toml's text: its [tool.uv] settings,
+    each read back the same (ValueError: malformed TOML, a duplicate key or a value of another kind)."""
+    import tomllib
+
+    try:
+        settings = tomllib.loads(pyproject).get("tool", {}).get("uv", {})
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"pyproject.toml: {exc}") from exc
+    if not isinstance(settings, dict):
+        raise ValueError("pyproject.toml: [tool.uv] is not a table")  # noqa: TRY004 - one error kind for callers
+    lines = []
+    for key, value in settings.items():
+        if not re.fullmatch(r"[a-z][a-z0-9-]*", key):
+            raise ValueError(f"pyproject.toml: [tool.uv] key {key!r}")
+        try:
+            lines.append(f"{key} = {_toml_value(value)}\n")
+        except ValueError as exc:
+            raise ValueError(f"pyproject.toml: [tool.uv] {key} is {exc}") from exc
+    text = UV_CONFIG_HEAD + "".join(lines) + UV_CONFIG_MARKER + "\n"
+    if tomllib.loads(text) != settings:
+        raise ValueError("pyproject.toml: [tool.uv] does not read back the same")
+    return text
+
+
+def uv_config_text(pyproject: str, current: str | None) -> str:
+    """runtime/uv.toml: the head of ``pyproject`` and the owner's lines of ``current`` (all of it
+    when it has no marker). ValueError when the result would not be a uv.toml uv can read: the
+    owner's lines malformed, or repeating a key of TOW's."""
+    import tomllib
+
+    head = uv_settings_text(pyproject)
+    lines = (current or "").splitlines(keepends=True)
+    marker = next((index for index, line in enumerate(lines) if line.strip() == UV_CONFIG_MARKER), None)
+    own = "".join(lines if marker is None else lines[marker + 1 :])
+    text = head + own
+    try:
+        mine = tomllib.loads(own)
+        reserved = sorted(set(mine) & set(tomllib.loads(head)))
+        if reserved:
+            raise ValueError(f"{', '.join(reserved)}: TOW's own setting")
+        tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(str(exc)) from exc
+    return text
+
+
+def write_uv_config(root: Path, app: Path) -> bool:
+    """runtime/uv.toml for the code in ``app`` (its pyproject.toml), the owner's lines kept, on the
+    disk before uv runs; True when it was written (it differed). ValueError: see uv_config_text."""
+    path = root / "runtime" / UV_CONFIG
+    try:
+        current: str | None = path.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        current = None
+    text = uv_config_text((app / "pyproject.toml").read_text(encoding="utf-8"), current)
+    if text == current:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{UV_CONFIG}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+            _sync(handle)
+        replace(temporary, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            temporary.unlink()
+        raise
+    _sync_folder(path.parent)
+    return True
 
 
 def version_tuple(text: str) -> tuple[int, ...] | None:
@@ -1764,6 +1880,7 @@ class Update:
             code = "restoring"
             self.restore_snapshot()
             self.code.finish_rollback()
+            self.repair_uv_config()  # the restored code's settings: its launchers may run uv
             code = "started"
             if not self.start_and_check(previous_version):
                 raise UpdateError(self.text("unhealthy", version=previous_version, seconds=int(self.health_timeout)))
@@ -2115,6 +2232,36 @@ class Update:
         ]
         self.refuse_waiting("content_ref_pending", waiting, CONTENT_REF_SINCE)
 
+    def refuse_unusable_uv_config(self, target: str) -> None:
+        """runtime/uv.toml for the target is checked while TOW still runs: the target's [tool.uv]
+        must be writable as a uv.toml, and the owner's own lines must stay readable beside it."""
+        pyproject = self.code.target_text(target, "pyproject.toml")
+        try:
+            uv_settings_text(pyproject or "")
+        except ValueError as exc:
+            raise UpdateError(self.text("uv_settings_invalid", ref=self.ref, error=exc)) from exc
+        path = self.root / "runtime" / UV_CONFIG
+        try:
+            uv_config_text(pyproject or "", path.read_text(encoding="utf-8-sig") if path.exists() else None)
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise UpdateError(self.text("uv_config_invalid", path=path, error=exc)) from exc
+
+    def uv_config(self) -> None:
+        """runtime/uv.toml for the code now in app/, before uv runs on it (target or rollback)."""
+        path = self.root / "runtime" / UV_CONFIG
+        try:
+            write_uv_config(self.root, self.app)
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise UpdateError(self.text("uv_config_invalid", path=path, error=exc)) from exc
+
+    def repair_uv_config(self) -> None:
+        """The file for the code that runs now, where no uv runs here: an install an older updater
+        brought to this version (it never wrote one), or a recovered switch. Said when it fails."""
+        try:
+            self.uv_config()
+        except UpdateError as exc:
+            self.say("uv_config_failed", error=exc)
+
     def run(self) -> int:
         try:
             self.check_install()
@@ -2129,6 +2276,7 @@ class Update:
                     self.refuse_unreadable_data(target)
                     self.refuse_pending_receipts(target)
                     self.refuse_pending_content_refs(target)
+                    self.refuse_unusable_uv_config(target)
             except BaseException:
                 code.discard()
                 raise
@@ -2142,6 +2290,7 @@ class Update:
             # refresh) gets the start files of the version it runs here, not only at the next.
             self.refresh_root_files(self.app, record=False)
             self.refresh_runtime_copy()
+            self.repair_uv_config()
             return 0
         self.say("start", previous=code.short(previous), target=code.short(target), ref=self.ref, root=self.root)
         self.write_state(
@@ -2172,6 +2321,7 @@ class Update:
                     self.progress("installing")
                     code.switch(target)
                     try:
+                        self.uv_config()  # the target's settings, before its sync
                         self.sys.uv_sync()
                     except UpdateError as exc:
                         raise UpdateError(self.text("sync_failed", error=exc)) from exc
@@ -2232,7 +2382,12 @@ class Update:
         step("stop the new version", stop_new)
         step("check out the previous code", lambda: self.code.switch_back(previous))
         code_back = steps[-1]["ok"]
-        step("uv sync", self.sys.uv_sync)
+
+        def sync_previous() -> None:
+            self.uv_config()  # the previous code's settings, before its sync
+            self.sys.uv_sync()
+
+        step("uv sync", sync_previous)
         # True: put back; None: the new version had changed nothing (both fine).
         restored = step("put back data and config", lambda: self.restore_snapshot() or None)
         data_back = steps[-1]["ok"]

@@ -15,6 +15,9 @@ rem sweeps (data\tmp is swept daily, and a lock file removed while it is held is
 if /i not "%TOW_ROOT%"=="%TOW_APP%" if not exist "%TOW_ROOT%\runtime\uv-tmp\" mkdir "%TOW_ROOT%\runtime\uv-tmp" || exit /b 3
 if /i not "%TOW_ROOT%"=="%TOW_APP%" set "TMP=%TOW_ROOT%\runtime\uv-tmp"
 if /i not "%TOW_ROOT%"=="%TOW_APP%" set "TEMP=%TOW_ROOT%\runtime\uv-tmp"
+rem uv's settings inside the install (runtime\uv.toml), before uv runs.
+if /i not "%TOW_ROOT%"=="%TOW_APP%" call "%%~dp0tow-uv-config.cmd" >nul 2>&1 || echo TOW setup: uv's settings "%TOW_ROOT%\runtime\uv.toml" could not be written.
+if /i not "%TOW_ROOT%"=="%TOW_APP%" if errorlevel 1 exit /b 3
 set "TOW_REBUILD="
 "%TOW_UV%" --version >nul 2>&1 || echo TOW setup: uv was not found. Put uv.exe into "%TOW_ROOT%\runtime\bin" or on PATH.
 "%TOW_UV%" --version >nul 2>&1 || exit /b 3

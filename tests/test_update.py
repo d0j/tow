@@ -636,6 +636,7 @@ def test_the_launchers_environment_is_the_updaters(install):
         "UV_CACHE_DIR",
         "UV_PROJECT_ENVIRONMENT",
         "UV_MANAGED_PYTHON",
+        "UV_CONFIG_FILE",
     }
     for name in names:
         assert f"export {name}=" in posix
@@ -645,6 +646,7 @@ def test_the_launchers_environment_is_the_updaters(install):
     assert env["UV_PYTHON_BIN_DIR"] == str(root / "runtime" / "bin")
     assert env["UV_CACHE_DIR"] == str(root / "runtime" / "cache")
     assert env["UV_PROJECT_ENVIRONMENT"] == str(app / ".venv")
+    assert env["UV_CONFIG_FILE"] == str(root / "runtime" / "uv.toml")
     assert (env["UV_MANAGED_PYTHON"], env["TOW_ROOT"], env["PATH"]) == ("1", str(root), "x")
     assert uv == "uv"
     own = root / "runtime" / "bin" / ("uv.exe" if os.name == "nt" else "uv")
@@ -663,7 +665,7 @@ def test_the_updater_clears_account_wide_python_settings_like_the_launchers(inst
     assert env["UV_OFFLINE"] == "1"
     windows = (SCRIPT.parent / "tow-env.cmd").read_text(encoding="utf-8")
     posix = (SCRIPT.parent / "tow").read_text(encoding="utf-8")
-    for name in ("UV_PYTHON", "PYTHONHOME", "PYTHONPATH"):
+    for name in ("UV_PYTHON", "PYTHONHOME", "PYTHONPATH", "UV_NO_CONFIG"):
         assert f'if /i not "%TOW_ROOT%"=="%TOW_APP%" set "{name}="' in windows
         assert f"    unset {name}\n" in posix
     assert "unset UV_PYTHON PYTHONHOME PYTHONPATH" in (SCRIPT.parent / "tow-start").read_text(encoding="utf-8")
