@@ -2,7 +2,8 @@ name: real systems
 
 # What the gate replaces with fakes, for real: qBittorrent, Transmission and Deluge, each started
 # on the runner with a login of this run and driven through TOW's own adapters and a real
-# `tow check --apply` against a local site (tests/integration/test_real_clients.py); and the
+# `tow check --apply` against a local site (tests/integration/test_real_clients.py), qBittorrent
+# on Windows too; the native probes of Linux and macOS (tests/integration/test_real_probes.py); and the
 # autostart of each OS - Task Scheduler, launchd, systemd --user - turned on for a throwaway
 # install made the way the owner makes one, started by the OS and turned off again
 # (tests/integration/test_real_autostart.py, in autostart.yml, which release.yml runs for a tag
@@ -224,6 +225,139 @@ jobs:
           for name in qbittorrent transmission deluge-web deluged; do
             [ ! -f "$CLIENTS/$name.pid" ] || kill "$(cat "$CLIENTS/$name.pid")" 2>/dev/null || true
           done
+
+  # TC-10: the real qBittorrent on Windows - the owner's system - with Windows save paths: a
+  # pinned release from Chocolatey (whose package checks the installer's checksum; the program's
+  # version, SHA-256 and signature are recorded), started with a login of this run, and the same
+  # adapter and `tow check --apply` tests in a folder with a Cyrillic name on drive D: (the add's
+  # save path read back, a relocation read back). Separate from the fake client of the local QA.
+  clients-windows:
+    name: qBittorrent (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      TOW_REAL_CLIENTS: "1"
+      TOW_REAL_QBITTORRENT: 127.0.0.1:18080
+      TOW_REAL_CLIENT_USER: tow
+      QBITTORRENT_VERSION: "5.2.4"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          save-cache: false
+      - name: Install Python from .python-version
+        run: uv python install --no-bin --no-registry
+      - name: Sync locked environment
+        run: uv sync --frozen
+      - name: Install the pinned qBittorrent and record what was installed
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          choco install qbittorrent --version $env:QBITTORRENT_VERSION -y --no-progress
+          if ($LASTEXITCODE) { throw "choco exited with $LASTEXITCODE" }
+          $exe = Join-Path $env:ProgramFiles 'qBittorrent\qbittorrent.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw "no $exe" }
+          $version = (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion
+          $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+          $signature = Get-AuthenticodeSignature -LiteralPath $exe
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\clients\logs" | Out-Null
+          "qBittorrent $version; SHA-256 $hash; signature $($signature.Status) $($signature.SignerCertificate.Subject)" |
+            Tee-Object -FilePath "$env:RUNNER_TEMP\clients\logs\provenance.txt"
+          if (-not "$version".StartsWith($env:QBITTORRENT_VERSION)) { throw "qBittorrent $version, not $env:QBITTORRENT_VERSION" }
+          "QBT_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: A login for this run; qBittorrent started with it on 127.0.0.1:18080
+        shell: pwsh
+        run: |
+          $secret = uv run --no-project python -c "import secrets; print(secrets.token_hex(16))"
+          Write-Host "::add-mask::$secret"
+          "TOW_REAL_CLIENT_SECRET=$secret" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $env:TOW_REAL_CLIENT_SECRET = $secret
+          $clients = Join-Path $env:RUNNER_TEMP 'clients'
+          $profileDir = Join-Path $clients 'qbittorrent'
+          $config = Join-Path $profileDir 'qBittorrent\config'
+          New-Item -ItemType Directory -Force -Path $config, (Join-Path $clients 'downloads') | Out-Null
+          # The Web UI login as qBittorrent keeps it: PBKDF2-SHA512, salt and key in base64.
+          $key = uv run --no-project python -c "import base64, hashlib, os; s = os.urandom(16); d = hashlib.pbkdf2_hmac('sha512', os.environ['TOW_REAL_CLIENT_SECRET'].encode(), s, 100000, 64); print(base64.b64encode(s).decode() + ':' + base64.b64encode(d).decode())"
+          $downloads = (Join-Path $clients 'downloads') -replace '\\', '/'
+          $ini = @(
+            '[LegalNotice]', 'Accepted=true', '',
+            '[BitTorrent]', 'Session\DHTEnabled=false', 'Session\LSDEnabled=false', 'Session\PeXEnabled=false',
+            "Session\DefaultSavePath=$downloads", '',
+            '[Preferences]', 'Connection\UPnP=false',
+            'WebUI\Enabled=true', 'WebUI\Address=127.0.0.1', 'WebUI\Port=18080',
+            "WebUI\Username=$env:TOW_REAL_CLIENT_USER", "WebUI\Password_PBKDF2=`"@ByteArray($key)`""
+          )
+          Set-Content -LiteralPath (Join-Path $config 'qBittorrent.ini') -Value $ini -Encoding utf8
+          $process = Start-Process -FilePath $env:QBT_EXE -PassThru -WindowStyle Hidden `
+            -ArgumentList "--profile=`"$profileDir`"", '--webui-port=18080', '--confirm-legal-notice'
+          $process.Id | Set-Content -LiteralPath (Join-Path $clients 'qbittorrent.pid')
+      - name: Wait until qBittorrent answers with that login
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 5 --data-urlencode "username=$TOW_REAL_CLIENT_USER" \
+              --data-urlencode "password=$TOW_REAL_CLIENT_SECRET" http://127.0.0.1:18080/api/v2/auth/login | grep -qx 'Ok.'; then
+              echo "qBittorrent answers with this run's login"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::qBittorrent does not answer with this run's login within 120 s"
+          exit 1
+      - name: TOW's adapter and `tow check --apply` against the real qBittorrent, Windows paths with Cyrillic
+        timeout-minutes: 20
+        shell: pwsh
+        run: |
+          $base = Join-Path $env:RUNNER_TEMP ('pytest ' + (-join [char[]](0x0422, 0x0435, 0x0441, 0x0442)))
+          uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_clients.py -k qbittorrent --basetemp $base
+          if ($LASTEXITCODE) { throw "pytest exited with $LASTEXITCODE" }
+      - name: The client's logs and what was installed
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: client-logs-windows
+          path: |
+            ${{ runner.temp }}/clients/logs
+            ${{ runner.temp }}/clients/qbittorrent/qBittorrent/data/logs
+          if-no-files-found: warn
+      - name: Stop the client
+        if: always()
+        shell: pwsh
+        run: |
+          $file = Join-Path $env:RUNNER_TEMP 'clients\qbittorrent.pid'
+          if (Test-Path -LiteralPath $file) { Stop-Process -Id ([int](Get-Content -LiteralPath $file)) -Force -ErrorAction SilentlyContinue }
+
+  # TC-13: the POSIX backend's native probes on real Linux and macOS, each fallback forced and the
+  # branch that ran checked (tests/integration/test_real_probes.py).
+  probes:
+    name: native probes (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      TOW_REAL_PROBES: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          save-cache: false
+      - name: Install Python from .python-version
+        run: uv python install --no-bin --no-registry
+      - name: Sync locked environment
+        run: uv sync --frozen
+      - name: Port owner, command line and boot time through the forced fallbacks
+        timeout-minutes: 10
+        run: uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_probes.py
 
   # The OS autostart of the three systems (autostart.yml, which release.yml runs for a tag too);
   # the weekly run does not pass on a runner that cannot run it.

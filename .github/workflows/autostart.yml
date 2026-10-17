@@ -30,9 +30,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-24.04]
+        # Both Ubuntu LTS versions: 26.04's systemd too (TC-14).
+        os: [windows-latest, macos-latest, ubuntu-24.04, ubuntu-26.04]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    # The autostart tests, then an update under the OS manager and its rollback (TC-05).
+    timeout-minutes: 70
     env:
       TOW_REAL_AUTOSTART: "1"
       TOW_REAL_AUTOSTART_PORT: "18877"
@@ -106,9 +108,11 @@ jobs:
             echo "::warning::$reason"
             echo "TOW_REAL_AUTOSTART_SKIP=$reason" >>"$GITHUB_ENV"
           fi
-      - name: tow autostart on, the OS starts TOW, tow autostart off
-        timeout-minutes: 20
+      - name: tow autostart on, the OS starts TOW, an update under it and its rollback, tow autostart off
+        timeout-minutes: 50
         shell: bash
+        env:
+          TOW_REAL_AUTOSTART_SOURCE: ${{ runner.temp }}/tow-source.tar.gz
         run: uv run --frozen pytest -q -ra -p no:cacheprovider tests/integration/test_real_autostart.py
       - name: The install's logs
         if: failure()

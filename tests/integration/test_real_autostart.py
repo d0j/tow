@@ -296,3 +296,135 @@ def test_autostart_without_signing_in():
         stop_tow(install)
     finally:
         leave_nothing(install)
+
+
+# --- TC-05: an update while autostart is on -------------------------------------------------------
+
+SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
+TERMINAL = {"ok", "refused", "failed", "rolled_back", "recovered", "interrupted", "superseded"}
+
+
+def _script(name: str, module: str) -> Any:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(module, SCRIPTS / name)
+    assert spec is not None
+    assert spec.loader is not None
+    loaded = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(loaded)
+    return loaded
+
+
+def _post(port: int, path: str, form: dict[str, str]) -> tuple[int, dict[str, Any]]:
+    from urllib.error import HTTPError
+    from urllib.parse import urlencode
+    from urllib.request import Request
+
+    origin = f"http://127.0.0.1:{port}"
+    request = Request(origin + path, data=urlencode(form).encode(), headers={"Origin": origin}, method="POST")
+    try:
+        with build_opener(ProxyHandler({})).open(request, timeout=30) as response:
+            return response.status, json.loads(response.read() or b"{}")
+    except HTTPError as exc:
+        return exc.code, json.loads(exc.read() or b"{}")
+
+
+def _get(port: int, path: str) -> dict[str, Any]:
+    try:
+        with build_opener(ProxyHandler({})).open(f"http://127.0.0.1:{port}{path}", timeout=5) as response:
+            value = json.loads(response.read())
+    except OSError, ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _version_under_the_os(install: Install, version: str, what: str) -> None:
+    deadline = time.monotonic() + START_SEC
+    while time.monotonic() < deadline and (health(install.port) or {}).get("version") != version:
+        time.sleep(2)
+    assert (health(install.port) or {}).get("version") == version, f"{what}: TOW {version} does not answer\n" + (
+        diagnostics(install)
+    )
+    running, said = started_by_the_os()
+    assert running, f"{what}: TOW {version} is not the one the OS manager runs\n{said}" + diagnostics(install)
+
+
+def _web_update(install: Install, adapter: Any, folder: Path, version: str) -> dict[str, Any]:
+    """Settings' update to ``version`` (a loopback release, the harness adapter injected into the
+    install's environment, TOW restarted by the OS so every process has it); its final status."""
+    origin, server, _asked = adapter.serve(folder, f"v{version}")
+    files: list[Path] = []
+    try:
+        files = adapter.install(install.root / "app" / ".venv" / "Lib" / "site-packages", origin, f"v{version}")
+        stop_tow(install)
+        assert trigger().returncode == 0
+        assert wait_health(install.port, answering=True, seconds=START_SEC), diagnostics(install)
+        code, answer = _post(install.port, "/updates/install", {"version": version})
+        assert (code, answer.get("status")) == (202, "queued"), (code, answer)
+        deadline = time.monotonic() + 900
+        status: dict[str, Any] = {}
+        while time.monotonic() < deadline and status.get("status") not in TERMINAL:
+            time.sleep(2)
+            status = _get(install.port, "/updates/status") or status
+        print(f"/updates/status: {status}", flush=True)
+        return status
+    finally:
+        server.shutdown()
+        server.server_close()
+        for path in files:
+            path.unlink(missing_ok=True)
+
+
+def _terminal_update(install: Install, smoke: Any, folder: Path, version: str) -> int:
+    """The updater command `tow update` prints, with the local release of ``version``."""
+    printed = run([str(install.launcher), "update", "--ref", f"v{version}"])
+    found = smoke.COMMAND_RE.search(printed.stdout)
+    assert printed.returncode == 0, printed.stdout + printed.stderr
+    assert found, printed.stdout
+    argv = [found.group(1), found.group(2), "--ref", f"v{version}", "--source", str(folder / smoke.SOURCE_NAME)]
+    argv += ["--sums", str(folder / "SHA256SUMS"), "--health-timeout", "180", "--wait-minutes", "3"]
+    return run(argv, timeout=1500).returncode
+
+
+def test_an_update_with_autostart_on_goes_through_the_os_manager_and_rolls_back(tmp_path):
+    """TC-05: Windows - Settings' update of a TOW the scheduled task runs: the task starts the new
+    version, and a broken one is rolled back to the previous, again under the task. Linux and macOS -
+    the web update is refused under systemd and launchd (the manager would stop it with TOW); the
+    terminal update stops TOW through the manager, starts the new version through it, and a broken
+    one is rolled back to the previous, still under the manager."""
+    install = the_install()
+    source = Path(os.environ.get("TOW_REAL_AUTOSTART_SOURCE", ""))
+    if not source.is_file():
+        pytest.fail("TOW_REAL_AUTOSTART_SOURCE must name the commit's source archive")
+    smoke = _script("update-smoke.py", "update_smoke")
+    adapter = _script("update_source_adapter.py", "update_source_adapter")
+    smoke.candidate_release(source, tmp_path / "good", "1.99.0")
+    broken = smoke.make_broken(source, tmp_path / "broken-source.tar.gz")
+    smoke.candidate_release(broken, tmp_path / "broken", "1.99.1")
+    stop_tow(install)
+    try:
+        code, result = tow_json(install, "autostart", "on")
+        assert (code, result.get("ok")) == (0, True), result
+        assert trigger().returncode == 0
+        _version_under_the_os(install, install.version, "autostart on")
+        if OS == "windows":
+            status = _web_update(install, adapter, tmp_path / "good", "1.99.0")
+            assert status.get("status") == "ok", status
+            _version_under_the_os(install, "1.99.0", "the web update")
+            status = _web_update(install, adapter, tmp_path / "broken", "1.99.1")
+            assert status.get("status") == "rolled_back", status
+            _version_under_the_os(install, "1.99.0", "the rollback of a broken web update")
+        else:
+            before = (health(install.port) or {}).get("version")
+            code, answer = _post(install.port, "/updates/install", {"version": "1.99.0"})
+            assert code == 409, (code, answer)
+            assert answer.get("ok") is False, answer
+            assert (health(install.port) or {}).get("version") == before, "the refused web update changed TOW"
+            assert _terminal_update(install, smoke, tmp_path / "good", "1.99.0") == 0, diagnostics(install)
+            _version_under_the_os(install, "1.99.0", "the terminal update")
+            assert _terminal_update(install, smoke, tmp_path / "broken", "1.99.1") == 1, diagnostics(install)
+            state = json.loads((install.root / "update-state.json").read_text(encoding="utf-8"))
+            assert state.get("status") == "rolled_back", state
+            _version_under_the_os(install, "1.99.0", "the rollback of a broken terminal update")
+    finally:
+        leave_nothing(install)
