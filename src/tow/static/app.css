@@ -289,6 +289,9 @@ textarea {
 }
 /* A placeholder reads like a hint (the browser's grey was 3.6:1 in the dark theme). */
 ::placeholder { color: var(--mut); opacity: 1; }
+/* An empty rule field stays one row: its example ends with "…" rather than wrapping. WebKit grew
+   it for only part of a wrapped example (46 px for 53 at 320 px), which then scrolled. */
+textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* One field height everywhere (--field-h): 36 px, 44 px on a phone or a touch screen. */
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { height: var(--field-h); }
 @media (max-width: 720px), (pointer: coarse) {
