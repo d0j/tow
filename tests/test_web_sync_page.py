@@ -147,3 +147,25 @@ def test_the_static_version_follows_sync_js(monkeypatch, tmp_path):
     before = templating._static_asset_version()
     (tmp_path / "sync.js").write_bytes((tmp_path / "sync.js").read_bytes() + b"\n// changed\n")
     assert templating._static_asset_version() != before
+
+
+def _versioned_assets() -> list[str]:
+    """Every script and stylesheet a template links with the static version (``?v=``)."""
+    templates = templating.PACKAGE_DIR / "templates"
+    found = set()
+    for page in templates.rglob("*.html"):
+        found.update(re.findall(r"/static/([\w.-]+\.(?:js|css))\?v=", page.read_text(encoding="utf-8")))
+    return sorted(found)
+
+
+@pytest.mark.parametrize("name", _versioned_assets())
+def test_every_versioned_asset_changes_the_static_version(monkeypatch, tmp_path, name):
+    """Final review 1.33.0 #15: a change confined to pages.js kept its immutable address and the
+    advertised static version, so open pages never loaded it."""
+    for path in templating.STATIC_DIR.iterdir():
+        if path.is_file():
+            (tmp_path / path.name).write_bytes(path.read_bytes())
+    monkeypatch.setattr(templating, "STATIC_DIR", tmp_path)
+    before = templating._static_asset_version()
+    (tmp_path / name).write_bytes((tmp_path / name).read_bytes() + b"\n/* changed */\n")
+    assert templating._static_asset_version() != before
