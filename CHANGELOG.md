@@ -28,7 +28,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   to its result. A hidden tab, or a TOW that does not answer, is still asked every 5 seconds. While a page of
   TOW is open, TOW keeps running up to 6 seconds longer once the release is ready, so every open page, on
   another device too, shows the update before TOW restarts. The other tabs of the browser that started it show
-  it at once.
+  it at once. During the restart a page says "TOW is restarting…", no longer the result of an earlier update,
+  and then the new result.
 
 ### Fixed
 

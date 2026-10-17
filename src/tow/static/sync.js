@@ -187,9 +187,9 @@
         if (payload && typeof payload.rev === "string") offer(area, payload, body.now_ts);
       }
     };
-    const told = (ok) => pollers.forEach((fn) => {
+    const told = (ok, status = 0) => pollers.forEach((fn) => {
       try {
-        fn(api, ok);
+        fn(api, ok, status);
       } catch {
         // one broken view never stops the others
       }
@@ -253,7 +253,7 @@
         if (answer.date && Math.abs(answer.date - now() - offset) > 2000) offset = answer.date - now();
         offerAgain();
         succeeded();
-        told(true);
+        told(true, status);
         return;
       }
       if (status === 200 && answer.body?.ok === true) {
@@ -264,11 +264,11 @@
         deliver(answer.body);
         offerAgain();
         succeeded();
-        told(true);
+        told(true, status);
         return;
       }
       failed(status === 429 || status === 503 ? Math.max(0, Number(answer?.retryAfter) || 0) * 1000 : 0);
-      told(false);
+      told(false, status); // 0: no answer at all (TOW unreachable, or 10 s without one)
     };
     // Ask now: shown again, back from the cache, online again (``kind`` "show"), or another tab's
     // hint ("hint", coalesced within 250 ms). A hint never cuts a failure's wait short, and nothing
@@ -312,7 +312,8 @@
           }
         }
       },
-      // After every answer (ok: true for 200 and 304, false for a failure).
+      // After every answer: fn(client, ok, status) - ok true for 200 and 304, false for a failure,
+      // whose HTTP status is 0 when there was no answer at all.
       onPoll: (fn) => { pollers.push(fn); },
       ack: (area, rev) => {
         if (!stopped && typeof rev === "string") applied[area] = rev;
