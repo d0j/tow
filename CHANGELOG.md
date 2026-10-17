@@ -20,6 +20,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Windows: reading `config.yaml` at the moment another part of TOW saves it no longer fails with "Permission
+  denied"; the read waits for that save.
 - Transmission: a file whose name Windows reserves (`CON`, `aux.txt`, `COM1`…) is matched again. Transmission
   lists and writes it as `_CON`, `_aux.txt`, and TOW took that for another file when it confirmed an add, chose
   files or checked the overlap with other torrents.

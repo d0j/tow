@@ -45,6 +45,47 @@ def test_config_yaml_uses_atomic_write_and_reads_back(monkeypatch, tmp_path):
     assert list(path.parent.glob(".config.yaml.*.tmp")) == []
 
 
+def test_config_read_during_a_save_waits_for_the_save_under_the_lock(monkeypatch, tmp_path):
+    # Before: on Windows a read that opened config.yaml while another save replaced it failed
+    # with PermissionError (the gate on windows-latest: test_config_yaml_uses_atomic_write_and_reads_back).
+    # Now it reads once more under the persistence lock, which a save holds through its replace.
+    import contextlib
+
+    from tow import config
+
+    path = tmp_path / "config.yaml"
+    path.write_bytes(b"bind: 127.0.0.1\n")
+    events: list[str] = []
+    real_read = config.read_yaml_text
+
+    def read(target):
+        events.append("read")
+        if len(events) == 1:
+            raise PermissionError(13, "Permission denied", str(target))
+        return real_read(target)
+
+    @contextlib.contextmanager
+    def lock():
+        events.append("lock")
+        yield
+
+    monkeypatch.setattr(config, "read_yaml_text", read)
+    monkeypatch.setattr(config, "persistence_lock", lock)
+    assert config._config_text(path) == "bind: 127.0.0.1\n"
+    assert events == ["read", "lock", "read"]
+
+
+def test_a_config_that_stays_unreadable_still_says_so(monkeypatch, tmp_path):
+    from tow import config
+
+    def read(target):
+        raise PermissionError(13, "Permission denied", str(target))
+
+    monkeypatch.setattr(config, "read_yaml_text", read)
+    with pytest.raises(PermissionError):
+        config._config_text(tmp_path / "config.yaml")
+
+
 def test_corrupt_json_is_quarantined_and_fails_closed(tmp_path):
     path = tmp_path / "state.json"
     path.write_text("{broken", encoding="utf-8")
