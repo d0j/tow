@@ -60,7 +60,6 @@ from tow.messages_feed import MarkerRefused as MessageMarkerRefused
 from tow.messages_feed import feed as message_feed
 from tow.messages_feed import reconcile_update as reconcile_update_result
 from tow.messages_feed import render as render_message_feed
-from tow.messages_feed import scrub_display
 from tow.mirrors import mirror_observations
 from tow.mirrors import note_signed_in as _note_signed_in
 from tow.mirrors import prefer_host as _prefer_host
@@ -89,6 +88,7 @@ from tow.restore_points import (
     restore_portable_bundle,
 )
 from tow.restore_points import cleanup_status as restore_point_cleanup_status
+from tow.scrub import scrub_display
 from tow.snapshots import (
     check_snapshot,
     create_snapshot,
