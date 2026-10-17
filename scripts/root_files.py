@@ -27,10 +27,11 @@ for %%I in ("%~dp0.") do set "TOW_DIR=%%~fI"
 rem An update cut off while it replaced the code leaves its record, and app\ (app\scripts too) may
 rem hold half of either version: the rule of app\scripts\tow-start.cmd, checked here before anything
 rem in app\ runs (not when the record says the switch is finished, nor while an update holds
-rem .update.lock). PowerShell reads both.
+rem .update.lock). PowerShell reads both, with cmdlets only (Constrained Language Mode too): byte 0 of
+rem the lock cannot be read while it is held.
 set "TOW_CUT="
 if exist "%~dp0.update-switch.json" set "TOW_CUT=1"
-if defined TOW_CUT "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$d = $env:TOW_DIR; try { $j = Get-Content -LiteralPath (Join-Path $d '.update-switch.json') -Raw | ConvertFrom-Json; if ($j.phase -eq 'accepted' -or $j.restored -eq $true) { exit 0 } } catch {}; try { $f = [IO.File]::Open((Join-Path $d '.update.lock'), 'Open', 'ReadWrite', 'ReadWrite') } catch { exit 3 }; try { $f.Lock(0, 1) } catch { $f.Close(); exit 0 }; $f.Unlock(0, 1); $f.Close(); exit 3" >nul 2>&1 && set "TOW_CUT="
+if defined TOW_CUT "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$d = $env:TOW_DIR; try { $j = Get-Content -LiteralPath (Join-Path $d '.update-switch.json') -Raw | ConvertFrom-Json; if ($j.phase -eq 'accepted' -or $j.restored -eq $true) { exit 0 } } catch {}; try { $null = Get-Content -LiteralPath (Join-Path $d '.update.lock') -Encoding Byte -TotalCount 1 -ErrorAction Stop } catch { if ($_.Exception.HResult -eq -2147024863) { exit 0 } }; exit 3" >nul 2>&1 && set "TOW_CUT="
 if defined TOW_CUT echo TOW was not started: an update was cut off while it replaced the code in "%TOW_DIR%". Run "Update TOW.cmd" there again: it puts the previous version back first.
 if not defined TOW_CUT if not exist "%~dp0app\scripts\tow-start.cmd" set "TOW_CUT=2"
 if "%TOW_CUT%"=="2" echo TOW was not started: its code is incomplete, "%~dp0app\scripts\tow-start.cmd" is missing. To put it back, run "Update TOW.cmd" there in a terminal with the version you had: "Update TOW.cmd" vX.Y.Z

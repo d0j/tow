@@ -507,7 +507,9 @@ def test_windows_powershell_probes_write_utf8(monkeypatch):
     WindowsBackend().process_command(123)
     assert len(scripts) == 2
     for args in scripts:
-        assert args[4].startswith("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ")
+        # Tried first, its failure caught: Constrained Language Mode refuses it, and the answer
+        # is then ASCII anyway (tests/test_constrained_language.py).
+        assert args[4].startswith("try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }; ")
 
 
 # --- Windows: processes -------------------------------------------------------------------------
