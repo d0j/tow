@@ -1,7 +1,9 @@
 {%- from "_note.html" import note -%}
 {%- from "_conflict.html" import base_field, conflict_box -%}
 {#- A refused save's conflict brings back the owner's draft (settings_merge.protection_draft):
-    each field's value, each connection's under providers:<id>:<field>. -#}
+    each field's value, each connection's under providers:<id>:<field>; the cards are then the
+    draft's whole collection (settings_merge.protection_recovery: a card only in the draft is
+    p.draft, with no Remove of its own). -#}
 {%- set pc = edit_conflict if edit_conflict and edit_conflict.kind == 'protection' else none -%}
 {%- set pd = pc.draft if pc else {} -%}
 <details class="settings-section settings-accordion acc" id="acc-protection"{% if open_section == 'protection' %} open{% endif %} data-q="{{ ([t('protection_ui.title')] + ([t('protection_ui.add')] if protection.cards | selectattr('new') | list else []) + (protection.cards | rejectattr('new') | map(attribute='title') | unique | list) + [t('protection_ui.search')]) | join(' ') }}">
@@ -61,7 +63,7 @@
             </div>
             {#- P1: a saved connection is removed by its own button (its own form below, with only its
                 id: a draft in another card is neither sent nor saved). -#}
-            {% if not p.new %}<div class="settings-actions"><button type="submit" class="ghost danger" form="protection-remove-{{ p.id }}">{{ t('settings.common.remove') }}</button></div>{% endif %}
+            {% if not p.new and not p.draft %}<div class="settings-actions"><button type="submit" class="ghost danger" form="protection-remove-{{ p.id }}">{{ t('settings.common.remove') }}</button></div>{% endif %}
             </div>
           </details>
           {% endfor %}
@@ -78,7 +80,7 @@
         <div class="settings-actions"><button type="submit">{{ t('common.save') }}</button></div>
       </fieldset>
     </form>
-    {% if access_local %}{% for p in protection.cards if not p.new %}
+    {% if access_local %}{% for p in protection.cards if not p.new and not p.draft %}
     <form id="protection-remove-{{ p.id }}" method="post" action="/settings/protection/remove" data-return-target="acc-protection" data-confirm="{{ t('protection_ui.remove_confirm', title=p.title) }}" data-confirm-label="{{ t('settings.common.remove') }}" data-confirm-danger hidden><input type="hidden" name="provider_id" value="{{ p.id }}"></form>
     {% endfor %}{% endif %}
     <details class="technical-details">
