@@ -326,6 +326,30 @@ def test_browser_pass_targets_clipping_and_empty_rows():
     assert ".restore-point-row { grid-template-columns: 1fr; row-gap: var(--sp-2); }" in CSS
 
 
+def test_the_messages_panel_keeps_its_head_and_scrolls_its_list():
+    """1.33 QA: the shared list (up to 50 entries) ran past the panel's 26 rem, the whole panel scrolled
+    and its head - the title, Mark all read, Clear - scrolled away with the entries (30 clipping and
+    inset findings). The panel is a column that clips; its head stays, the list alone scrolls."""
+    messages = (STATIC / "messages.css").read_text(encoding="utf-8")
+    panel = _rule(".msg-panel", messages)
+    assert "display: flex; flex-direction: column" in panel
+    assert "overflow: hidden" in panel
+    assert "overflow: auto" not in panel
+    assert "max-height: min(26rem, 60dvh)" in panel
+    assert "flex: none" in _rule(".msg-panel-head", messages)
+    listed = _rule(".msg-list", messages)
+    assert "overflow: auto" in listed
+    assert "min-block-size: 0" in listed
+    assert "overscroll-behavior: contain" in listed
+    base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
+    panel_html = base[base.index('<div class="msg-panel"') : base.index("</ol>", base.index('<div class="msg-panel"'))]
+    head = panel_html[panel_html.index('<div class="msg-panel-head">') : panel_html.index('<p class="msg-empty"')]
+    assert "data-messages-read" in head  # the head's buttons, outside the list
+    assert "data-messages-clear" in head
+    assert head.count("<div") == head.count("</div>")
+    assert '<ol class="msg-list" data-messages-list>' in panel_html
+
+
 def test_the_text_after_a_chevron_starts_18px_from_it_and_menu_rings_stay_inside():
     """A pseudo-element is no `*`: the chevron's 1.5 px border came on top of its .36rem box and put every
     disclosure's and card's title at 19.3 px. The chevron is one border-box now, in a 12 px slot, then
