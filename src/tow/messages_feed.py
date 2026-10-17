@@ -805,14 +805,38 @@ def project(window: Window, markers: Markers, now: float) -> Projection:
 # --------------------------------------------------------------------------- words
 
 
-# A folder or file path, also one with spaces in its folders ("D:\TV\Show A\e01.mkv"): every part
-# up to its last separator, then the name up to a space. Scrubbing a little more is harmless.
+# A folder or file path, also one with spaces in its folders ("D:\TV\Show A\e01.mkv"), a drive's
+# root ("D:\"), a share ("\\nas", "//nas/media") and a folder at the root ("/media", "~/x"):
+# every part up to its last separator, then the name up to a space (a POSIX name without the
+# mark that ends a sentence after it). A slash between words ("and/or", "1/2", "Show / Сериал")
+# is no path. Scrubbing a little more is harmless.
+_POSIX_NAME = r"[^\s\\/\"'<>·—]*[^\s\\/\"'<>·—;,.:!?)\]]"
 _PATH_RES = (
     re.compile(r"\b[A-Za-z]:\\(?:[^\\/\n\"'<>·—:]{0,60}\\)*[^\s\\/\"'<>·—]*"),
     re.compile(r"\b[A-Za-z]:/(?:[^\\/\n\"'<>·—:]{0,60}/)*[^\s\\/\"'<>·—]*"),
     re.compile(r"\\\\(?:[^\\/\n\"'<>·—:]{0,60}\\)*[^\s\\/\"'<>·—]*"),
-    re.compile(r"(?<![\w.:/])~?/(?:[^\\/\n\"'<>·—:]{0,60}/)+[^\s\\/\"'<>·—]*"),
+    re.compile(rf"(?<![\w.:/])~?/(?:(?:[^\\/\n\"'<>·—:]{{0,60}}/)+(?:{_POSIX_NAME})?|{_POSIX_NAME})"),
 )
+# Message values that name a folder or a file, whatever they hold.
+_PATH_PARAMS = frozenset(
+    (
+        "path",
+        "folder",
+        "file",
+        "root",
+        "where",
+        "dir",
+        "directory",
+        "save_path",
+        "log",
+        "stderr",
+        "snapshot",
+        "checkpoint",
+        "launcher",
+    )
+)
+_MESSAGE = "$msg"  # a stored value that is itself a message (tow.errors)
+_NESTED_MAX = 32  # messages inside messages: as deep as tow.errors renders them
 _URL_RE = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s\"'<>]+", re.IGNORECASE)
 
 
@@ -833,6 +857,27 @@ def scrub_display(text: str, limit: int = 600) -> str:
         value = pattern.sub("…", value)
     value = re.sub(r"[\x00-\x1f\x7f]+", " ", value)
     return " ".join(value.split())[:limit]
+
+
+def _without_paths(params: Any, depth: int = 0) -> Any:
+    """A stored message's values (and those of the messages among them) without a folder or a
+    file: a value named as one (``_PATH_PARAMS``) or holding one is "…", before the words are
+    formatted - the sentence stays whole, with no path in it for any device."""
+    if not isinstance(params, Mapping):
+        return params
+    kept: dict[str, Any] = {}
+    for name, value in params.items():
+        inner = value.get(_MESSAGE) if isinstance(value, Mapping) else None
+        if isinstance(inner, Mapping):
+            if depth >= _NESTED_MAX:
+                kept[name] = "…"
+                continue
+            kept[name] = {_MESSAGE: {**inner, "params": _without_paths(inner.get("params"), depth + 1)}}
+        elif isinstance(value, str) and (name in _PATH_PARAMS or any(path.search(value) for path in _PATH_RES)):
+            kept[name] = "…"
+        else:
+            kept[name] = value
+    return kept
 
 
 _FORMAT_FIELDS = (
@@ -880,12 +925,15 @@ def _subject(entry: Mapping[str, Any], title_index: Mapping[str, str], site_titl
 def render_entry(
     entry: Mapping[str, Any], *, title_index: Mapping[str, str], site_titles: Mapping[str, str]
 ) -> dict[str, Any]:
-    """An entry as every device gets it, in the current language: allowlisted fields formatted
-    by the History's rules, then scrubbed (no paths, links reduced to their host, no raw
-    diagnostics), with a link to a page of this TOW only."""
+    """An entry as every device gets it, in the current language: allowlisted fields, their
+    message values without paths (``_without_paths``), formatted by the History's rules, then
+    scrubbed (no paths, links reduced to their host, no raw diagnostics), with a link to a page
+    of this TOW only."""
     rec = entry["rec"]
     subject = scrub_display(_subject(entry, title_index, site_titles), 200)
     fields = {key: rec[key] for key in _FORMAT_FIELDS if key in rec}
+    if "error_params" in fields:
+        fields["error_params"] = _without_paths(fields["error_params"])
     fields["kind"] = rec["_kind"]
     site = str(rec.get("tracker") or "")
     if site and subject != str(site_titles.get(site) or site):
