@@ -688,3 +688,60 @@ def test_a_saved_marker_that_cannot_be_ranked_is_never_replaced_blindly(monkeypa
     with suppress(messages_feed.MarkerRefused):
         messages_feed.feed().mark(older, clear=True)
     assert ui_state_path().read_bytes() == marker
+
+
+# --------------------------------------------------------------------------- scrubbing for remote viewers
+
+
+@pytest.mark.parametrize(
+    ("text", "shown"),
+    [
+        ("waiting for disk space in /media; retry", "waiting for disk space in …; retry"),
+        ("no room on /mnt", "no room on …"),
+        ("cannot write ~/Downloads", "cannot write …"),
+        (r"no room on D:\ now", "no room on … now"),
+        ("no room on D:/ now", "no room on … now"),
+        (r"share \\nas\media is offline", "share … is offline"),
+        (r"share \\nas is offline", "share … is offline"),
+        ("share //nas/media is offline", "share … is offline"),
+        ("Show A / Сериал А", "Show A / Сериал А"),
+        ("and/or 1/2 episodes, N/A, TV/Movies", "and/or 1/2 episodes, N/A, TV/Movies"),
+    ],
+)
+def test_the_fallback_scrubber_drops_root_level_paths_and_keeps_words(text, shown):
+    assert messages_feed.scrub_display(text) == shown
+
+
+def test_path_values_go_before_the_feed_is_formatted(monkeypatch):
+    open_network(monkeypatch, token="t" * 32)
+    _raw(
+        "check_fail",
+        topic="t1",
+        tracker="rutor",
+        cls="disk",
+        error_code="check.waiting_space",
+        error_params={"missing": 3, "needed": 10, "free": 7, "path": "/media"},
+        how="auto",
+    )
+    _raw(
+        "reconcile_failed",
+        topic="t2",
+        cls="qbit",
+        error_code="check.reconcile_failed",
+        error_params={
+            "error": {"$msg": {"code": "check.low_disk", "params": {"needed": 9, "free": 1, "path": "Downloads"}}}
+        },
+        how="auto",
+    )
+    lan = TestClient(app, client=("192.168.1.7", 50000), base_url="http://192.168.1.2:8787")
+    signed_in = lan.post("/login", data={"password": "t" * 32}, headers={"Origin": "http://192.168.1.2:8787"})
+    assert signed_in.status_code in (200, 303)
+    items = lan.get("/messages.json", headers={"Accept": "application/json"}).json()["items"]
+    texts = [item["text"] for item in items]
+    assert len(texts) == 2
+    for text in texts:
+        assert "/media" not in text
+        assert "Downloads" not in text
+        assert "…" in text  # the sentence stays whole, without the folder
+    assert "9" in texts[0]  # the other values stay
+    assert "10" in texts[1]
