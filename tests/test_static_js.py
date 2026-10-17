@@ -376,6 +376,7 @@ def test_the_sync_poll_keeps_its_schedule_backoff_hints_and_sign_out():
         "backoffFiveToSixty",
         "jitterBounded",
         "retryAfterHonoured",
+        "retryAfterSurvivesHideShowAndClockJumps",
         "tenSecondTimeout",
         "oneInFlightOnePending",
         "hintsCoalescedNeverThroughBackoff",

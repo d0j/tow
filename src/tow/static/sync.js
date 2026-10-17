@@ -31,9 +31,17 @@
   // ------------------------------------------------------------------ the poll, without the page
   // Tests drive it with a fake clock and a fake request: ``request({url, etag})`` answers
   // {status, etag, date, retryAfter, body} or throws; ``abort`` (if the request returns one in
-  // ``onAbort``) ends a request that took longer than 10 s.
+  // ``onAbort``) ends a request that took longer than 10 s. ``now`` is the wall clock (the
+  // server's time and its offset only); every wait - the schedule, a failure's backoff, the
+  // server's Retry-After - runs on ``monotonic``, which a clock set back or forward does not move
+  // (``performance.now``; a test that gives only ``now`` drives both with it).
+  const wallClock = () => Date.now();
+  const steadyClock = () => (typeof performance === "object" && typeof performance?.now === "function"
+    ? performance.now()
+    : Date.now());
   const createSyncClient = ({
-    now = () => Date.now(),
+    now = wallClock,
+    monotonic = null,
     setTimer = (fn, ms) => setTimeout(fn, ms),
     clearTimer = (id) => clearTimeout(id),
     random = Math.random,
@@ -63,6 +71,7 @@
     let offset = 0; // the server's clock minus this one (ms)
     let tzNow = null;
     let polls = 0;
+    const clock = monotonic || (now === wallClock ? steadyClock : now);
 
     const haveParam = () => Object.entries(applied)
       .filter(([, rev]) => typeof rev === "string" && /^[0-9a-f]{32}$/.test(rev))
@@ -82,24 +91,24 @@
       clearTimer(timer);
       timer = 0;
       if (stopped || hidden()) return;
-      timer = setTimer(poll, Math.max(0, at - now()));
+      timer = setTimer(poll, Math.max(0, at - clock()));
     };
     const succeeded = () => {
       failures = 0;
       waitUntil = 0;
       if (pending) {
         pending = false;
-        plan(now());
+        plan(clock());
       } else {
-        plan(now() + VISIBLE_MS);
+        plan(clock() + VISIBLE_MS);
       }
     };
     const failed = (retryAfterMs = 0) => {
       failures += 1;
       const step = BACKOFF_MS[Math.min(failures, BACKOFF_MS.length) - 1];
       const wait = Math.max(Math.round(step * (0.8 + 0.4 * random())), retryAfterMs);
-      waitUntil = now() + wait;
-      if (retryAfterMs) serverUntil = now() + retryAfterMs;
+      waitUntil = clock() + wait;
+      if (retryAfterMs) serverUntil = clock() + retryAfterMs;
       pending = false; // the wait is the answer to any wish to ask meanwhile
       plan(waitUntil);
     };
@@ -112,7 +121,7 @@
     const offer = (area, payload, nowTs) => {
       const known = retries[area];
       const same = Boolean(known && known.rev === payload.rev);
-      if (same && (known.running || now() < known.at)) return;
+      if (same && (known.running || clock() < known.at)) return;
       const state = same ? known : { rev: payload.rev, failures: 0, at: 0, running: false };
       delete retries[area];
       const readers = subscribers.get(area) || [];
@@ -130,7 +139,7 @@
       if (readers.some((reader) => reader.manual)) return;
       const failed = () => {
         state.failures += 1;
-        state.at = now() + BACKOFF_MS[Math.min(state.failures, BACKOFF_MS.length) - 1];
+        state.at = clock() + BACKOFF_MS[Math.min(state.failures, BACKOFF_MS.length) - 1];
         state.running = false;
         retries[area] = state;
       };
@@ -164,7 +173,7 @@
       for (const [area, state] of Object.entries(retries)) {
         const payload = areas[area];
         if (!payload || payload.rev !== state.rev || applied[area] === state.rev) delete retries[area];
-        else if (!state.running && now() >= state.at) offer(area, payload, (now() + offset) / 1000);
+        else if (!state.running && clock() >= state.at) offer(area, payload, (now() + offset) / 1000);
       }
     };
     const deliver = (body) => {
@@ -263,24 +272,30 @@
     };
     // Ask now: shown again, back from the cache, online again (``kind`` "show"), or another tab's
     // hint ("hint", coalesced within 250 ms). A hint never cuts a failure's wait short, and nothing
-    // cuts the server's Retry-After short.
+    // cuts the server's Retry-After short: inside one, the request is planned for its end. A hide
+    // cleared the timer, so a show inside the server's window that only returned would never ask
+    // again (1.33.1 QA-02).
     const nudge = (kind = "show") => {
       if (stopped || hidden()) return;
       if (inFlight) {
         pending = true;
         return;
       }
-      const at = now();
-      if (at < serverUntil) return;
+      const at = clock();
       if (kind === "hint") {
-        if (at < waitUntil || hintTimer) return;
+        const until = Math.max(waitUntil, serverUntil);
+        if (at < until) {
+          if (!timer) plan(until);
+          return;
+        }
+        if (hintTimer) return;
         hintTimer = setTimer(() => {
           hintTimer = 0;
-          if (!stopped && !hidden() && !inFlight && now() >= waitUntil) plan(now());
+          if (!stopped && !hidden() && !inFlight && clock() >= waitUntil) plan(clock());
         }, HINT_MS);
         return;
       }
-      plan(at);
+      plan(Math.max(at, serverUntil));
     };
     const api = {
       // A reader of ``area``: fn(payload, {nowTs, client}). ``manual``: the page applies the area
@@ -304,7 +319,7 @@
       },
       // Start: the first request at a random moment of the first 5 s.
       start: () => {
-        if (!stopped && !timer && !inFlight) plan(now() + Math.floor(random() * VISIBLE_MS));
+        if (!stopped && !timer && !inFlight) plan(clock() + Math.floor(random() * VISIBLE_MS));
       },
       nudge,
       now: () => nudge("show"),
@@ -319,7 +334,7 @@
       observed: (name) => observed[name] || "",
       applied: (name) => applied[name] || "",
       stopped: () => stopped,
-      backingOff: () => now() < waitUntil,
+      backingOff: () => clock() < waitUntil,
       polls: () => polls,
       url,
     };
@@ -348,7 +363,7 @@
     retry = () => {}, // an answer from a newer revision: ask the server again soon
     signedOut = () => {},
     emptied = () => {}, // (hasRows): Home turned empty (false) or got its first topic (true); null: neither
-    now = () => Date.now(),
+    now = steadyClock, // the retries' waits: a clock set back does not stretch them
   } = {}) => {
     let generation = 0;
     let current = null; // {rev, order, acked}
