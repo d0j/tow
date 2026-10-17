@@ -5,16 +5,18 @@ values that name a folder or a file are "…" before its words are formatted.
 
 Credentials go for every device, the PC running TOW included (``scrub_credentials``): a link's
 sign-in (``user:password@``), the values of its secret query names (``uk``, ``pk``, ``passkey``,
-``token``...), a tracker's announce address (its passkey may be in the path) and a magnet's
-trackers, a header's or a ``name=value`` secret. The PC keeps every other word: folders, and
-links otherwise whole."""
+``token``..., also written with %-escapes: ``%70k``), a tracker's announce address (its passkey may
+be in the path) and a magnet's trackers, a header's, a ``name=value`` or a quoted
+``"token": "..."`` secret (JSON or a Python mapping in a diagnostic, also one cut off), and in a
+message's stored values a value whose own name says it is a secret (``credentials_out``). The PC
+keeps every other word: folders, and links otherwise whole."""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote_plus, urlsplit, urlunsplit
 
 # A folder or file path, also one with spaces in its folders ("D:\TV\Show A\e01.mkv"), a drive's
 # root ("D:\"), a share ("\\nas", "//nas/media") and a folder at the root ("/media", "~/x"):
@@ -67,6 +69,26 @@ _SECRET_VALUE_RE = re.compile(
     re.IGNORECASE,
 )
 _BEARER_RE = re.compile(r"\bbearer\s+[^\s,;]+", re.IGNORECASE)
+# A name that says its value is a secret, as a mapping's key or a quoted key in a diagnostic
+# ("token", "bot_token", "api-key", "Cookie"...); "key", "auth" or "session" alone say too little.
+_SECRET_NAME = (
+    r"(?:[\w-]*[_-])?(?:password|passwd|passphrase|passkey|pass_key|torrent_pass|authkey|token|secret"
+    r"|api[_-]?key|access[_-]?key|private[_-]?key|cookies?|set[_-]cookie|authorization|cf_clearance)"
+    r"|uk|pk|pass|pwd"
+)
+_SECRET_KEY = re.compile(_SECRET_NAME, re.IGNORECASE)
+# "token": "value", 'password': 'value', "pk": 123 - the value of a quoted secret name, also in a
+# cut-off diagnostic that ends inside it (no closing quote).
+_QUOTED_SECRET_RE = re.compile(
+    rf"""(["'])({_SECRET_NAME})\1(\s*[:=]\s*)"""
+    r"""(?:"(?:[^"\\\r\n]|\\.)*"?|'(?:[^'\\\r\n]|\\.)*'?|(?!\*\*\*)[^\s,;}\]]+)""",
+    re.IGNORECASE,
+)
+
+
+def _quoted_secret(match: re.Match[str]) -> str:
+    quote, name, between = match.group(1), match.group(2), match.group(3)
+    return f"{quote}{name}{quote}{between}{quote}***{quote}"
 
 
 def _magnet(match: re.Match[str]) -> str:
@@ -78,10 +100,13 @@ def _magnet(match: re.Match[str]) -> str:
 
 
 def _query_without_secrets(query: str) -> str:
+    """The query with each secret name's value "***": a name is classified as the server reads
+    it (``%70k`` is ``pk``) and keeps its own spelling."""
     kept = []
     for item in query.split("&"):
         name, sep, value = item.partition("=")
-        kept.append(f"{name}=***" if sep and value and _SECRET_QUERY.fullmatch(name) else item)
+        secret = _SECRET_QUERY.fullmatch(unquote_plus(name).strip())
+        kept.append(f"{name}=***" if sep and value and secret else item)
     return "&".join(item for item in kept if item)
 
 
@@ -107,13 +132,16 @@ def scrub_credentials(text: str) -> str:
     """``text`` without credentials, for every device (see the module); every other word stays."""
     value = _MAGNET_RE.sub(_magnet, str(text or ""))
     value = _URL_RE.sub(_link_without_credentials, value)
+    value = _QUOTED_SECRET_RE.sub(_quoted_secret, value)
     value = _SECRET_HEADER_RE.sub(lambda match: f"{match.group(1)}: ***", value)
     value = _SECRET_VALUE_RE.sub(lambda match: f"{match.group(1)}{match.group(2)}***", value)
     return _BEARER_RE.sub("Bearer ***", value)
 
 
 def credentials_out(params: Any, depth: int = 0) -> Any:
-    """Stored values (a message's, and those of the messages among them) without credentials."""
+    """Stored values (a message's, and those of the messages among them) without credentials: a
+    text loses those in it, and a value whose name says it is a secret (``token``, ``password``,
+    ``cookie``...) is "***" whatever it holds (a message among the values stays a message)."""
     if isinstance(params, str):
         return scrub_credentials(params)
     if depth >= _NESTED_MAX:
@@ -121,8 +149,15 @@ def credentials_out(params: Any, depth: int = 0) -> Any:
     if isinstance(params, list | tuple):
         return [credentials_out(item, depth + 1) for item in params]
     if isinstance(params, Mapping):
-        return {name: credentials_out(value, depth + 1) for name, value in params.items()}
+        return {name: _named_value_out(name, value, depth) for name, value in params.items()}
     return params
+
+
+def _named_value_out(name: Any, value: Any, depth: int) -> Any:
+    secret = isinstance(name, str) and _SECRET_KEY.fullmatch(name.strip()) is not None
+    if secret and not isinstance(value, Mapping) and value not in (None, "", True, False):
+        return "***"
+    return credentials_out(value, depth + 1)
 
 
 def scrub_display(text: str, limit: int = 600) -> str:

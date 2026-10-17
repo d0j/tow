@@ -74,8 +74,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   now ask for their own password, and a save that carries TOW's password is refused with a note.
 - No device, this computer included, is shown the sign-in, passkey or secret query of a link in an error any
   more: not on **Home**'s rows and their tooltips, a topic's panel, **Needs attention**, History, the log,
-  Recent messages or Settings. New errors are saved without them, and those saved before are cleaned when shown;
-  the rest of the link and your folders stay visible on this computer.
+  Recent messages or Settings. This also holds for a secret query name written in escaped form (`%70k` for `pk`),
+  a token or password a site's answer repeats in quotes (`"token": "..."`, also when the text is cut off there),
+  and a value saved with an error under a secret name. New errors are saved without them, and those saved before
+  are cleaned when shown; the rest of the link and your folders stay visible on this computer.
 - With `allow_private_tracker_hosts` on, a proxy set for the whole system (`HTTP_PROXY`, `HTTPS_PROXY`) no
   longer carries the requests to a site on this computer or the home network, its sign-in and cookies included,
   when `NO_PROXY` does not name it: they go direct. Public sites still use the proxy.
