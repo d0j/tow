@@ -80,6 +80,7 @@
   let logRequest = null;
   let logRefreshPending = false;
   let pollTimer = null;
+  let pollFailed = false;
   let rollbackVersion = "";
   // The version installed now (the page's, then the update status's): an older target is a step back.
   let installed = /^\d+\.\d+\.\d+$/.test(pageVersion) ? pageVersion : "";
@@ -172,10 +173,19 @@
     if (input) input.disabled = disabled;
     if (previous) previous.disabled = disabled;
   };
+  // While a job runs and this tab is seen, its steps are asked for every 2 s: a short update goes
+  // through them in ~10 s, and a 5 s poll skipped some. Hidden, after a failed read, while the
+  // page's own poll waits after a failure (sync.js: the server busy or limiting), or while an
+  // install whose answer was lost is not yet seen to run, every 5 s as before; once the job has
+  // ended, not at all.
   const schedulePoll = () => {
     if (pollTimer !== null) window.clearTimeout(pollTimer);
-    pollTimer = window.setTimeout(() => { pollTimer = null; pollJob(); }, 5000);
+    const quick = updating && !pendingTarget && !pollFailed && !document.hidden && !window.towSync?.client?.backingOff?.();
+    pollTimer = window.setTimeout(() => { pollTimer = null; pollJob(); }, quick ? 2000 : 5000);
   };
+  document.addEventListener?.("visibilitychange", () => {
+    if (!document.hidden && updating && pollTimer !== null) schedulePoll();
+  });
   const pollJob = async () => {
     if (!progress) return;
     if (pollRequest?.generation === generation) return;
@@ -186,6 +196,7 @@
       if (!response.ok) throw new Error("update status unavailable");
       const job = await response.json();
       if (request.generation !== generation) return;
+      pollFailed = false;
       // An old terminal result is not evidence that a new POST was accepted.
       if (pendingTarget) {
         if (!job.id || job.id === pendingBaseline || job.target !== pendingTarget) {
@@ -260,6 +271,7 @@
       refreshLog();
     } catch {
       if (request.generation !== generation) return;
+      pollFailed = true;
       if (updating) {
         progress.hidden = false;
         progress.textContent = t(pendingTarget ? "js.releases.confirming" : "js.releases.reconnecting");

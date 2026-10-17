@@ -59,6 +59,23 @@ def test_the_automatic_update_checks_box_follows_another_device_but_not_under_th
     assert verdict == dict.fromkeys(("followsAnotherDevice", "protectedWhileInUse", "conflictKeepsItsBase"), True)
 
 
+@pytest.mark.allow_system  # runs node on a local script; no network, no system changes
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_a_running_update_is_followed_every_two_seconds_only_while_seen_and_reading():
+    # 1.33.1 QA O-1: a ~10 s update went from "Restore point saved" to its result on a 5 s poll.
+    verdict = _verdict("update_poll_cadence.mjs")
+    assert verdict == dict.fromkeys(
+        (
+            "everyTwoSecondsWhileActive",
+            "onlyWhileSeen",
+            "keepsTheBackoff",
+            "normalWhenItEnds",
+            "unconfirmedInstallAsBefore",
+        ),
+        True,
+    )
+
+
 @pytest.mark.allow_system
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_update_notice_and_disabled_check_status():

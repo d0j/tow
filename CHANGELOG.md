@@ -23,6 +23,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   not again for every check of every tab every 5 seconds (with 2,000 topics most of the time of such a check).
 - **Home** puts many changed rows in faster (50 of 2,000: about 60 ms instead of 110): it finds them once for
   all, and changes the page only after it has read it.
+- While an update runs, an open **Settings** page shows each of its steps: it asks for them every 2 seconds
+  instead of 5 while you can see the tab, so a short update no longer jumps from "Restore point saved" straight
+  to its result. A hidden tab, or a TOW that does not answer, is still asked every 5 seconds.
 
 ### Fixed
 
