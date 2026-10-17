@@ -105,7 +105,30 @@ $functions = @($ast.FindAll({
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -in $names
 }, $true))
 if ($functions.Count -ne $names.Count) { throw 'the deadline functions are required' }
-$functions | ForEach-Object { . ([scriptblock]::Create($_.Extent.Text)) }
+# The deadline is measured from readiness, not from the start: the synthetic tree first records
+# both its pids, under a bound of its own (a slow runner may take long to start two Pythons). If
+# it never gets there, its whole tree is stopped all the same.
+$start = '$process = [System.Diagnostics.Process]::Start($info)'
+$functions | ForEach-Object {
+    $text = $_.Extent.Text
+    if ($_.Name -eq 'Invoke-WithDeadline') {
+        if (([regex]::Matches($text, [regex]::Escape($start))).Count -ne 1) { throw 'one process start required' }
+        $text = $text.Replace($start, "$start; Wait-TestReady `$process")
+    }
+    . ([scriptblock]::Create($text))
+}
+$script:readyAt = $null
+function Wait-TestReady([System.Diagnostics.Process]$Process) {
+    $until = [DateTime]::UtcNow.AddSeconds([int]$env:TOW_TEST_READY_SEC)
+    while (@(Get-ChildItem -LiteralPath $env:TOW_TEST_PIDS -Filter '*.pid').Count -lt [int]$env:TOW_TEST_READY) {
+        if ([DateTime]::UtcNow -ge $until) {
+            Stop-ProcessTree $Process | Out-Null
+            throw 'the synthetic run did not get ready'
+        }
+        Start-Sleep -Milliseconds 50
+    }
+    $script:readyAt = $clock.Elapsed.TotalSeconds
+}
 $arguments = @($env:TOW_TEST_ARGS | ConvertFrom-Json)
 $global:LASTEXITCODE = 0
 $failure = $null
@@ -113,7 +136,7 @@ Set-Location -LiteralPath $env:TOW_TEST_PIDS  # the gate runs from its checkout,
 $clock = [System.Diagnostics.Stopwatch]::StartNew()
 try { Invoke-WithDeadline ([int]$env:TOW_TEST_DEADLINE) $env:TOW_TEST_PYTHON $arguments *> $null }
 catch { $failure = $_.Exception.Message }
-$elapsed = $clock.Elapsed.TotalSeconds
+$elapsed = $clock.Elapsed.TotalSeconds - $script:readyAt
 $code = $LASTEXITCODE
 $ids = @(Get-ChildItem -LiteralPath $env:TOW_TEST_PIDS -Filter '*.pid' |
     ForEach-Object { [int](Get-Content -Raw $_.FullName) })
@@ -127,23 +150,24 @@ do {
 $alive | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }  # never leave a hung tree
 @{failure=$failure; code=$code; elapsed=$elapsed; started=$ids.Count; alive=@($alive)} | ConvertTo-Json -Compress
 """
-# A test run that hangs with a worker: it records its pid, starts a child that records its own,
-# and both sleep far past the deadline.
+# A test run that hangs with a worker: it records its pid, starts a child (after a delay: a slow
+# runner) that records its own, and both sleep far past the deadline.
 TREE = """
 import os, subprocess, sys, time
 from pathlib import Path
 
 folder = Path(sys.argv[1])
-if len(sys.argv) > 2:
+if sys.argv[2] == "worker":
     (folder / "worker.pid").write_text(str(os.getpid()))
 else:
-    subprocess.Popen([sys.executable, __file__, str(folder), "worker"])
     (folder / "main.pid").write_text(str(os.getpid()))
+    time.sleep(float(sys.argv[3]))
+    subprocess.Popen([sys.executable, __file__, str(folder), "worker"])
 time.sleep(300)
 """
 
 
-def _deadline(tmp_path, deadline, arguments):
+def _deadline(tmp_path, deadline, arguments, *, ready=0):
     import sys
 
     pids = tmp_path / "pids"
@@ -151,6 +175,8 @@ def _deadline(tmp_path, deadline, arguments):
     return _run(
         DEADLINE_HARNESS,
         TOW_TEST_DEADLINE=str(deadline),
+        TOW_TEST_READY=str(ready),
+        TOW_TEST_READY_SEC="60",
         TOW_TEST_PYTHON=sys.executable,
         TOW_TEST_PIDS=str(pids),
         TOW_TEST_ARGS=json.dumps([str(argument) if argument != "{pids}" else str(pids) for argument in arguments]),
@@ -158,16 +184,19 @@ def _deadline(tmp_path, deadline, arguments):
 
 
 @pytest.mark.allow_system
-def test_a_hung_test_run_is_stopped_at_its_deadline_with_its_whole_tree(tmp_path):
+@pytest.mark.parametrize("startup", [0, 3])
+def test_a_hung_test_run_is_stopped_at_its_deadline_with_its_whole_tree(tmp_path, startup):
     script = tmp_path / "tree.py"
     script.write_text(TREE, encoding="utf-8")
-    # 20 s: both Python processes must start before the deadline, also on a slow Windows runner.
-    result = _deadline(tmp_path, 20, [script, "{pids}"])
-    assert result["failure"] == "gate failed: the test run did not finish within 20 s"
+    # Both Python processes are running before the deadline starts (bounded apart from it): a slow
+    # runner (startup: a worker that comes later than the deadline) cannot make it start after
+    # the run was stopped.
+    result = _deadline(tmp_path, 2, [script, "{pids}", "main", startup], ready=2)
+    assert result["failure"] == "gate failed: the test run did not finish within 2 s"
     assert result["code"] == 124
     assert result["started"] == 2, "the synthetic run and its worker both started before the deadline"
     assert result["alive"] == [], "the whole tree is stopped"
-    assert 20 <= result["elapsed"] < 75
+    assert 2 <= result["elapsed"] < 60
 
 
 @pytest.mark.allow_system
