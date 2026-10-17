@@ -304,11 +304,12 @@
       worst: () => unread().reduce((worst, item) => (RANK[item.kind] > RANK[worst] ? item.kind : worst), "info"),
       words: (id) => words.get(id) || { subject: find(id)?.subject || "", text: find(id)?.text || "" },
       stored: () => !memoryOnly,
-      // Signed out: this tab's messages go, of every install and sign-in.
+      // Signed out: this tab's messages go, of every install and sign-in, their words too.
       clearStorage: () => {
         items = [];
         announced = [];
         pending.length = 0;
+        words.clear();
         if (active) collapse("cleared", false);
         // Also when a failed write made the history keep its messages in memory only.
         if (!storage) return;
@@ -387,6 +388,9 @@
   // The session of this page's messages: a new one once the owner signs out (or TOW signs the
   // owner out). An answer, a poll or an announcement of the old one does nothing any more.
   let session = 0;
+  // Every request of a session ends with it (aborted where the browser can).
+  const newController = () => (typeof AbortController === "function" ? new AbortController() : null);
+  let requests = newController();
   const saying = new Set();
   const announce = (item, said) => {
     const region = document.getElementById(item.kind === "err" ? "announce-alert" : "announce");
@@ -405,6 +409,13 @@
   // Signed out: a new session; nothing of the old one is said, kept or shown.
   const signOut = () => {
     session += 1;
+    try {
+      requests?.abort();
+    } catch {
+      // aborted already
+    }
+    requests = newController();
+    again = false;
     saying.forEach((timer) => window.clearTimeout(timer));
     saying.clear();
     ["announce", "announce-alert"].forEach((name) => {
@@ -710,7 +721,7 @@
     const mine = session;
     const headers = { Accept: "application/json" };
     if (shared.etag) headers["If-None-Match"] = shared.etag;
-    inFlight = fetch("/messages.json", { credentials: "same-origin", cache: "no-store", headers })
+    inFlight = fetch("/messages.json", { credentials: "same-origin", cache: "no-store", headers, signal: requests?.signal })
       .then(async (response) => {
         if (mine !== session || response.status === 304) return;
         if (response.status === 401) {
@@ -719,7 +730,9 @@
           return;
         }
         if (!response.ok) return;
-        accept(await response.json(), response.headers?.get?.("ETag") || "");
+        const data = await response.json();
+        if (mine !== session) return; // signed out while the body was read
+        accept(data, response.headers?.get?.("ETag") || "");
       })
       .catch(() => {})
       .finally(() => {
@@ -737,7 +750,7 @@
     if (typeof fetch !== "function" || !shared.cursor) return Promise.resolve();
     const mine = session;
     const body = new URLSearchParams({ cursor: shared.cursor });
-    return fetch(path, { method: "POST", credentials: "same-origin", headers: { Accept: "application/json" }, body })
+    return fetch(path, { method: "POST", credentials: "same-origin", headers: { Accept: "application/json" }, body, signal: requests?.signal })
       .then(async (response) => {
         if (mine !== session) return;
         let data = null;
@@ -746,6 +759,7 @@
         } catch {
           data = null;
         }
+        if (mine !== session) return; // signed out while the body was read
         if (response.ok) {
           accept(data);
           return;
@@ -757,7 +771,7 @@
         }
         failed(data?.error);
       })
-      .catch(() => failed(""));
+      .catch(() => { if (mine === session) failed(""); }); // aborted by a sign-out: nothing to say
   };
   if (menu && toggle) {
     menu.addEventListener("toggle", () => {

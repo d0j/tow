@@ -567,5 +567,10 @@
   };
   ["focusout", "pointerup", "submit", "reset", "change", "close"].forEach((name) => document.addEventListener(name, later, true));
   sync.onPoll((_, ok) => { if (ok) pageSync.settle(); });
+  // Signed out: the fragments on their way are not put in, and nothing is asked or applied again.
+  sync.onSignOut?.(() => {
+    window.clearTimeout(settleTimer);
+    pageSync.cancel();
+  });
   window.towPages = { sync: pageSync, protectedElement, page: list.page };
 })();

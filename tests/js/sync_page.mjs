@@ -17,6 +17,7 @@ const flush = async () => { for (let i = 0; i < 40; i += 1) await Promise.resolv
 FakeElement.prototype.insertBefore = function insertBefore(node, ref) { if (ref) ref.before(node); else this.append(node); };
 Object.defineProperty(FakeElement.prototype, "parentNode", { get() { return this.parent; } });
 Object.defineProperty(FakeElement.prototype, "lang", { get() { return this.getAttribute("lang") || ""; } });
+Object.defineProperty(FakeElement.prototype, "nodeType", { get() { return 1; } });
 
 const page = () => {
   const document = fakeDocument();
@@ -71,7 +72,7 @@ const built = new Map();
 const realCreate = document.createElement;
 document.createElement = (tag) => {
   if (tag !== "template") return realCreate(tag);
-  const template = { content: { querySelector: () => built.get(template.html) || null } };
+  const template = { content: { querySelector: () => built.get(template.html) || null, get childNodes() { return built.has(template.html) ? [built.get(template.html)] : []; } } };
   Object.defineProperty(template, "innerHTML", { set(value) { template.html = value; } });
   return template;
 };
@@ -103,9 +104,14 @@ const context = {
     if (String(url).startsWith("/sync.json")) return syncAnswers.shift()?.() || respond(304);
     if (String(url) === "/topics/rows" && rowsHang) return new Promise(() => {});
     if (String(url) === "/topics/rows") return rowAnswers.shift()?.(JSON.parse(init.body)) || respond(500);
+    if (String(url).startsWith("/page/fragments")) return fragmentAnswers.shift()?.() || respond(500);
     return respond(404);
   },
+  // pages.js (loaded for the sign-out below) on a History page: no comments to walk.
+  NodeFilter: { SHOW_COMMENT: 128 },
 };
+const fragmentAnswers = [];
+document.createTreeWalker = () => ({ nextNode: () => null });
 vm.runInNewContext(source, context);
 const sync = window.towSync;
 const fire = (type) => (document.listeners[type] || []).forEach(({ fn }) => fn({ target: document.body }));
@@ -299,15 +305,45 @@ sync.hint();
 assert.deepEqual(posted.at(-1), ["tow-sync.ns", "changed"]);
 verdict.hintScopedWithoutData = true;
 
+// ---- signing out ends one session for every request and settler of the page: fragments of the
+// page area (pages.js, here on a History list) whose body arrives after it are not put in, nor
+// asked for again; a request asked afterwards is not sent; the sign-out's listeners are told once.
+const pagesSource = readFileSync(new URL("../../src/tow/static/pages.js", import.meta.url), "utf8");
+const historyLog = build(document, ["div", { id: "history-log", "data-history-limit": "300" }]);
+document.getElementById("main").append(historyLog);
+vm.runInNewContext(pagesSource, context);
+const PAGE = REV(9);
+built.set("<e1>", build(document, ["div", { class: "log-line", "data-event": "e1" }, "a line"]));
+let releaseBody = null;
+fragmentAnswers.push(() => ({
+  status: 200, headers: { get: () => null },
+  json: () => new Promise((resolve) => { releaseBody = () => resolve({ ok: true, rev: PAGE, entries: [{ id: "e1", hash: "x", html: "<e1>" }], limit: 300 }); }),
+}));
+answer({ page: { rev: PAGE } });
+while (!releaseBody && clock.now() < 1_900_000_000_000) await run(50);
+assert.ok(sent.some((r) => r.url.startsWith("/page/fragments?page=%2Fhistory")));
+const ended = [];
+sync.onSignOut?.(() => ended.push("told"));
+
 // ---- signing out by the form: nothing asked any more, nothing applied
 const polls = sent.filter((r) => r.url.startsWith("/sync.json")).length;
 const logout = build(document, ["form", { method: "post", action: "/logout" }]);
 document.body.append(logout);
 (document.listeners.submit || []).forEach(({ fn }) => fn({ target: logout }));
+releaseBody(); // the body read ends after the sign-out
 await run(20000);
 assert.equal(sent.filter((r) => r.url.startsWith("/sync.json")).length, polls);
 sync.hint(); // signed out: no hint any more
 assert.equal(posted.length, 1);
 verdict.signOutStopsPolling = true;
+assert.equal(historyLog.querySelectorAll(".log-line").length, 0);
+const asked = sent.length;
+const after = await sync.request("/page/fragments?page=%2Fhistory&rev=x");
+assert.equal(after.status, 0);
+await run(120000); // no settler asks again either
+assert.equal(sent.length, asked);
+(document.listeners.submit || []).forEach(({ fn }) => fn({ target: logout }));
+assert.deepEqual(ended, ["told"]);
+verdict.signOutEndsEveryRequestAndSettler = true;
 
 console.log(JSON.stringify(verdict));

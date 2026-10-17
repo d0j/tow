@@ -310,10 +310,15 @@ verdict.unauthorizedEnds = true;
   const seen = [];
   test.client.on("undo", (payload) => seen.push(payload.rev));
   let release;
-  test.queue.push(() => new Promise((resolve) => { release = () => resolve({ status: 200, body: { ok: true, now_ts: 1, areas: { undo: { rev: REV(5), undo: null } } } }); }));
+  let aborted = 0;
+  test.queue.push((req) => {
+    req.onAbort(() => { aborted += 1; });
+    return new Promise((resolve) => { release = () => resolve({ status: 200, body: { ok: true, now_ts: 1, areas: { undo: { rev: REV(5), undo: null } } } }); });
+  });
   test.client.start();
   await test.run(2600);
   test.client.signOut(0);
+  assert.equal(aborted, 1); // the request on its way is ended with the session
   release();
   await flush();
   assert.deepEqual(seen, []);

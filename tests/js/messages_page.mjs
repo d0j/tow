@@ -429,4 +429,33 @@ verdict.signOutClears = true;
 }
 verdict.signOutSilencesAnnouncements = true;
 
+// Signing out while the list's body is still being read: the old session's list is not shown when
+// it arrives; the words of this tab's messages (kept as said, in memory only) go with the session.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", subject: "Show", text: "Check failed", at: 1800000100 }]);
+  const plain = server.fetch;
+  let release = null;
+  server.fetch = (url, options = {}) => {
+    if (url !== "/messages.json" || release) return plain(url, options);
+    return plain(url, options).then((answer) => ({
+      ...answer,
+      json: () => new Promise((resolve) => { release = () => answer.json().then(resolve); }),
+    }));
+  };
+  const out = page({ storage: memoryStorage(), server });
+  await settle();
+  assert.ok(release, "the list's body is on its way");
+  out.window.towMessages.showMessage({ id: "w1", kind: "err", subject: "Show", text: "could not write D:\\TV\\Show" });
+  assert.ok(out.window.towMessages.center.words("w1").text.includes("D:\\TV"));
+  const form = build(out.document, ["form", { method: "post", action: "/logout" }]);
+  out.document.body.append(form);
+  out.document.dispatch(form, "submit");
+  release();
+  await settle();
+  assert.equal(out.window.towMessages.shared().items.length, 0);
+  assert.equal(out.window.towMessages.shared().loaded, false);
+  assert.equal(out.window.towMessages.center.words("w1").text, "");
+}
+verdict.signOutDropsLateBodiesAndWords = true;
+
 console.log(JSON.stringify(verdict));
