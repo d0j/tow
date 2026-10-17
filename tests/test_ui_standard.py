@@ -652,3 +652,13 @@ def test_two_open_cards_sit_side_by_side_only_where_a_long_field_fits():
     assert found, "the two-column rule of .integration-list.cards-2"
     width = float(found.group(1)) * (16 if found.group(2) == "rem" else 1)
     assert width >= 1280
+
+
+def test_a_wrapped_summary_pill_is_centred():
+    """A pill that wraps on a phone ("qBittorrent — not answering" at 320 px) kept its lines at
+    its end, not centred as every pill's text is (1.33.1 QA-08)."""
+    phone = CSS[CSS.index("@media (max-width: 720px)") :]
+    rule = re.search(r"\.settings-accordion > summary \.pill \{([^}]*)\}", phone)
+    assert rule, "the wrapped pill's rule"
+    assert "text-align: center" in rule.group(1)
+    assert "text-align: end" not in rule.group(1)
