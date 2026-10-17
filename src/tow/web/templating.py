@@ -38,22 +38,13 @@ STATIC_DIR = PACKAGE_DIR / "static"
 
 
 def _static_asset_version() -> str:
+    """The version in every script's and stylesheet's address (``?v=``, cached as immutable):
+    the app's version and a digest of every one of them, so a change to any (a new script too)
+    is a new address and a new static version an open page reloads for."""
     digest = hashlib.sha256()
-    for name in (
-        "app.css",
-        "app.js",
-        "attention.js",
-        "messages.css",
-        "messages.js",
-        "checks.js",
-        "updates.css",
-        "updates.js",
-        "content.css",
-        "content.js",
-        "sync.js",
-    ):
-        path = STATIC_DIR / name
-        if path.is_file():
+    for path in sorted(STATIC_DIR.iterdir()):
+        if path.is_file() and path.suffix in {".js", ".css"}:
+            digest.update(path.name.encode("utf-8") + b"\0")
             digest.update(path.read_bytes())
     return f"{__version__}-{digest.hexdigest()[:12]}"
 
