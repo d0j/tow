@@ -56,7 +56,8 @@ def log_json(request: Request) -> Response:
     rows = [
         {**log_line(row, local=local), "time": time_parts(row.get("iso"))}
         for row in (
-            format_event(e, title_index=title_index, site_titles=site_titles) for e in services.read_events(limit=200)
+            format_event(e, title_index=title_index, site_titles=site_titles, paths=local)
+            for e in services.read_events(limit=200)
         )
     ]
     return JSONResponse({"ok": True, "rows": rows})

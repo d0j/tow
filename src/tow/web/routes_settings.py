@@ -123,7 +123,8 @@ def settings_view(request: Request, *, live: bool) -> Response:
             if live
             else [
                 log_line(
-                    format_event(e, title_index=title_index, site_titles=site_titles), local=access.is_local(request)
+                    format_event(e, title_index=title_index, site_titles=site_titles, paths=access.is_local(request)),
+                    local=access.is_local(request),
                 )
                 for e in services.read_events(limit=200)
             ],

@@ -915,7 +915,7 @@ def render_entry(
     site = str(rec.get("tracker") or "")
     if site and subject != str(site_titles.get(site) or site):
         fields["tracker"] = site  # a topic's message names its site too; a site's says it once
-    row = eventlog.format_event(fields, site_titles=site_titles)
+    row = eventlog.format_event(fields, site_titles=site_titles, paths=False)
     bits = [_feed_label(rec) or row["label"]]
     if entry["kind"] == "settings_update_result":
         outcome = str(rec.get("status") or "")

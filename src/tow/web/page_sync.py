@@ -159,7 +159,7 @@ def history_rows(
     rows = []
     seen: set[str] = set()
     for event in events:
-        row = log_line(format_event(event, title_index=title_index, site_titles=site_titles), local=local)
+        row = log_line(format_event(event, title_index=title_index, site_titles=site_titles, paths=local), local=local)
         kind = str(event.get("kind") or "")
         if kind and kind not in seen:
             seen.add(kind)
