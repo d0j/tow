@@ -78,7 +78,14 @@ class Client:
                 use_auto_torrent_management=False,
                 content_layout="Original",
             )
-            return None if str(answer).strip() == "Ok." else f"qBittorrent answered {answer!r}"
+            # "Ok." before qBittorrent 5.2, then the counts of what was added: judged as TOW's adapter does.
+            from tow.clients.managed import ClientError
+
+            try:
+                self.adapter._api_ok(answer, action="client.qbittorrent.action_add")
+            except ClientError:
+                return f"qBittorrent answered {answer!r}"
+            return None
         encoded = base64.b64encode(content).decode("ascii")
         answer = self.adapter._rpc("torrent-add", metainfo=encoded, paused=True, **{"download-dir": str(folder)})
         return None if isinstance(answer, dict) and "torrent-added" in answer else f"Transmission answered {answer!r}"

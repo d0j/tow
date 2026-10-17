@@ -325,14 +325,21 @@ jobs:
         timeout-minutes: 5
         shell: bash
         run: |
+          # qBittorrent 5.2 answers a login without the "Ok." body of 4.x: the login is proven by
+          # the session it gives, which must then read the version (403 without one).
+          jar="$RUNNER_TEMP/qbittorrent-login.cookies"
           for attempt in $(seq 1 60); do
-            if curl -fsS --max-time 5 --data-urlencode "username=$TOW_REAL_CLIENT_USER" \
-              --data-urlencode "password=$TOW_REAL_CLIENT_SECRET" http://127.0.0.1:18080/api/v2/auth/login | grep -qx 'Ok.'; then
-              echo "qBittorrent answers with this run's login"
+            rm -f "$jar"
+            if curl -fsS --max-time 5 -c "$jar" -o /dev/null --data-urlencode "username=$TOW_REAL_CLIENT_USER" \
+              --data-urlencode "password=$TOW_REAL_CLIENT_SECRET" http://127.0.0.1:18080/api/v2/auth/login &&
+              version=$(curl -fsS --max-time 5 -b "$jar" http://127.0.0.1:18080/api/v2/app/version); then
+              rm -f "$jar"
+              echo "qBittorrent $version answers with this run's login"
               exit 0
             fi
             sleep 2
           done
+          rm -f "$jar"
           echo "::error::qBittorrent does not answer with this run's login within 120 s"
           exit 1
       - name: TOW's adapter and `tow check --apply` against the real qBittorrent, Windows paths with Cyrillic
