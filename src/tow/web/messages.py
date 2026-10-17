@@ -314,11 +314,20 @@ def home_redirect(
 
 
 def _names() -> tuple[dict[str, str], dict[str, str]]:
-    """Topics and sites named as they are now (the History's indexes), once per request."""
+    """Topics and sites named as they are now (the History's indexes), once per request.
+
+    Only looks: the state is read without a quarantine and so without the data lock (a poll of
+    ``/messages.json`` never waits for a check's commit, never moves a damaged state.json
+    aside). A state that cannot be read now names no topic: an entry keeps the title its event
+    was logged with."""
     from tow.log import index_event_titles, index_site_titles
 
     def build() -> tuple[dict[str, str], dict[str, str]]:
-        return index_event_titles(_context.state().get("topics") or []), index_site_titles(_context.config())
+        try:
+            topics = _context.state(quarantine=False).get("topics") or []
+        except OSError, ValueError, RuntimeError:  # damaged, unreadable or newer: the events' own titles
+            topics = []
+        return index_event_titles(topics), index_site_titles(_context.config())
 
     return _context.memo("message_feed_names", build)
 
