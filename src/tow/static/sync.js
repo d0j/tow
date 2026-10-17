@@ -10,7 +10,9 @@
 // One request at a time, 10 s at most; a wish to ask while one is on its way is remembered once.
 // A failed or timed-out request waits 5, 10, 20, 40, then 60 s (a little more or less, at random),
 // and never less than the server's Retry-After. 304 Not Modified is a success: the areas stay as
-// they are. Another tab of this browser that changed something says so on a BroadcastChannel of
+// they are - and an area this page could not apply yet (a reader failed, its rows or fragments did
+// not come) is not lost behind it: it is kept and asked again after later successful polls, 5, 10,
+// 20, 40, then every 60 s after the failure. Another tab of this browser that changed something says so on a BroadcastChannel of
 // this install and sign-in (a hint without any data): this tab asks within 250 ms, never sooner
 // than its own waiting after a failure. Signed out (401, 403, or the Sign out form): every area
 // this page learned is forgotten and an answer still on its way is ignored.
@@ -43,6 +45,7 @@
     let observed = {}; // area -> the revision the server said last
     let applied = {}; // area -> the revision this page shows (what ``have`` sends)
     let areas = {}; // area -> its last payload
+    let retries = {}; // area -> {rev, failures, at, running}: offered, not applied yet
     let epoch = 0; // a new one at sign-out: answers of an older one are ignored
     let stopped = false;
     let inFlight = false;
@@ -97,6 +100,63 @@
       pending = false; // the wait is the answer to any wish to ask meanwhile
       plan(waitUntil);
     };
+    // An area is offered to its readers; it is applied (named in ``have``) once every reader took
+    // it: none threw, and a reader's promise did not settle false or fail. Otherwise it is kept and
+    // offered again after a later successful poll - also a 304, which brings it no more - 5, 10, 20,
+    // 40, then every 60 s, never sooner; a newer revision is offered at once. A ``manual`` area is
+    // its owner's: applied with ack(), asked again by the owner (Home's rows, the page area).
+    const offer = (area, payload, nowTs) => {
+      const known = retries[area];
+      const same = Boolean(known && known.rev === payload.rev);
+      if (same && (known.running || now() < known.at)) return;
+      const state = same ? known : { rev: payload.rev, failures: 0, at: 0, running: false };
+      delete retries[area];
+      const readers = subscribers.get(area) || [];
+      const mine = epoch;
+      let ok = true;
+      const waits = [];
+      for (const reader of readers) {
+        try {
+          const result = reader.fn(payload, { nowTs, client: api });
+          if (!reader.manual && typeof result?.then === "function") waits.push(result);
+        } catch {
+          ok = false;
+        }
+      }
+      if (readers.some((reader) => reader.manual)) return;
+      const failed = () => {
+        state.failures += 1;
+        state.at = now() + BACKOFF_MS[Math.min(state.failures, BACKOFF_MS.length) - 1];
+        state.running = false;
+        retries[area] = state;
+      };
+      if (!ok) {
+        failed();
+        return;
+      }
+      if (!waits.length) {
+        applied[area] = payload.rev;
+        return;
+      }
+      state.running = true;
+      retries[area] = state;
+      Promise.all(waits).then((results) => results.every((result) => result !== false), () => false).then((done) => {
+        if (mine !== epoch || retries[area] !== state) return; // signed out, or a newer revision meanwhile
+        if (!done) {
+          failed();
+          return;
+        }
+        delete retries[area];
+        applied[area] = payload.rev;
+      });
+    };
+    const offerAgain = () => {
+      for (const [area, state] of Object.entries(retries)) {
+        const payload = areas[area];
+        if (!payload || payload.rev !== state.rev || applied[area] === state.rev) delete retries[area];
+        else if (!state.running && now() >= state.at) offer(area, payload, (now() + offset) / 1000);
+      }
+    };
     const deliver = (body) => {
       const changed = body?.areas && typeof body.areas === "object" ? body.areas : {};
       for (const [area, payload] of Object.entries(changed)) {
@@ -105,17 +165,7 @@
         areas[area] = payload;
       }
       for (const [area, payload] of Object.entries(changed)) {
-        if (!payload || typeof payload.rev !== "string") continue;
-        const readers = subscribers.get(area) || [];
-        let ok = true;
-        for (const reader of readers) {
-          try {
-            reader.fn(payload, { nowTs: body.now_ts, client: api });
-          } catch {
-            ok = false; // asked again with the next answer (its revision is not applied)
-          }
-        }
-        if (ok && !readers.some((reader) => reader.manual)) applied[area] = payload.rev;
+        if (payload && typeof payload.rev === "string") offer(area, payload, body.now_ts);
       }
     };
     const told = (ok) => pollers.forEach((fn) => {
@@ -136,6 +186,7 @@
       observed = {};
       applied = {};
       areas = {};
+      retries = {};
       lastUrl = "";
       lastEtag = "";
       signedOut(status);
@@ -177,6 +228,7 @@
       if (status === 304) {
         // HTTP Date has whole seconds: it corrects the clock only when it moved (set, slept).
         if (answer.date && Math.abs(answer.date - now() - offset) > 2000) offset = answer.date - now();
+        offerAgain();
         succeeded();
         told(true);
         return;
@@ -187,6 +239,7 @@
         if (Number.isFinite(answer.body.now_ts)) offset = answer.body.now_ts * 1000 - now();
         if (Number.isFinite(answer.body.tz_now)) tzNow = answer.body.tz_now;
         deliver(answer.body);
+        offerAgain();
         succeeded();
         told(true);
         return;
@@ -263,10 +316,10 @@
   // What the topics area says, put on the page: rows the server no longer has go, new ones come in
   // their place, changed ones are drawn again from /topics/rows (at most 200 a request, two
   // requests at a time). A row is fetched for the revision the area named; an answer drawn from
-  // another revision is not used (the next poll asks again), and a failed request is asked again
-  // too: the area counts as applied only once every row of it is on the page. A row under the
-  // owner's hands (``isProtected``) is never replaced or removed: it gets a note and is drawn again
-  // (or removed) once the work ends (``settle``).
+  // another revision is not used (the next poll asks again), and a failed or too slow request is
+  // asked again by ``settle``: the area counts as applied only once every row of it is on the
+  // page. A row under the owner's hands (``isProtected``) is never replaced or removed: it gets a
+  // note and is drawn again (or removed) once the work ends (``settle``).
   const createRowSync = ({
     rows, // () => the row elements in the page's order
     idOf = (row) => String(row.id || "").replace(/^row-/, ""),
@@ -281,11 +334,22 @@
     retry = () => {}, // an answer from a newer revision: ask the server again soon
     signedOut = () => {},
     emptied = () => {}, // (hasRows): Home turned empty (false) or got its first topic (true); null: neither
+    now = () => Date.now(),
   } = {}) => {
     let generation = 0;
-    let current = null; // {rev, order}
+    let current = null; // {rev, order, acked}
     const later = new Set(); // ids to draw again once free (protected when their change came, a job ended)
     const kept = new Set(); // ids the server removed, kept under the owner's hands
+    // Rows of the current revision whose request failed: asked again by ``settle`` 5, 10, 20, 40,
+    // then every 60 s after the failure; the revision is applied once they are all on the page.
+    let failed = new Set();
+    let failures = 0;
+    let retryAt = 0;
+    const missed = (ids) => {
+      failed = new Set(ids);
+      failures += 1;
+      retryAt = now() + BACKOFF_MS[Math.min(failures, BACKOFF_MS.length) - 1];
+    };
     const find = (id) => rows().find((row) => idOf(row) === id) || null;
     const nextOnPage = (order, id) => {
       const index = order.indexOf(id);
@@ -324,7 +388,7 @@
     // Fetch ``ids`` for revision ``rev`` and put them in; true when every one of them arrived.
     const draw = async (ids, rev, order, mine) => {
       const queue = batches(ids);
-      const result = { complete: true, placed: [], removed: [] };
+      const result = { complete: true, placed: [], removed: [], failed: [], stale: false };
       const worker = async () => {
         while (queue.length && mine === generation) {
           const batch = queue.shift();
@@ -343,11 +407,13 @@
           }
           const body = answer?.status === 200 ? answer.body : null;
           if (!body || body.ok !== true || !Array.isArray(body.rows)) {
-            result.complete = false; // asked again: with the next poll (it still names these rows)
+            result.complete = false; // asked again by ``settle``
+            result.failed.push(...batch);
             continue;
           }
           if (body.rev !== rev || body.stale) {
             result.complete = false; // another revision: never mixed in
+            result.stale = true;
             retry();
             continue;
           }
@@ -389,7 +455,9 @@
       generation += 1;
       const mine = generation;
       const order = payload.order.filter((id) => typeof id === "string");
-      current = { rev: payload.rev, order };
+      if (current?.rev !== payload.rev) failures = 0;
+      failed = new Set();
+      current = { rev: payload.rev, order, acked: false };
       const listed = new Set(order);
       const onPage = new Map(rows().map((row) => [idOf(row), row]));
       if (!onPage.size && order.length) {
@@ -404,6 +472,7 @@
         // The last topic went: the page with its first steps (reloaded when idle).
         emptied(onPage.size ? false : null);
         applied({ order, placed: [], removed });
+        current.acked = true;
         ack(payload.rev);
         return true;
       }
@@ -431,16 +500,28 @@
       if (mine !== generation) return false;
       result.removed.unshift(...removed);
       applied({ order, ...result });
-      if (result.complete) ack(payload.rev);
+      if (result.complete) {
+        failures = 0;
+        current.acked = true;
+        ack(payload.rev);
+      } else if (!result.stale && result.failed.length) {
+        missed(result.failed);
+      }
       return result.complete;
     };
-    // Rows waiting for the owner, and rows a check started or ended in: drawn again once free.
+    // Rows waiting for the owner, rows a check started or ended in, and rows whose request failed:
+    // drawn again once free (the failed ones once their wait is over).
     let settling = null;
+    let again = false;
     const settle = async () => {
-      if (settling) return settling;
+      if (settling) {
+        again = true; // asked for more meanwhile: one more pass right after
+        return settling;
+      }
       if (!current) return undefined;
       settling = (async () => {
         const mine = generation;
+        const { rev, order } = current;
         for (const id of [...kept]) {
           const row = find(id);
           if (!row) kept.delete(id);
@@ -452,11 +533,25 @@
             later.delete(id);
             return false;
           }
-          return !isProtected(row) && current.order.includes(id);
+          return !isProtected(row) && order.includes(id);
         });
-        if (free.length) {
-          const result = await draw(free, current.rev, current.order, mine);
-          if (mine === generation) applied({ order: current.order, ...result });
+        const asking = failed.size && now() >= retryAt ? [...failed] : [];
+        const ids = [...new Set([...free, ...asking])];
+        if (!ids.length) return;
+        const result = await draw(ids, rev, order, mine);
+        if (mine !== generation) return;
+        applied({ order, ...result });
+        if (!asking.length || result.stale) return;
+        const still = result.failed.filter((id) => failed.has(id));
+        if (still.length) {
+          missed(still);
+          return;
+        }
+        failed = new Set();
+        failures = 0;
+        if (!current.acked) {
+          current.acked = true;
+          ack(rev);
         }
       })();
       try {
@@ -464,13 +559,17 @@
       } finally {
         settling = null;
       }
+      if (again) {
+        again = false;
+        return settle();
+      }
       return undefined;
     };
     return {
       topics,
       settle,
       redraw: (ids) => { ids.forEach((id) => later.add(String(id))); return settle(); },
-      cancel: () => { generation += 1; current = null; later.clear(); kept.clear(); },
+      cancel: () => { generation += 1; current = null; later.clear(); kept.clear(); failed = new Set(); failures = 0; },
       waiting: () => [...later],
       kept: () => [...kept],
     };
@@ -631,6 +730,28 @@
     }
   })();
   const show = (record, options) => window.towMessages?.showMessage?.(record, options);
+  // A fragment request (Home's rows, the page area of pages.js): 10 s at most, its body included;
+  // one that takes longer is aborted and answers {status: 0} (failed: asked again later).
+  const request = async (url, init = {}) => {
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    let timer = 0;
+    const late = new Promise((resolve) => {
+      timer = window.setTimeout(() => {
+        controller?.abort();
+        resolve({ status: 0, body: null, timedOut: true });
+      }, TIMEOUT_MS);
+    });
+    const asked = (async () => {
+      const response = await fetch(url, { ...init, signal: controller?.signal });
+      const body = response.status === 200 ? await response.json().catch(() => null) : null;
+      return { status: response.status, body };
+    })();
+    try {
+      return await Promise.race([asked, late]);
+    } finally {
+      window.clearTimeout(timer);
+    }
+  };
   let rowSync = null; // Home's rows (below)
   let pageQuery = ""; // page=/sites… once pages.js follows this page's area
 
@@ -1000,16 +1121,13 @@
   };
   rowSync = list ? createRowSync({
     rows: listRows,
-    fetchRows: async (ids, rev) => {
-      const response = await fetch("/topics/rows", {
-        method: "POST",
-        cache: "no-store",
-        credentials: "same-origin",
-        headers: { Accept: "application/json", "Content-Type": "application/json", "X-TOW-Tab": tab },
-        body: JSON.stringify({ ids, rev }),
-      });
-      return { status: response.status, body: response.status === 200 ? await response.json().catch(() => null) : null };
-    },
+    fetchRows: (ids, rev) => request("/topics/rows", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json", "X-TOW-Tab": tab },
+      body: JSON.stringify({ ids, rev }),
+    }),
     isProtected: protectedRow,
     place: (row, fragment, beforeId) => {
       const template = document.createElement("template");
@@ -1103,6 +1221,7 @@
       pageQuery = query.toString();
     },
     onPoll: (fn) => client.onPoll(fn),
+    request,
     health,
     now: () => client.now(),
     hint,

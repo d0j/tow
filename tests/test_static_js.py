@@ -359,6 +359,7 @@ def test_the_sync_poll_keeps_its_schedule_backoff_hints_and_sign_out():
         "hiddenAsksNothingShownAsksOnce",
         "deltaHaveEtagAndNotModified",
         "failedReaderRetried",
+        "unappliedOfferedAgainThrough304",
         "backoffFiveToSixty",
         "jitterBounded",
         "retryAfterHonoured",
@@ -381,6 +382,7 @@ def test_home_rows_follow_the_topics_area_without_touching_rows_in_use():
         "protectedRowsWaitWithNote",
         "protectionCheckedBeforeApply",
         "staleDiscardedFailedRetried",
+        "failedRowsAskedAgainBySettle",
         "olderAnswerDiscarded",
         "batchesBoundedAndDeferredAgain",
         "emptyHomeTransitions",
@@ -418,6 +420,7 @@ def test_the_page_follows_header_jobs_undo_preferences_version_and_new_rows():
         "languageNoticeThenIdleReload",
         "rowInsertedAnchorKept",
         "focusKeptFieldProtects",
+        "hungRowsGivenUpAndAskedAgain",
         "versionDeferredAndCancelled",
         "hintScopedWithoutData",
         "signOutStopsPolling",
@@ -451,6 +454,7 @@ def test_sites_settings_and_history_follow_their_fragments_without_overwriting_t
         "ownLinesAdopted",
         "historyMergedOncePerEventWithinBounds",
         "pageAreaAppliedFromItsRevision",
+        "failedPageAskedAgainBySettle",
     )
     assert verdict == dict.fromkeys(keys, True), verdict
 
