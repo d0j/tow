@@ -67,8 +67,8 @@ The options are `-Dir FOLDER`, `-Version v1.25.0` (a particular release instead 
 
 ## macOS
 
-A Mac with Apple silicon (M1 or newer). Intel Macs work only with developer tools installed (see
-[If something goes wrong](#if-something-goes-wrong)).
+A Mac with Apple silicon (M1 or newer) and macOS 11 or newer. Intel Macs work only with developer tools installed
+(see [If something goes wrong](#if-something-goes-wrong)) and are not tested.
 
 1. Open **Terminal**: press **Cmd + Space**, type `Terminal`, press **Enter**.
 2. Paste this line and press **Enter**:
@@ -91,8 +91,10 @@ Keep the `TOW` folder and the folders your torrents download into out of **Docum
 
 ## Linux
 
-Any 64-bit distribution (x86-64 or ARM, a Raspberry Pi with a 64-bit system too) with `curl` (or GNU `wget`; BusyBox's
-`wget` is not enough) and `tar`.
+A 64-bit x86-64 distribution with glibc 2.17 or newer (tested on Ubuntu 24.04 and 26.04) and with `curl` (or GNU
+`wget`; BusyBox's `wget` is not enough) and `tar`. 64-bit ARM (a Raspberry Pi with a 64-bit system) and Alpine are
+expected to work but are not tested; 32-bit ARM is not supported. Every system in detail:
+[PORTABLE.md](PORTABLE.md#1b-supported-systems-the-dependency-contract-1331).
 
 1. Open a terminal: on Ubuntu press **Ctrl + Alt + T**; elsewhere find **Terminal** in the applications menu.
 2. Paste this line and press **Enter**:
@@ -141,6 +143,7 @@ TOW/
   backup/          nightly backups, snapshots taken before updates
   app/             the program
   runtime/         its Python and libraries (and uv's temporary files, in runtime/uv-tmp)
+  runtime/uv.toml  uv's settings for TOW; yours go below its line "# --- your settings below ---"
 ```
 
 Move or copy the whole folder: the start file prepares it again in the new place. If TOW starts with the computer,
@@ -163,6 +166,15 @@ already the latest release, it says so and does nothing. On Windows it also puts
 `Stop TOW.cmd` and `Update TOW.cmd` in the TOW folder (changes made to them by hand are not kept). It goes back
 only to a version that can read your data: not before v1.23.0 once v1.23 has run (it says so and changes
 nothing).
+
+The update runs in its own process: its window says so, with the path of its log, and then only shows the progress.
+Closing the window does not stop the update; it finishes or rolls back by itself. If the window says instead that the
+update runs in it, keep the window open until it ends.
+
+TOW's uv reads only `TOW/runtime/uv.toml`, not the `uv.toml` of your account or of the computer. If your network needs
+uv settings (`native-tls = true` for a company certificate, a package index or its mirror), add them to that file below
+the line `# --- your settings below ---`: TOW keeps them; the lines above it are TOW's own. `UV_*` variables such as
+`UV_OFFLINE` still apply.
 
 ## Back up the master key
 
@@ -197,6 +209,8 @@ that the folder is your former TOW install.
 | The page does not open | Wait a minute and open <http://127.0.0.1:8787> by hand. `app\scripts\tow.cmd status` in the TOW folder (macOS, Linux: `~/TOW/app/scripts/tow status`) says whether TOW runs; the reason of a failed start is in `TOW/data/logs/run.log`. |
 | The installer cannot download (company network, antivirus) | It needs `github.com` and `raw.githubusercontent.com` (and the `*.githubusercontent.com` hosts GitHub sends downloads to); on macOS and Linux also `pypi.org` and `files.pythonhosted.org`. Behind a proxy set `HTTPS_PROXY` first. The Windows zip needs no internet for its first start. |
 | macOS asks whether Terminal or Python may access a folder | Allow it, or keep TOW and your download folders out of Documents, Desktop and Downloads. |
+| An update cannot download behind a company network or proxy | Set `HTTPS_PROXY`, or put the uv settings your network needs (`native-tls = true`, a package index or its mirror) into `TOW/runtime/uv.toml` below `# --- your settings below ---`; TOW does not read your account's `uv.toml`. |
+| "uv cannot use …uv.toml (…): correct or remove your lines below …" | A line you added to `TOW/runtime/uv.toml` does not parse, or repeats one of TOW's settings above the marker. Correct or remove it; nothing was updated. |
 | An Intel Mac stops at "cryptography" | Install the developer tools (`xcode-select --install`) and Rust (<https://rustup.rs>), then run the installer again. |
 | "TOW is already installed" | Use the update file instead, or remove TOW first. |
 | "… is not empty: choose another folder" | The folder holds other files. Install into a new or empty folder (`-Dir` / `--dir`). |
