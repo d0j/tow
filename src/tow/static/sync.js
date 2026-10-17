@@ -15,7 +15,8 @@
 // 20, 40, then every 60 s after the failure. Another tab of this browser that changed something says so on a BroadcastChannel of
 // this install and sign-in (a hint without any data): this tab asks within 250 ms, never sooner
 // than its own waiting after a failure. Signed out (401, 403, or the Sign out form): every area
-// this page learned is forgotten and an answer still on its way is ignored.
+// this page learned is forgotten, every request of the page (the poll, Home's rows, the page area's
+// fragments) is aborted, and an answer still on its way - also a body still being read - is ignored.
 (() => {
   const VISIBLE_MS = 5000;
   const BACKOFF_MS = [5000, 10000, 20000, 40000, 60000];
@@ -57,6 +58,7 @@
     let serverUntil = 0; // nor before this (the server's Retry-After)
     let lastUrl = "";
     let lastEtag = "";
+    let abortInFlight = null; // ends the request on its way (a sign-out)
     let offset = 0; // the server's clock minus this one (ms)
     let tzNow = null;
     let polls = 0;
@@ -189,6 +191,9 @@
       retries = {};
       lastUrl = "";
       lastEtag = "";
+      const aborting = abortInFlight;
+      abortInFlight = null;
+      aborting?.(); // the request on its way: its answer is not used anyway
       signedOut(status);
     };
     const poll = async () => {
@@ -209,7 +214,7 @@
       let answer = null;
       try {
         answer = await Promise.race([
-          request({ url: address, etag, onAbort: (fn) => { abort = fn; } }),
+          request({ url: address, etag, onAbort: (fn) => { abort = fn; abortInFlight = fn; } }),
           new Promise((resolve) => { timeout = setTimer(() => resolve({ status: 0, timedOut: true }), TIMEOUT_MS); }),
         ]);
       } catch {
@@ -218,6 +223,7 @@
       clearTimer(timeout);
       if (answer?.timedOut) abort?.();
       if (mine !== epoch) return; // signed out meanwhile: a late answer is not used
+      abortInFlight = null;
       inFlight = false;
       if (stopped) return;
       const status = answer?.status || 0;
@@ -730,14 +736,47 @@
     }
   })();
   const show = (record, options) => window.towMessages?.showMessage?.(record, options);
+  // One session for every request and settler of this page. Signing out (the form, or a 401/403
+  // to any of its requests) ends it: every request on its way is aborted, and its answer - also a
+  // body still being read - is not used; nothing is asked any more; what keeps work of its own
+  // (pages.js) is told once (``onSignOut``).
+  const newController = () => (typeof AbortController === "function" ? new AbortController() : null);
+  const signIn = { epoch: 0, ended: false, controller: newController(), listeners: [] };
+  const endSession = () => {
+    if (signIn.ended) return;
+    signIn.ended = true;
+    signIn.epoch += 1;
+    try {
+      signIn.controller?.abort();
+    } catch {
+      // aborted already
+    }
+    signIn.listeners.splice(0).forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        // one broken listener never stops the others
+      }
+    });
+  };
+  const onSignOut = (fn) => {
+    if (signIn.ended) fn();
+    else signIn.listeners.push(fn);
+  };
   // A fragment request (Home's rows, the page area of pages.js): 10 s at most, its body included;
-  // one that takes longer is aborted and answers {status: 0} (failed: asked again later).
+  // one that takes longer is aborted and answers {status: 0} (failed: asked again later), as does
+  // one the session ended under (``cancelled``).
+  const CANCELLED = { status: 0, body: null, cancelled: true };
   const request = async (url, init = {}) => {
-    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const mine = signIn.epoch;
+    if (signIn.ended) return { ...CANCELLED };
+    const controller = newController();
+    const stop = () => controller?.abort();
+    signIn.controller?.signal?.addEventListener?.("abort", stop);
     let timer = 0;
     const late = new Promise((resolve) => {
       timer = window.setTimeout(() => {
-        controller?.abort();
+        stop();
         resolve({ status: 0, body: null, timedOut: true });
       }, TIMEOUT_MS);
     });
@@ -745,11 +784,13 @@
       const response = await fetch(url, { ...init, signal: controller?.signal });
       const body = response.status === 200 ? await response.json().catch(() => null) : null;
       return { status: response.status, body };
-    })();
+    })().catch(() => ({ status: 0, body: null }));
     try {
-      return await Promise.race([asked, late]);
+      const answer = await Promise.race([asked, late]);
+      return mine === signIn.epoch ? answer : { ...CANCELLED }; // the session ended meanwhile
     } finally {
       window.clearTimeout(timer);
+      signIn.controller?.signal?.removeEventListener?.("abort", stop);
     }
   };
   let rowSync = null; // Home's rows (below)
@@ -821,6 +862,7 @@
     // History's filters go with every poll (the server's request variant).
     query: () => pageQuery,
     signedOut: (status) => {
+      endSession();
       rowSync?.cancel();
       window.towChecks?.scheduler?.stop?.();
       window.towMessages?.signOut?.();
@@ -1222,6 +1264,7 @@
     },
     onPoll: (fn) => client.onPoll(fn),
     request,
+    onSignOut,
     health,
     now: () => client.now(),
     hint,
