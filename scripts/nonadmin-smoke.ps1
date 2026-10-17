@@ -49,9 +49,19 @@ if ($Inner) {
         $report.admin = $principal.IsInRole([Security.Principal.SecurityIdentifier]$AdministratorsSid)
         $report.steps += "identity $($report.sid), administrator: $($report.admin)"
 
+        # The account's own folders, from its token (a process started with -Credential may carry
+        # the starting account's environment, whose folders this account cannot open).
+        $local = [Environment]::GetFolderPath('LocalApplicationData')
+        $env:LOCALAPPDATA = $local
+        $env:APPDATA = [Environment]::GetFolderPath('ApplicationData')
+        $env:USERPROFILE = [Environment]::GetFolderPath('UserProfile')
+        $env:TEMP = (New-Item -ItemType Directory -Force -Path (Join-Path $local 'Temp')).FullName
+        $env:TMP = $env:TEMP
+        $report.profile = $env:USERPROFILE
+
         # 2. Unpack into a Cyrillic folder of this account, set up offline, start.
         $cyrillic = -join [char[]](0x0422, 0x0435, 0x0441, 0x0442)
-        $base = Join-Path $env:LOCALAPPDATA ("TOW nonadmin $cyrillic")
+        $base = Join-Path $local ("TOW nonadmin $cyrillic")
         if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force }
         New-Item -ItemType Directory -Path $base | Out-Null
         Add-Type -AssemblyName System.IO.Compression.FileSystem
