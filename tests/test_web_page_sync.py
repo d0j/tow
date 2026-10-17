@@ -470,6 +470,25 @@ def test_history_lines_are_keyed_by_their_events_and_follow_the_filters(clock):
     assert len(every["entries"]) == 3
 
 
+def test_the_history_limit_note_is_always_drawn_and_hidden_below_the_limit(monkeypatch):
+    """pages.js shows the "newest N" note once live merges fill the list to its limit and hides it
+    below: the page must carry it from the start, hidden while fewer lines are shown."""
+    from tow.web import routes_history
+
+    _seed()
+    monkeypatch.setattr(routes_history, "HISTORY_LIMIT", 3)
+    log_event("topic_pause", topic_id="t1")
+    client = TestClient(app)
+    notes = re.findall(r"<p [^>]*data-history-note[^>]*>", client.get("/history").text)
+    assert len(notes) == 1
+    assert "hidden" in notes[0]
+    for _ in range(3):
+        log_event("topic_pause", topic_id="t2")
+    notes = re.findall(r"<p [^>]*data-history-note[^>]*>", client.get("/history").text)
+    assert len(notes) == 1
+    assert "hidden" not in notes[0]
+
+
 def test_an_event_of_an_older_tow_without_an_id_keeps_one_key():
     record = {"ts": "2026-10-01T18:50:00+03:00", "kind": "check", "n": 3}
     assert page_sync.event_key(record) == page_sync.event_key(dict(record))

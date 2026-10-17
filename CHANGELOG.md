@@ -10,6 +10,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - **Mark all read** and **Clear history** in Recent messages give up after 10 seconds when TOW does not answer
   and say once that it was not saved, instead of waiting for ever; an answer arriving later is not taken over
   what the next refresh shows.
+- **History** says "Only the latest 300 events are shown" also when new lines arriving while the page is open
+  fill it to 300, not only when it was opened that full.
 
 ## [1.33.0] — 2026-10-17
 
