@@ -101,7 +101,7 @@ def _access(args: argparse.Namespace) -> int:
     if args.access_action == "status":
         cfg = load_config()
         view = {"network": as_bool(cfg.get("allow_lan")), "bind": str(cfg.get("bind") or "127.0.0.1")}
-        view["password_set"] = access.password_is_set(load_secrets())
+        view["password_set"] = render.flag(access.password_is_set(load_secrets()))
         render.show(view, args.json, render.access_text)
         return EXIT_OK
     enabled = args.access_action == "on"
@@ -137,6 +137,17 @@ def _key_error(exc: Exception) -> str:
     return t(f"cli.keys.error.{exc.kind}") if isinstance(exc, MasterKeyError) else str(exc)
 
 
+def _store_view(status: dict[str, Any]) -> dict[str, Any]:
+    """What ``secrets`` and ``keys`` say of the store: its state and where the master key comes
+    from, each one of the store's fixed words (None for any other), never a value it holds."""
+    from tow.store import KEY_SOURCES, STORAGE_STATES
+
+    return {
+        "storage": render.one_of(status.get("storage"), STORAGE_STATES),
+        "key_source": render.one_of(status.get("key_source"), KEY_SOURCES),
+    }
+
+
 def _add_secrets(sub: Subcommands) -> None:
     from tow.i18n import t
 
@@ -159,10 +170,11 @@ def _secrets(args: argparse.Namespace) -> int:
 
     try:
         if args.secrets_action == "status":
-            render.show(secret_store_status(), args.json, render.secrets_text)
+            render.show(_store_view(secret_store_status()), args.json, render.secrets_text)
         elif args.secrets_action == "migrate":
-            migrated = migrate_legacy_secrets()
-            render.show({"ok": True, "migrated": migrated, **secret_store_status()}, args.json, render.secrets_text)
+            migrated = render.flag(migrate_legacy_secrets())
+            view = {"ok": True, "migrated": migrated, **_store_view(secret_store_status())}
+            render.show(view, args.json, render.secrets_text)
         elif args.secrets_action == "generate-key":
             from tow.i18n import t
 
@@ -235,7 +247,7 @@ def _keys(args: argparse.Namespace) -> int:
         in_use = master_key_file()
         render.show(
             {
-                "key_source": secret_store_status()["key_source"],
+                "key_source": _store_view(secret_store_status())["key_source"],
                 "key_file": str(in_use) if in_use else None,
                 "install_key_file": str(key_file()),
                 "install_key_exists": key_file().is_file(),

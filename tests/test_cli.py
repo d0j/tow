@@ -327,6 +327,50 @@ def test_a_command_tells_a_person_its_result_in_sentences(monkeypatch, capsys, t
     _sentences_only(capsys.readouterr().out)
 
 
+@pytest.mark.parametrize("as_json", [True, False])
+def test_the_security_commands_print_only_their_fixed_words(monkeypatch, capsys, as_json):
+    """`secrets status`, `secrets migrate`, `keys status` and `access status` say the store's
+    state, where the master key comes from and yes or no, each as one of its fixed words:
+    anything else a status holds, or a word it does not know, never reaches the output."""
+    import tow.access
+    import tow.store
+
+    leak = "SECRETVALUE-123"
+    monkeypatch.setattr(
+        tow.store, "secret_store_status", lambda: {"storage": leak, "key_source": leak, "master_key": leak}
+    )
+    monkeypatch.setattr(tow.store, "migrate_legacy_secrets", lambda: leak)
+    monkeypatch.setattr(tow.access, "password_is_set", lambda secrets: leak)
+    views = {}
+    for argv in (["secrets", "status"], ["secrets", "migrate"], ["keys", "status"], ["access", "status"]):
+        assert main(argv + ["--json"] * as_json) == 0, argv
+        out = capsys.readouterr().out
+        assert leak not in out, argv
+        views[argv[0] + " " + argv[1]] = json.loads(out) if as_json else out
+    if as_json:
+        assert views["secrets status"] == {"storage": None, "key_source": None}
+        assert views["secrets migrate"] == {"ok": True, "migrated": False, "storage": None, "key_source": None}
+        assert views["keys status"]["key_source"] is None
+        assert views["access status"]["password_set"] is False
+
+
+def test_the_fixed_words_are_every_word_the_store_says():
+    import inspect
+    import re
+
+    from tow.storage import keys, secrets
+    from tow.store import KEY_SOURCES, STORAGE_STATES
+
+    assert set(re.findall(r'return "(\w+)"', inspect.getsource(keys.key_source))) == set(KEY_SOURCES)
+    assert set(re.findall(r'storage = "(\w+)"', inspect.getsource(secrets.secret_store_status))) == set(STORAGE_STATES)
+    for word in KEY_SOURCES:
+        assert render.one_of(word, KEY_SOURCES) == word
+    assert render.one_of(None, KEY_SOURCES) is None
+    assert render.one_of(["env"], KEY_SOURCES) is None
+    assert render.flag(True) is True
+    assert [render.flag(value) for value in (1, "yes", None, False)] == [False] * 4
+
+
 def test_a_refusal_says_the_reason_alone(capsys, tmp_path):
     render.show({"ok": False, "error": "The reason.", "detail": "a technical cause"}, False)
     assert capsys.readouterr().out == "The reason.\n"
