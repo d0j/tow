@@ -275,7 +275,14 @@ verdict.focusKeptFieldProtects = true;
   assert.ok(sent.some((r) => r.url === "/topics/rows" && JSON.parse(r.init.body).rev === rev));
   assert.notEqual(document.getElementById("row-a"), late);
   rowsHang = false;
-  const good = ({ ids, rev: asked }) => respond(200, { ok: true, rev: asked, order: ["n", "a", "b"], rows: ids.filter((id) => id === "a").map((id) => ({ id, html: "<a-late>", hash: "h5-a" })), missing: [], deferred: [] });
+  // Every row asked for is answered, as the server does (a row, missing or deferred): a "b" left
+  // unanswered stayed pending into the next case and, on some poll timings (Math.random), took the
+  // answer meant for it there (CI ubuntu-26.04, 1 in ~130 runs).
+  const rowB = () => {
+    built.set("<b-again>", build(document, ["div", { class: "row-wrap", id: "row-b", "data-q": "b" }, ["details", { class: "row-edit" }, ["summary", {}, "b again"], ["div", { class: "edit-panel" }]]]));
+    return { id: "b", html: "<b-again>", hash: "h5-b" };
+  };
+  const good = ({ ids, rev: asked }) => respond(200, { ok: true, rev: asked, order: ["n", "a", "b"], rows: ids.map((id) => (id === "a" ? { id, html: "<a-late>", hash: "h5-a" } : rowB())), missing: [], deferred: [] });
   rowAnswers.push(good, good, good);
   await run(30000);
   assert.equal(document.getElementById("row-a"), late);
