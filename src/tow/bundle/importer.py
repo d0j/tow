@@ -56,6 +56,8 @@ _OVERRIDE_TYPES: dict[str, type] = {
 }
 # The password other devices sign in with (secrets.enc): kept with the settings above.
 _ACCESS_SECRET = "lan_auth"
+# The secrets an import may keep from this install: their names, never their values.
+_PRESERVABLE = (_ACCESS_SECRET,)
 # What an import that cannot read this install's password writes instead: this computer only.
 _NO_NETWORK: dict[str, Any] = {"allow_lan": False, "bind": "127.0.0.1"}
 
@@ -238,7 +240,7 @@ def _import_bundle(
     parsed = read_bundle(Path(input_path), passphrase)
     overrides = dict(config_overrides or {})
     secret_keys = {str(key) for key in (preserve_secret_keys or ())}
-    if not secret_keys.issubset({_ACCESS_SECRET}):
+    if not secret_keys.issubset(_PRESERVABLE):
         raise ExportImportError("unsupported preserved secret key")
     destination_secrets: dict[str, Any] | None = None
     unreadable = False
@@ -288,7 +290,7 @@ def _import_bundle(
         "path_maps": [{"old": old, "new": new} for old, new in mappings],
         "config_overrides": sorted(overrides),
         "security_settings": security,
-        "preserved_secret_keys": sorted(secret_keys),
+        "preserved_secret_keys": [name for name in _PRESERVABLE if name in secret_keys],
         "local_secrets_unreadable": unreadable,
         **({"network_access": "off"} if unreadable else {}),
         "path_warnings": warnings,
