@@ -54,10 +54,10 @@ _OVERRIDE_TYPES: dict[str, type] = {
     "allow_private_notifier_hosts": bool,
     "protection": dict,
 }
-# The password other devices sign in with (secrets.enc): kept with the settings above.
-_ACCESS_SECRET = "lan_auth"
-# The secrets an import may keep from this install: their names, never their values.
-_PRESERVABLE = (_ACCESS_SECRET,)
+# The secrets an import may keep from this install, by name (their values are never said): the
+# password other devices sign in with (secrets.enc), kept with the settings above.
+_PRESERVABLE: tuple[str, ...] = ("lan_auth",)
+_ACCESS_SECRET = _PRESERVABLE[0]
 # What an import that cannot read this install's password writes instead: this computer only.
 _NO_NETWORK: dict[str, Any] = {"allow_lan": False, "bind": "127.0.0.1"}
 
