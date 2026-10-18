@@ -98,8 +98,11 @@ def test_every_smokes_job_is_bounded_on_its_own_port_and_on_the_given_commit():
         for step in job["steps"]:
             if step.get("uses", "").startswith("actions/checkout@"):
                 assert step["with"] == {"ref": "${{ inputs.ref }}", "persist-credentials": False}, job_id
+            # The commit given is checked out in the default branch's cache scope (weekly, by
+            # hand, a release): no uv cache is restored or saved, and no other cache is used.
             if step.get("uses", "").startswith("astral-sh/setup-uv@"):
-                assert step["with"]["save-cache"] is False, job_id
+                assert step["with"] == {"enable-cache": False}, job_id
+            assert not step.get("uses", "").startswith("actions/cache"), job_id
         if job_id == "build":
             continue
         assert job["needs"] == "build", job_id
