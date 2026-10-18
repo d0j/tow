@@ -29,6 +29,13 @@ from tow.storage.locks import persistence_lock
 _SECRETS_FORMAT = "tow-secrets/v1"
 _UNDO_FORMAT = "tow-secrets-undo/v1"
 _SETTINGS_UNDO_REF = "settings-v1"
+# Every state secret_store_status() says the store is in.
+STORAGE_STATES: tuple[str, ...] = (
+    "encrypted",
+    "uninitialized",
+    "legacy_plaintext_migration_required",
+    "blocked_legacy_plaintext",
+)
 
 
 def encrypted_secrets_path() -> Path:

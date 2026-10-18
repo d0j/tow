@@ -81,6 +81,10 @@ def master_key_file() -> Path | None:
     return _key_file_in_use()
 
 
+# Every word key_source() says: where the master key in use comes from.
+KEY_SOURCES: tuple[str, ...] = ("env", "file", "install", "legacy", "missing")
+
+
 def key_source() -> str:
     if os.environ.get("TOW_MASTER_KEY", "").strip():
         return "env"

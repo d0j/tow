@@ -100,6 +100,17 @@ def _names(items: Any) -> str:
     return ", ".join(str(item) for item in items or []) or "—"
 
 
+def one_of(value: object, words: tuple[str, ...]) -> str | None:
+    """``value`` as the word of ``words`` it is (that constant itself), None for anything else:
+    what the security commands say of the store is one of its fixed words, never text it gave."""
+    return next((word for word in words if isinstance(value, str) and word == value), None)
+
+
+def flag(value: object) -> bool:
+    """Yes for True itself only: a security command's yes or no is never a value it was handed."""
+    return value is True
+
+
 def _key_line(source: str, key_file: str | None, *, secrets_saved: bool) -> str:
     """Which master key TOW uses, never the key itself."""
     from tow.i18n import t
@@ -128,7 +139,7 @@ def secrets_text(status: dict[str, Any]) -> str:
                 "store.migrate_needed", file="data/secrets.json", command="tow secrets migrate"
             ),
             "blocked_legacy_plaintext": t("store.legacy_left", file="data/secrets.json", encrypted="secrets.enc"),
-        }.get(str(storage), str(storage))
+        }.get(str(storage), "—")
     )
     in_use = master_key_file()
     lines.append(
