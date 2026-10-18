@@ -5,10 +5,65 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.33.1] — 2026-10-18
+
+### Security
+
+- On **Settings**, a messenger's last delivery error and a failed nightly backup no longer show folders, files or
+  a link's secret query to a device on the network, as everywhere else; and no device, this computer included, is
+  shown the credentials in a link of such an error. Your configured folders still show as before.
+- A browser that saved TOW's sign-in password no longer fills it into a torrent client's or a site's password,
+  a messenger's token, webhook or key, or a site sign-in on **Home**, where a Save then stored it. These fields
+  now ask for their own password, and a save that carries TOW's password is refused with a note.
+- No device, this computer included, is shown the sign-in, passkey or secret query of a link in an error any
+  more: not on **Home**'s rows and their tooltips, a topic's panel, **Needs attention**, History, the log,
+  Recent messages or Settings. This also holds for a secret query name written in escaped form (`%70k` for `pk`),
+  a token or password a site's answer repeats in quotes (`"token": "..."`, also when the text is cut off there),
+  and a value saved with an error under a secret name. New errors are saved without them, and those saved before
+  are cleaned when shown; the rest of the link and your folders stay visible on this computer.
+- With `allow_private_tracker_hosts` on, a proxy set for the whole system (`HTTP_PROXY`, `HTTPS_PROXY`) no
+  longer carries the requests to a site on this computer or the home network, its sign-in and cookies included,
+  when `NO_PROXY` does not name it: they go direct. Public sites still use the proxy.
+
 ### Added
 
 - `tow doctor` warns when the live `data/` folder is on a network file system (NFS, SMB, 9p, SSHFS and the like),
   where TOW's locks may not keep a second TOW on another computer out.
+- `config.yaml` can set how often open pages may ask TOW what changed: `web: {rate_burst: 40, rate_per_sec: 4}`
+  (each tab of this computer and each signed-in device on its own). A wrong value is named when TOW starts.
+- `tow ... --json` writes its JSON in ASCII (other characters as `\u` escapes): Windows PowerShell 5.1 read a
+  Cyrillic install folder in it as garbage (`tow.cmd keys status --json | ConvertFrom-Json`). Text for people
+  is unchanged.
+- Closing the window of an update ("Update TOW.cmd", `update-tow`, `deploy.ps1`) no longer stops the update
+  halfway: it runs in its own process, which stops TOW, switches the code, starts TOW again or rolls back by
+  itself; the window only shows its progress. Settings → **Update log** shows the latest such update too, with
+  when it started and how it ended (a device on the network sees both logs without folders outside the TOW
+  folder, such as where a downloaded archive lies). A `--source`, `--sums` or `--uv` path given relative to the
+  folder you run the update from still means the file there.
+- TOW's own uv no longer reads the account's or the computer's `uv.toml`: an index, a mirror, a cache or a
+  Python preference set there for other projects could break TOW's setup and updates. An install now has its own
+  `runtime/uv.toml`; settings of yours (`native-tls`, an index) go below its marked line and are kept.
+- On a Windows that is not in English, the watchdog's message after the computer was off says whether it was
+  restarted or powered off: TOW reads the kind Windows itself records for the shutdown, and stays neutral when that
+  record is missing or unclear.
+- A topic's files are no longer called missing when the disk their folder is on is not mounted (Linux, macOS, and
+  Windows folders a disk is mounted on): TOW remembers the disk once it has seen a file there, keeps the files
+  unconfirmed and measures no other disk's free space until it is back. The disk is known by its own ID (its UUID,
+  the Windows volume and its serial number, the share a network drive stands for), so another disk of the same kind
+  put at the same place or drive letter is another disk; one without an ID is not remembered. After replacing or
+  reformatting the disk, run `tow check --apply --rebind-volumes` (or **Same disk — accept**): it looks at the files
+  on the disk now, also those already confirmed that day, and the note in Needs attention goes only once the disk
+  is recorded.
+- A nightly backup or a restore point is no longer written onto the system disk when the disk of its folder is not
+  connected: TOW remembers the disk once a copy was written and checked there, refuses the copy with a clear message
+  while it is missing or another one, and shows no free space for that folder then.
+- **Needs attention** says when a topic's folder or a backup folder is not on its disk, and on the computer running
+  TOW its **Same disk — accept** binds the folder to the disk it is on now, only when a file of the topic (or a copy of
+  TOW's) is found there.
+- On Linux and macOS, `tow export` to a drive without hard links (an exFAT or FAT USB stick, some network shares)
+  works: the finished file is put in place by the system's own rename that never replaces an existing file, instead of
+  failing. A drive that offers neither still refuses, as before.
+
 ### Changed
 
 - `install.sh` refuses a 32-bit ARM computer (ARMv7, ARMv6) before it writes anything, as it already refused
@@ -76,61 +131,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - The torrent client's name in its card in **Settings** is no longer cut at the bottom in some browsers.
 - A **Settings** page left open over an update no longer says "You have the latest version" beside the note to
   reload it: until you do, it says "Reload the page to use TOW …" with the version now running.
-
-### Security
-
-- On **Settings**, a messenger's last delivery error and a failed nightly backup no longer show folders, files or
-  a link's secret query to a device on the network, as everywhere else; and no device, this computer included, is
-  shown the credentials in a link of such an error. Your configured folders still show as before.
-- A browser that saved TOW's sign-in password no longer fills it into a torrent client's or a site's password,
-  a messenger's token, webhook or key, or a site sign-in on **Home**, where a Save then stored it. These fields
-  now ask for their own password, and a save that carries TOW's password is refused with a note.
-- No device, this computer included, is shown the sign-in, passkey or secret query of a link in an error any
-  more: not on **Home**'s rows and their tooltips, a topic's panel, **Needs attention**, History, the log,
-  Recent messages or Settings. This also holds for a secret query name written in escaped form (`%70k` for `pk`),
-  a token or password a site's answer repeats in quotes (`"token": "..."`, also when the text is cut off there),
-  and a value saved with an error under a secret name. New errors are saved without them, and those saved before
-  are cleaned when shown; the rest of the link and your folders stay visible on this computer.
-- With `allow_private_tracker_hosts` on, a proxy set for the whole system (`HTTP_PROXY`, `HTTPS_PROXY`) no
-  longer carries the requests to a site on this computer or the home network, its sign-in and cookies included,
-  when `NO_PROXY` does not name it: they go direct. Public sites still use the proxy.
-
-### Added
-
-- `config.yaml` can set how often open pages may ask TOW what changed: `web: {rate_burst: 40, rate_per_sec: 4}`
-  (each tab of this computer and each signed-in device on its own). A wrong value is named when TOW starts.
-- `tow ... --json` writes its JSON in ASCII (other characters as `\u` escapes): Windows PowerShell 5.1 read a
-  Cyrillic install folder in it as garbage (`tow.cmd keys status --json | ConvertFrom-Json`). Text for people
-  is unchanged.
-- Closing the window of an update ("Update TOW.cmd", `update-tow`, `deploy.ps1`) no longer stops the update
-  halfway: it runs in its own process, which stops TOW, switches the code, starts TOW again or rolls back by
-  itself; the window only shows its progress. Settings → **Update log** shows the latest such update too, with
-  when it started and how it ended (a device on the network sees both logs without folders outside the TOW
-  folder, such as where a downloaded archive lies). A `--source`, `--sums` or `--uv` path given relative to the
-  folder you run the update from still means the file there.
-- TOW's own uv no longer reads the account's or the computer's `uv.toml`: an index, a mirror, a cache or a
-  Python preference set there for other projects could break TOW's setup and updates. An install now has its own
-  `runtime/uv.toml`; settings of yours (`native-tls`, an index) go below its marked line and are kept.
-- On a Windows that is not in English, the watchdog's message after the computer was off says whether it was
-  restarted or powered off: TOW reads the kind Windows itself records for the shutdown, and stays neutral when that
-  record is missing or unclear.
-- A topic's files are no longer called missing when the disk their folder is on is not mounted (Linux, macOS, and
-  Windows folders a disk is mounted on): TOW remembers the disk once it has seen a file there, keeps the files
-  unconfirmed and measures no other disk's free space until it is back. The disk is known by its own ID (its UUID,
-  the Windows volume and its serial number, the share a network drive stands for), so another disk of the same kind
-  put at the same place or drive letter is another disk; one without an ID is not remembered. After replacing or
-  reformatting the disk, run `tow check --apply --rebind-volumes` (or **Same disk — accept**): it looks at the files
-  on the disk now, also those already confirmed that day, and the note in Needs attention goes only once the disk
-  is recorded.
-- A nightly backup or a restore point is no longer written onto the system disk when the disk of its folder is not
-  connected: TOW remembers the disk once a copy was written and checked there, refuses the copy with a clear message
-  while it is missing or another one, and shows no free space for that folder then.
-- **Needs attention** says when a topic's folder or a backup folder is not on its disk, and on the computer running
-  TOW its **Same disk — accept** binds the folder to the disk it is on now, only when a file of the topic (or a copy of
-  TOW's) is found there.
-- On Linux and macOS, `tow export` to a drive without hard links (an exFAT or FAT USB stick, some network shares)
-  works: the finished file is put in place by the system's own rename that never replaces an existing file, instead of
-  failing. A drive that offers neither still refuses, as before.
 
 ## [1.33.0] — 2026-10-17
 
