@@ -7,6 +7,7 @@ New errors are stored without them too; stored ones from before are cleaned when
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import UTC, datetime
 
@@ -42,7 +43,8 @@ def test_the_credentials_scrub_keeps_the_rest_of_the_text():
     shown = scrub_credentials(PLAIN)
     assert _leaks(shown) == []
     assert "https://tracker.example/dl.php?t=5&uk=***&pk=***" in shown  # the link stays useful
-    assert "http://bt.example" in shown
+    # The announce link keeps its host, as the whole word after "announce" (its passkey path is gone).
+    assert re.findall(r"\(announce ([^\s,)]+)", shown) == ["http://bt.example"]
     assert "token=***" in shown
     assert scrub_credentials(r"D:\TV\Show A\e01.mkv was not found") == r"D:\TV\Show A\e01.mkv was not found"
     assert scrub_credentials("magnet:?xt=urn:btih:abc&tr=http://t.example/PASSKEY0123456789abcdef/announce") == (
