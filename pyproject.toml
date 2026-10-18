@@ -71,7 +71,7 @@ dev = [
     "pytest-timeout>=2.4",
     "pytest-xdist>=3.8",
     "ruff>=0.16.10",
-    "types-regex>=2026.6.28",
+    "types-regex>=2026.9.29.20261005",
 ]
 
 [tool.uv]
