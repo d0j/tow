@@ -825,6 +825,9 @@ def test_only_main_gate_writes_shared_uv_cache(name):
                 continue
             found += 1
             options = step.get("with", {})
+            if name == "smokes":  # the commit it is given, in the default branch's scope: no cache
+                assert options == {"enable-cache": False}, job_id
+                continue
             assert options.get("restore-cache", True) is True
             if name == "ci" and job_id == "gate":
                 assert options["save-cache"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"

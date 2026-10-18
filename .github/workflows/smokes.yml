@@ -17,6 +17,13 @@ name: smokes
 # Windows with long paths off (D04); Rosetta (D05); a quarantined program on macOS (D07); folder
 # names in NFD on macOS (TC-17); and a device on the network as two network namespaces of one
 # runner (D01: separate network stacks, not a second device).
+#
+# The commit to test is the caller's own: installers.yml passes github.sha (weekly: the default
+# branch; by hand: a branch of this repository; a pull request runs in its own cache scope), the
+# release the commit its source job checked. A run of the weekly or by-hand kind is in the default
+# branch's cache scope, so no job here restores or saves a cache (setup-uv's is off), and every job
+# reads only: contents: read, a checkout that keeps no credentials, no secret but the read-only
+# github.token of the two steps that download the previous release.
 
 on:
   workflow_call:
@@ -58,7 +65,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          save-cache: false
+          enable-cache: false
       - name: Source archive of this commit
         shell: bash
         run: git archive --format=tar.gz --prefix=tow/ -o tow-source.tar.gz HEAD
@@ -89,7 +96,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          save-cache: false
+          enable-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ env.SOURCE_ARTIFACT }}
@@ -130,7 +137,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          save-cache: false
+          enable-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ env.SOURCE_ARTIFACT }}
@@ -305,7 +312,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          save-cache: false
+          enable-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ env.SOURCE_ARTIFACT }}
@@ -364,7 +371,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          save-cache: false
+          enable-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ env.SOURCE_ARTIFACT }}
@@ -398,7 +405,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          save-cache: false
+          enable-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ env.SOURCE_ARTIFACT }}
