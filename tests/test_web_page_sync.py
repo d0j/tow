@@ -546,7 +546,8 @@ def test_settings_card_errors_are_scrubbed_for_the_network_and_credentials_for_e
         return [page["acc-bots"], page["acc-transfer"], found["acc-bots"], found["acc-transfer"]]
 
     for html in sections(lan):
-        assert "api.telegram.org" in html  # the link's host stays
+        # The link's host stays, as the whole word after "via" (the link itself is gone).
+        assert set(re.findall(r" via ([\w.-]+)", html)) == {"api.telegram.org"}
         assert not [word for word in (*CREDENTIALS, *LOCAL_WORDS) if word in html]
     remote = sections(lan)
     assert folder in remote[1]  # the configured folder: a setting, not an error
