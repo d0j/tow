@@ -33,13 +33,13 @@ requires-python = ">=3.14"
 dependencies = [
     "beautifulsoup4>=4.15.0",
     "cryptography>=50.0.1",
-    "fastapi>=0.141.1",
+    "fastapi>=0.143.0",
     "httpcore>=1.0.9,<2",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
     "python-multipart>=0.0.32",
     "pyyaml>=6.0.3",
-    "qbittorrent-api>=2024.1",
+    "qbittorrent-api>=2026.10.0",
     "regex>=2026.9.29",
     "tzdata>=2026.5",
     "uvicorn[standard]>=0.52.4",
@@ -71,7 +71,7 @@ dev = [
     "pytest-timeout>=2.4",
     "pytest-xdist>=3.8",
     "ruff>=0.16.10",
-    "types-regex>=2026.6.28",
+    "types-regex>=2026.9.29.20261005",
 ]
 
 [tool.uv]
