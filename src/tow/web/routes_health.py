@@ -14,7 +14,7 @@ from tow.clock import format_ui_timestamp
 from tow.web import _context, services, sync
 from tow.web.templating import header_health
 from tow.web.text import t, time_parts, zone_minutes
-from tow.web_update import WebUpdateError
+from tow.web_update import REFUSAL_PARAM, REFUSAL_REASONS, REFUSALS, WebUpdateError
 
 router = APIRouter()
 
@@ -43,9 +43,17 @@ def updates_check() -> dict[str, Any]:
     return _with_time_labels(services.release_status(force=True), "checked_at")
 
 
+def _fixed(value: object, words: tuple[str, ...]) -> str | None:
+    """``value`` as the word of ``words`` it is (that constant itself), None for anything else."""
+    return next((word for word in words if isinstance(value, str) and word == value), None)
+
+
 def _said(exc: WebUpdateError) -> str:
-    """The refusal in the owner's words: its key and its parameters are all catalog keys."""
-    return t(str(exc), **{name: t(key) for name, key in exc.params.items()})
+    """The refusal in the owner's words, built from tow.web_update's fixed words alone: a key or
+    a reason outside them says the update failed, never the exception's own text."""
+    key = _fixed(str(exc), REFUSALS) or "releases.update_failed"
+    reason = _fixed(exc.params.get(REFUSAL_PARAM), REFUSAL_REASONS) or "releases.backup_reason.other"
+    return t(key, **{REFUSAL_PARAM: t(reason)})
 
 
 @router.get("/updates/status")

@@ -159,7 +159,8 @@ PURE: dict[str, set[str]] = {
     # secrets only inside the route's own store transaction; undoing and the cleanup are in services.
     "tow.undo": {"invalidate", "stamp"},
     "tow.undo.snapshots": {"site_snapshot"},
-    "tow.web_update": {"WebUpdateError"},
+    # A refused update and the fixed words it is said in (routes_health._said): constants.
+    "tow.web_update": {"REFUSALS", "REFUSAL_PARAM", "REFUSAL_REASONS", "WebUpdateError"},
 }
 
 # Helper module of tow.web -> what it uses from outside the web beyond PURE, directly instead of
