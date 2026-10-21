@@ -541,6 +541,59 @@ def test_web_install_route_confirms_queue_and_enforces_origin(monkeypatch):
     assert calls == ["1.22.21"]
 
 
+def test_every_refusal_web_update_raises_is_one_of_its_fixed_words():
+    # The web answer is built from REFUSALS and REFUSAL_REASONS alone (CodeQL
+    # py/stack-trace-exposure, alerts 1285 and 1303): a new refusal must be added there.
+    tree = ast.parse(Path(web_update.__file__).read_text(encoding="utf-8"))
+    raised = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "WebUpdateError"
+    ]
+    assert raised
+    for call in raised:
+        assert isinstance(call.args[0], ast.Constant)
+        assert call.args[0].value in web_update.REFUSALS
+        assert {keyword.arg for keyword in call.keywords} <= {web_update.REFUSAL_PARAM}
+    for key in (*web_update.REFUSALS, *web_update.REFUSAL_REASONS, "releases.update_failed"):
+        for lang in ("en", "ru"):
+            assert t(key, lang) != key
+
+
+@pytest.mark.parametrize(
+    ("refusal", "said"),
+    [
+        (web_update.WebUpdateError("releases.busy"), ("releases.busy", "releases.backup_reason.other")),
+        (
+            web_update.WebUpdateError("releases.backup_failed_because", reason="releases.backup_reason.write"),
+            ("releases.backup_failed_because", "releases.backup_reason.write"),
+        ),
+        # Words that are not TOW's own never reach the answer: an unknown refusal says the update
+        # failed, an unknown reason says "other".
+        (web_update.WebUpdateError(r"C:\Synthetic\secret-folder"), ("releases.update_failed", "")),
+        (
+            web_update.WebUpdateError("releases.backup_failed_because", reason="disk D: is synthetic-secret"),
+            ("releases.backup_failed_because", "releases.backup_reason.other"),
+        ),
+    ],
+)
+def test_a_refused_web_update_answers_in_fixed_words_only(monkeypatch, refusal, said):
+    def refuse(_version, **_options):
+        raise refusal
+
+    monkeypatch.setattr(services, "start_web_update", refuse)
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    response = client.post("/updates/install", data={"version": "1.22.21"})
+    assert response.status_code == 409
+    from tow.web.text import t as page_t
+
+    key, reason = said
+    expected = page_t(key, reason=page_t(reason)) if reason else page_t(key)
+    assert response.json() == {"ok": False, "error": expected}
+    assert "synthetic-secret" not in response.text
+    assert "Synthetic" not in response.text
+
+
 @pytest.mark.parametrize(("asked_ago", "grace"), [(None, 0.0), (1.0, 6.0), (29.0, 6.0), (31.0, 0.0)])
 def test_an_update_gives_open_pages_a_grace_only_when_a_page_asked_lately(monkeypatch, asked_ago, grace):
     # 1.33.1 B25 F-1: a ~10 s update was answered for 1.6 s before TOW stopped, so a page on its

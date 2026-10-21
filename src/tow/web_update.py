@@ -48,10 +48,30 @@ _RESTORE_POINT_REASONS = {
     MASTER_KEY: "releases.backup_reason.master_key",
     CREATE_FAILED: "releases.backup_reason.write",
 }
+# Every refusal a WebUpdateError says, its one parameter and that parameter's words: the web
+# answer is built from these constants alone, never from the exception (routes_health._said).
+REFUSALS = (
+    "releases.already_installed",
+    "releases.backup_failed_because",
+    "releases.busy",
+    "releases.content_ref_pending",
+    "releases.detached_unavailable",
+    "releases.interrupted",
+    "releases.job_unreadable",
+    "releases.launch_failed",
+    "releases.no_python",
+    "releases.not_published",
+    "releases.not_runtime",
+    "releases.receipt_pending",
+    "releases.unsupported_version",
+)
+REFUSAL_PARAM = "reason"
+REFUSAL_REASONS = (*_RESTORE_POINT_REASONS.values(), "releases.backup_reason.other")
 
 
 class WebUpdateError(RuntimeError):
-    """A catalog key (the message) and its `params`: catalog keys too, translated with it."""
+    """A catalog key of ``REFUSALS`` (the message) and its `params`: ``reason``, a catalog key of
+    ``REFUSAL_REASONS``, translated with it."""
 
     def __init__(self, key: str, **params: str) -> None:
         super().__init__(key)
