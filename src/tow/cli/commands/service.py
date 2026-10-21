@@ -65,6 +65,17 @@ def _status_view() -> dict[str, Any]:
     except Exception:  # noqa: BLE001 - autostart is read from the system; its failure is "unknown"
         autostart = None
     running = layout.running()
+    # The last scheduled check, the one the next is counted from (the header's countdown): a
+    # progress or space pass, a site retry or one topic's check moves at_ts, not auto_at_ts. A
+    # state of an older TOW has at_ts alone.
+    checked = next(
+        (
+            value
+            for value in (health.get("auto_at_ts"), health.get("at_ts"))
+            if isinstance(value, int) and not isinstance(value, bool) and value > 0
+        ),
+        None,
+    )
     return {
         "version": __version__,
         # What needs the owner now: the issues of Home's "Needs attention", from the same rules.
@@ -78,8 +89,8 @@ def _status_view() -> dict[str, Any]:
         # Written from the number beside "at" (an older TOW stored "at" already written in the
         # page's language of that moment), in the language this command speaks, like next_check.
         "last_check": (
-            format_ui_timestamp(datetime.fromtimestamp(health["at_ts"], UTC).isoformat())
-            if isinstance(health.get("at_ts"), int) and health["at_ts"] > 0
+            format_ui_timestamp(datetime.fromtimestamp(checked, UTC).isoformat())
+            if checked
             else health.get("at") or None
         ),
         "last_check_ok": bool(health.get("check_ok", True)) if health else None,
