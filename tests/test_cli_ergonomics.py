@@ -168,6 +168,26 @@ def test_status_writes_the_last_and_the_next_check_the_same_way(monkeypatch, cap
     assert format_datetime(datetime.fromisoformat("2026-10-06T22:30:56")) in line
 
 
+def test_status_says_the_last_scheduled_check_not_a_later_progress_pass(monkeypatch, capsys):
+    # Audit 22.10.2026: a progress pass at 00:41 after the scheduled check at 23:57 made
+    # "last check 00:41 · next 11:57", twelve hours from a check that never looked at a site.
+    from tow.config import load_config, save_config
+    from tow.store import save_state
+
+    cfg = load_config()
+    cfg["language"] = "en"
+    save_config(cfg)
+    monkeypatch.setattr("tow.autostart.backend", lambda: type("B", (), {"status": lambda self: {"on": True}})())
+    scheduled = datetime(2026, 10, 21, 20, 57, 26, tzinfo=UTC)
+    progress = datetime(2026, 10, 21, 21, 41, 49, tzinfo=UTC)
+    health = {"at": progress.isoformat(), "at_ts": int(progress.timestamp()), "auto_at_ts": int(scheduled.timestamp())}
+    save_state({"topics": [], "health": health | {"check_ok": True}})
+    assert cli.main(["status"]) == 0
+    line = capsys.readouterr().out
+    assert re.search(r"last check: 2026-10-2\d \d\d:57:26", line), line
+    assert ":41:49" not in line
+
+
 def test_access_on_asks_for_a_password_when_none_is_set(monkeypatch, capsys):
     from tow import access
     from tow.config import load_config

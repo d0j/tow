@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- `tow status` says when the last scheduled check ran, the one the next is counted from. A later pass that only
+  looked at download progress or free space was shown instead.
+
 ## [1.33.1] — 2026-10-18
 
 ### Security
