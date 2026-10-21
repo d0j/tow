@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Changed
+
+- The web server's FastAPI and the qBittorrent library are updated (qbittorrent-api 2026.10: qBittorrent 5.2.4 and
+  5.3). Nothing changes in what TOW does.
+
 ### Fixed
 
 - `tow status` says when the last scheduled check ran, the one the next is counted from. A later pass that only
