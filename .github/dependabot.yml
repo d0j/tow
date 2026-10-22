@@ -23,3 +23,7 @@ updates:
     commit-message:
       prefix: deps
     open-pull-requests-limit: 5
+    ignore:
+      # uv_build moves with the uv the bundle and the installers carry (build-bundle.py UV_VERSION):
+      # its range must admit that uv, or an offline install cannot build TOW. Both are raised together.
+      - dependency-name: uv-build

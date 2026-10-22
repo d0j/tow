@@ -1097,6 +1097,8 @@ def test_dependabot_waits_a_week_and_groups_the_actions():
     for entry in updates:
         assert entry["cooldown"]["default-days"] >= 7
     assert by_kind["github-actions"]["groups"] == {"actions": {"patterns": ["*"]}}
+    # uv_build follows the bundle's uv by hand (test_bundle: the uv the bundle carries builds TOW).
+    assert by_kind["uv"]["ignore"] == [{"dependency-name": "uv-build"}]
 
 
 def test_ci_cancels_only_a_pull_requests_older_run():
