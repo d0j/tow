@@ -5,6 +5,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Security
+
+- TOW no longer trusts the emSign ECC Root CA - G3 certificate, whose intermediate certificates had their keys
+  stolen (certifi 2026.10.19, GHSA-6q48-6c7w-9gw2): someone holding such a key and sitting between TOW and a site,
+  a messenger or GitHub could have read or changed that traffic.
+
 ### Changed
 
 - The web server's FastAPI and the qBittorrent library are updated (qbittorrent-api 2026.10: qBittorrent 5.2.4 and
