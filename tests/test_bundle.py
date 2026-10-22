@@ -400,6 +400,23 @@ def test_the_bundle_takes_the_python_of_the_project():
     assert bundle.UV_URL.endswith(f"/{bundle.UV_VERSION}/uv-x86_64-pc-windows-msvc.zip")
 
 
+def test_the_uv_the_bundle_carries_builds_tow_with_its_own_backend():
+    # uv uses its built-in uv_build only while [build-system] admits its own version; else it
+    # fetches uv_build from the index, and an offline install cannot build TOW (Dependabot #155
+    # proposed uv_build>=0.13.0 while the bundle and installs carry uv 0.12.23).
+    import tomllib
+
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    (requirement,) = [item for item in config["build-system"]["requires"] if item.startswith("uv_build")]
+    match = re.fullmatch(r"uv_build>=([\d.]+),<([\d.]+)", requirement)
+    assert match, requirement
+
+    def version(text: str) -> tuple[int, ...]:
+        return tuple(int(part) for part in text.split("."))
+
+    assert version(match[1]) <= version(bundle.UV_VERSION) < version(match[2])
+
+
 def test_python_bootstrap_uses_an_immutable_official_manifest_for_older_uv():
     import tomllib
 
