@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.33.2] — 2026-10-22
+
 ### Security
 
 - TOW no longer trusts the emSign ECC Root CA - G3 certificate, whose intermediate certificates had their keys
