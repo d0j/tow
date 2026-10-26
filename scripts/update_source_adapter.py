@@ -28,7 +28,7 @@ import threading
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
 REPO = "d0j/tow"
@@ -150,10 +150,10 @@ def install(site_packages: Path, origin: str, tag: str) -> list[Path]:
 
 
 class _Release(BaseHTTPRequestHandler):
-    routes: dict[str, tuple[int, bytes, dict[str, str]]] = {}
-    asked: list[str] = []
+    routes: ClassVar[dict[str, tuple[int, bytes, dict[str, str]]]] = {}
+    asked: ClassVar[list[str]] = []
 
-    def do_GET(self) -> None:  # noqa: N802 - http.server's name
+    def do_GET(self) -> None:
         self.asked.append(self.path)
         status, body, headers = self.routes.get(self.path, (404, b"Not Found", {}))
         self.send_response(status)
