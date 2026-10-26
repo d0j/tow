@@ -195,3 +195,21 @@ def test_the_message_names_the_episodes_the_title_names(title, episodes):
     # The title of an added or updated topic said "S02E02 из 10" for "(2x2)" and nothing for the
     # usual "Сезон: 2 / Серии: 1-12 из 12".
     assert _episode_text(title, "ru") == episodes
+
+
+def test_a_long_failure_keeps_its_last_step_and_is_cut_between_words():
+    # 26.10.2026: "the previous version is still active" came to Telegram cut at 180 characters,
+    # in the middle of a word and without the step that ends it.
+    from tow.errors import TowError
+
+    blocked = TowError(
+        "check.previous_revision_active",
+        file="Synthetic Show (Season 2) WEB-DL 1080p/Synthetic.Show.S02E01.1080p.WEB-DL.Group.mkv",
+        hash="AB" * 20,
+    )
+    message = event_text(title="Synthetic Show", kind="error", error=blocked)
+    assert message.endswith("новая версия добавится при следующей проверке")
+    assert "«Остановить прежний и добавить»" in message
+    long = event_text(title="Show", kind="error", error="word " * 200)
+    assert long.endswith("word…")
+    assert len(long) < 450

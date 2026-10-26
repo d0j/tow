@@ -10,6 +10,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - When a new version of a topic waits for its previous torrent, still running on the same file, the message and
   **Needs attention** now name TOW's own one click: open the topic on **Home** and press **Stop the previous one and
   add**; **Needs attention** opens the topic with that button ready. Before, they only said to stop it in the client.
+- A long failure in a messenger is cut between words with an ellipsis, after up to 400 characters, so the step it
+  ends with is kept. Before, it was cut at 180 characters, in the middle of a word.
 
 ## [1.33.2] — 2026-10-22
 
