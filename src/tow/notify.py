@@ -248,6 +248,20 @@ def event_text(
     return text
 
 
+# A failure's words in a message, at most this long and cut between words, so the step it ends
+# with is not cut off mid-word (every messenger takes 1000 characters or more: tow.notifiers).
+ERROR_CHARS = 400
+
+
+def _brief(error: str | None) -> str:
+    text = " ".join((error or "").split())
+    if len(text) <= ERROR_CHARS:
+        return text
+    cut = text[: ERROR_CHARS - 1]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > ERROR_CHARS // 2 else cut).rstrip(" ,;:—-") + "…"
+
+
 def _event_text(
     lang: str,
     *,
@@ -268,10 +282,10 @@ def _event_text(
         return t("notify.works_again", lang, title=short_series_title(title, lang))
     if kind == "season_complete":
         text = t("notify.season_complete", lang, title=short_series_title(title, lang), episodes=episodes).rstrip()
-        err = " ".join((error or "").split())[:180]
+        err = _brief(error)
         return text + (t("notify.failure_suffix", lang, error=err) if err else "")
     if kind == "error":
-        err = " ".join((error or "").split())[:180]
+        err = _brief(error)
         name = short_series_title(title, lang)
         return (
             t("notify.failure_with_error", lang, title=name, error=err)
@@ -291,7 +305,7 @@ def _event_text(
             action += " " + t("notify.files_selected", lang, selected=selected_files, total=total_files)
         parts.append(action)
     text = " — ".join(parts)
-    err = " ".join((error or "").split())[:180]
+    err = _brief(error)
     if err and kind in _CLIENT_MUTATIONS:
         text += t("notify.then_failure_suffix", lang, error=err)
     elif err and kind in _EVENTS:
