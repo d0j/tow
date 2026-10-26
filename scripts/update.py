@@ -646,7 +646,7 @@ def agent_program(data: bytes) -> str | None:
 def windows_program(*parts: str) -> str:
     """A program of Windows itself by its full path: a bare name is searched in the current folder
     and on PATH first."""
-    system = os.environ.get("SystemRoot") or os.environ.get("SYSTEMROOT") or "C:\\Windows"
+    system = os.environ.get("SYSTEMROOT") or "C:\\Windows"  # Windows reads its environment in any case
     return str(Path(system, "System32", *parts))
 
 
@@ -2312,7 +2312,7 @@ class Update:
             match = re.search(r"(?m)^flash_ttl_sec:\s*['\"]?(\d+)", (self.root / "config.yaml").read_text("utf-8"))
             if match:
                 ttl = int(match[1]) or 60
-        return (datetime.now(timezone.utc) - stamped).total_seconds() < max(15, min(3600, ttl))
+        return (datetime.now(UTC) - stamped).total_seconds() < max(15, min(3600, ttl))
 
     def refuse_pending_content_refs(self, target: str) -> None:
         """A target older than v1.32.0 is refused while a topic prepared with the file picker
