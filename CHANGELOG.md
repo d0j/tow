@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.33.3] — 2026-10-26
+
 ### Security
 
 - A crafted `tracestate` header can no longer keep TOW's web server busy for seconds per request
