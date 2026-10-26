@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.34.0] — 2026-10-26
+
 ### Added
 
 - TOW can stop a topic's previous version by itself. When a new version shares a file with the previous torrent,
