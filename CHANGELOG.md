@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Security
+
+- A crafted `tracestate` header can no longer keep TOW's web server busy for seconds per request
+  (opentelemetry-api 1.45.1, which FastAPI brings in).
+
 ### Fixed
 
 - When a new version of a topic waits for its previous torrent, still running on the same file, the message and
