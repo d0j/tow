@@ -239,9 +239,11 @@ def _serve_log_config(path: Path) -> dict[str, Any]:
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+        "filters": {"quiet_probes": {"()": "tow.log.QuietHealthProbes"}},
         "handlers": {"file": handler},
         "loggers": {
             name: {"handlers": ["file"], "level": "INFO", "propagate": False}
+            | ({"filters": ["quiet_probes"]} if name == "uvicorn.access" else {})
             for name in ("uvicorn", "uvicorn.error", "uvicorn.access")
         },
     }

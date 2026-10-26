@@ -350,3 +350,31 @@ def test_access_on_json_prints_only_json_while_it_asks(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert json.loads(captured.out)["network"] is True
     assert captured.err  # the question was still asked
+
+
+def test_serve_log_leaves_out_the_answered_health_probes(tmp_path):
+    # Audit 26.10.2026: tow run's /healthz every 10 s was 59 513 of 60 000 lines of serve.log.
+    import logging
+    import logging.config
+
+    from tow.cli.commands.service import _serve_log_config
+
+    path = tmp_path / "serve.log"
+    logging.config.dictConfig(_serve_log_config(path))
+    access = logging.getLogger("uvicorn.access")
+    try:
+        access.info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:1", "GET", "/healthz", "1.1", 200)
+        access.info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:2", "GET", "/healthz", "1.1", 503)
+        access.info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:3", "GET", "/sync.json", "1.1", 200)
+        logging.getLogger("uvicorn.error").info("Started server process")
+    finally:
+        for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+            for handler in logging.getLogger(name).handlers:
+                handler.close()
+            logging.getLogger(name).handlers.clear()
+            logging.getLogger(name).filters.clear()
+    text = path.read_text(encoding="utf-8")
+    assert "127.0.0.1:1" not in text
+    assert '"GET /healthz HTTP/1.1" 503' in text
+    assert "/sync.json" in text
+    assert "Started server process" in text
