@@ -17,6 +17,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   add**; **Needs attention** opens the topic with that button ready. Before, they only said to stop it in the client.
 - A long failure in a messenger is cut between words with an ellipsis, after up to 400 characters, so the step it
   ends with is kept. Before, it was cut at 180 characters, in the middle of a word.
+- The web server's log (`data/logs/serve.log`) no longer records the answered health probes `tow run` makes every
+  10 seconds: they were nineteen lines in twenty and pushed everything else out of the log within two weeks. A probe
+  that fails is still written.
 
 ## [1.33.2] — 2026-10-22
 

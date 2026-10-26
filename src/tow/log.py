@@ -401,6 +401,19 @@ class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
             self.stream = self._open()
 
 
+class QuietHealthProbes(logging.Filter):
+    """uvicorn's access log without the answered ``/healthz`` probes: ``tow run`` asks every 10
+    seconds, which made nineteen lines of twenty in serve.log and pushed the rest out of its
+    rotation within two weeks. A probe answered otherwise than 200 is still written."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) == 5:  # client, method, path, version, status
+            path, status = args[2], args[4]
+            return not (isinstance(path, str) and path.split("?", 1)[0] == "/healthz" and status == 200)
+        return True
+
+
 def _rotate_if_needed(path: Path) -> None:
     try:
         if not path.is_file() or path.stat().st_size < MAX_BYTES:
