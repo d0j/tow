@@ -5,6 +5,16 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Added
+
+- TOW can stop a topic's previous version by itself. When a new version shares a file with the previous torrent,
+  still running in the torrent client, a check that has **Stop the previous version of a topic by itself** on
+  (Settings → Checks, off by default) stops the previous torrent (its files stay) and adds the new one in the same
+  check, instead of waiting for **Stop the previous one and add**. A topic can choose otherwise in its edit panel
+  (as in Settings, Yes or No). Only TOW's own previous torrent of that topic is stopped, each stop is read back;
+  if the stop fails, the topic waits as before, and if the add fails after it, the previous torrent is started
+  again. The message and History say that the previous version was stopped; a preview says it would stop it.
+
 ## [1.33.3] — 2026-10-26
 
 ### Security

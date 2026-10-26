@@ -22,7 +22,7 @@ from tow.errors import TowError
 from tow.folders import paths_equal, remember_save_root, resolve_save_path
 from tow.guess import canon_watch_url
 from tow.log import error_fields
-from tow.records import shown_title
+from tow.records import REPLACE_PREVIOUS_CHOICES, shown_title
 from tow.store import CheckBusyError, SecretStoreError
 from tow.title import title_is_placeholder
 from tow.topic_form import (
@@ -385,6 +385,7 @@ def _decide(state: dict[str, Any], topic: dict[str, Any], form: TopicForm) -> _E
         "tracking_mode": policy["tracking_mode"],
         "selection_changed": selection_changed,
         "check_interval_min": candidate.get("check_interval_min"),
+        "replace_previous": candidate.get("replace_previous", ""),
         "how": "manual",
     }
     return _Edit(copy.deepcopy(topic), candidate, dest, form, edited)
@@ -494,6 +495,14 @@ def _edited(topic: dict[str, Any], form: TopicForm) -> tuple[dict[str, Any], dic
             set_interval(candidate, parse_interval(form.check_interval_min))
     except TowError as exc:
         raise Refused(exc) from exc
+    if form.replace_previous is not None:  # None: the form had no such field, the topic keeps its own
+        choice = form.replace_previous.strip()
+        if choice not in REPLACE_PREVIOUS_CHOICES:
+            raise Refused("web.topics.replace_choice_invalid")
+        if choice:
+            candidate["replace_previous"] = choice
+        else:
+            candidate.pop("replace_previous", None)  # as Settings says
     _rename(topic, candidate, form.title.strip())
     if form.url.strip():
         url = canon_watch_url(form.url.strip())

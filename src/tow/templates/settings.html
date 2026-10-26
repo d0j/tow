@@ -289,6 +289,12 @@
             <label for="flash_ttl_min">{{ t('settings.intervals.show_undo') }}</label>
             <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="{{ idr.get('flash_ttl_min', flash_ttl_min) }}" class="w-xs" type="number" min="1" step="1" inputmode="numeric"><span>{{ t('settings.common.min') }}</span></div>
           </div>
+          {#- G1 by itself (tow.check.replace): off unless the owner turns it on; a topic may say otherwise. #}
+          <div class="check-field">
+            <input id="replace-previous" name="replace_previous_revision" value="1" type="checkbox"{% if idr.get('replace_previous_revision', '1' if replace_previous_revision else '') %} checked{% endif %} aria-describedby="replace-previous-hint">
+            <label for="replace-previous">{{ t('settings.intervals.replace_previous') }}</label>
+            <p id="replace-previous-hint">{{ t('settings.intervals.replace_previous_hint') }}</p>
+          </div>
           <div class="stack-2">
             <div class="settings-actions"><button type="submit">{{ t('settings.common.save') }}</button></div>
             <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>

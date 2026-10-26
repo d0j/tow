@@ -71,6 +71,8 @@ CLASSES: dict[str, str] = {
     "check.low_disk": "disk",
     "check.waiting_space": "disk",
     "check.start_unconfirmed": "qbit",
+    "check.stop_unconfirmed": "qbit",
+    "check.restart_unconfirmed": "qbit",
     "check.daily_limit": "quota",
     "check.frozen": "frozen",
     "check.no_tracker": "no_tracker",

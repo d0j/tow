@@ -195,7 +195,7 @@ def check_feedback(
     if not row.get("ok"):  # an empty row: nothing says the check worked
         return _feedback(t("web.check.failed"), "err")
     if row.get("added"):
-        return _feedback(t("web.check.added"))
+        return _feedback(t("web.check.added_replaced" if row.get("stopped_previous") else "web.check.added"))
     if row.get("started"):  # a torrent that waited for disk space, started now
         return _feedback(t("web.check.started"))
     if row.get("selection_updated"):
@@ -290,7 +290,11 @@ def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
             )
         elif outcome == "new":
             reason = t(
-                "web.check.selection_updated"
+                "web.check.would_replace"
+                if row.get("would_stop_previous")
+                else "web.check.added_replaced"
+                if row.get("added") and row.get("stopped_previous")
+                else "web.check.selection_updated"
                 if row.get("selection_updated")
                 else "web.check.started"
                 if row.get("started")

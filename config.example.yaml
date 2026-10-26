@@ -45,6 +45,11 @@ flash_ttl_sec: 60
 # How often every topic without a personal timer is checked, seconds. 3600 = once an hour.
 # Settings offers 15 min .. 24 h; this file accepts 60 (1 min) .. 604800 (7 days).
 interval_sec: 3600
+# When a topic's new version shares a file with its previous torrent, still running in the
+# client: true = the check stops the previous one itself (its files stay) and adds the new one;
+# false = the check waits for you ("Stop the previous one and add" on Home). A topic's own choice
+# in its edit panel overrides this. Settings -> Checks writes it.
+# replace_previous_revision: false
 # The User-Agent TOW sends to the sites; leave it out for TOW's own current browser string.
 # user_agent: Mozilla/5.0 (...)
 

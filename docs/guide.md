@@ -134,6 +134,11 @@ is accepted.
 
 When a new version arrives while the previous one is still seeding the same file, TOW does not touch the old
 torrent. It asks you: **Stop the previous one and add** stops the old torrent (its files stay) and adds the new one.
+To have TOW do that by itself, tick **Stop the previous version of a topic by itself** in Settings → Checks (off by
+default), or choose it for one topic in its edit panel (**Stop the previous version by itself**: as in Settings, Yes
+or No). A check then stops the topic's own previous torrent (its files stay) and adds the new one in the same check;
+the message and History say the previous version was stopped. If the stop fails, the topic waits as below; if the add
+fails after the stop, TOW starts the previous torrent again. A preview only says it would stop it.
 While it waits, scheduled checks do not download the new version's `.torrent` again when the topic page's magnet
 still names it, or, on a page without a magnet, when the site has a daily download limit (a newer upload there is
 found once the previous torrent is stopped, or by a check you start); the wait is logged once, not at every check.
@@ -475,7 +480,7 @@ fixed. Folding or closing a message does not clear the topic's error or its Hist
 | *site*: all mirrors are paused · *site*: the site is paused | Mirrors are resting after failures, or you paused the site. | Wait for the pause to end (an hour; Rutor: 30 minutes), or start a check yourself (the row's ↻ on Home): it tries resting mirrors too. A site you paused: resume it on **Sites**. |
 | the site requires a Cloudflare check; check access on Sites | The site shows a browser challenge, not a wrong password. | Try another mirror, wait or use the site's supported browser sign-in. Opening a separate browser alone does not verify access for TOW. Optional external providers can be configured on this computer in Settings → Site access; they are off by default. See [Site access](PROTECTION.md). |
 | daily download limit reached | The site's download quota for today is used up. | Nothing; TOW tries again tomorrow. |
-| the previous version of the torrent is still active on the same file: … | A new version overlaps a torrent that is still seeding. | **Stop the previous one and add** in the row, or stop it in the client. |
+| the previous version of the torrent is still active on the same file: … | A new version overlaps a torrent that is still seeding. | **Stop the previous one and add** in the row, or stop it in the client; to have checks do it by themselves, tick **Stop the previous version of a topic by itself** in Settings → Checks. |
 | waiting for episodes (…) | The episodes you chose are not in the torrent yet. | Nothing; they are added when they appear. |
 | the selection matches no file of the torrent · episode *N* is in several seasons — write it as S01E05 | The selection cannot be applied safely. | Edit the topic's selection. |
 | waiting for disk space: … GB short (needs … GB, … GB free in …); TOW starts it by itself when there is room | The new version's files do not fit on the target drive (measured only for a torrent client on this computer). It is in the client, stopped, with its files selected. | Free the space it names (or choose fewer files for the topic): TOW starts the torrent within minutes. |

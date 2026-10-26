@@ -28,7 +28,8 @@ router = APIRouter()
 def topics_replace_revision(tid: str, action_id: str = Form("")) -> Response:
     """G1: stop the topic's previous revision(s) TOW added, then check it again.
 
-    The automatic check never stops a seeding revision; this is the owner's one click.
+    Unless the owner turned that on (``tow.check.replace``: Settings or the topic), a check
+    never stops a seeding revision by itself; this is the owner's one click.
     """
     state = services.load_state()
     topic = next((item for item in state.get("topics") or [] if str(item.get("id")) == tid), None)

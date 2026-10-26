@@ -985,3 +985,15 @@ def test_an_import_leaves_the_exporting_computers_volumes_behind():
     }
     assert history["topics"]["1"]["volume"]["id"] == "ext4 /srv"  # the bundle's own copy is not changed
     assert _without_volumes({"topics": []}) == {"topics": []}
+
+
+@pytest.mark.parametrize(
+    ("value", "accepted"), [("on", True), ("off", True), ("", True), ("always", False), (True, False)]
+)
+def test_a_topics_own_previous_version_choice_is_kept_or_refused_by_an_import(value, accepted):
+    state = {"topics": [{"id": "t1", "replace_previous": value}], "mirrors": {}}
+    if accepted:
+        validate_state_schema(state)
+    else:
+        with pytest.raises(ExportImportError, match="replace_previous"):
+            validate_state_schema(state)

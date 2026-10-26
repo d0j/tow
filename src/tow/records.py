@@ -30,6 +30,10 @@ class Selection(TypedDict, total=False):
 MovePending = TypedDict("MovePending", {"from": str, "to": str, "since": str}, total=False)
 
 
+# A topic's own ``replace_previous``: "" (or absent) as Settings says, "on" or "off".
+REPLACE_PREVIOUS_CHOICES = ("", "on", "off")
+
+
 class Topic(TypedDict, total=False):
     """One watched topic (``state.json`` → ``topics[]``)."""
 
@@ -50,6 +54,9 @@ class Topic(TypedDict, total=False):
     check_interval_min: int | None
     check_timer_revision: str
     check_timer_set_at_ts: float
+    # Whether a check stops the previous revision itself when the new one shares a file with it:
+    # "on", "off", or absent - as Settings says (``replace_previous_revision``, tow.check.replace).
+    replace_previous: str
     paused: bool
     move_pending: MovePending
     # what the check found

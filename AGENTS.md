@@ -10,6 +10,9 @@ development setup, the term table and the release steps.
 - TOW does not download, retrieve, copy or move media bytes itself.
 - A normal `apply` may hand a torrent to the explicitly selected client and may request a user-requested client
   relocation through `set_location`.
+- An applying check may stop the topic's own previous revision in the client (its files kept) only when the owner
+  turned this on (`replace_previous_revision` in Settings → Checks, or the topic's own choice); otherwise only the
+  owner's **Stop the previous one and add** does.
 - Deleting a TOW topic removes only the TOW observation. It does not delete the client torrent; history is retained.
 - `dry-run` is preview-only: no client add/move, no TOW state/history/config/secrets/mirror/log writes, no cookie
   persistence or messenger notification, and no `.torrent` download from download-limited sites.

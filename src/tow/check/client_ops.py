@@ -261,6 +261,46 @@ def live_previous_overlap(client: TorrentClientAdapter, revision_hashes: list[st
     return ""
 
 
+def live_previous_overlaps(
+    client: TorrentClientAdapter, revision_hashes: list[str], files: Any
+) -> list[tuple[str, str]]:
+    """Every earlier revision still running in the client on a file of ``files``: (its hash, that
+    file), in the order given - all of them, where ``live_previous_overlap`` stops at the first."""
+    found = []
+    for revision_hash in dict.fromkeys(revision_hashes):
+        overlap = _active_revision_overlap(client, revision_hash, tuple(files))
+        if overlap:
+            found.append((revision_hash, overlap))
+    return found
+
+
+def claimed_by_other_topic(state: dict[str, Any], topic: Topic, infohash: str) -> bool:
+    """Another topic of the same client follows ``infohash`` as its current revision: it is that
+    topic's torrent, never this one's to stop."""
+    wanted, client_id = infohash.upper(), str(topic.get("client_id") or "default")
+    return any(
+        str(other.get("hash") or "").upper() == wanted
+        for other in topics_of(state)
+        if other is not topic
+        and str(other.get("id") or "") != str(topic.get("id") or "")
+        and str(other.get("client_id") or client_id) == client_id
+    )
+
+
+def can_add_selected(client: TorrentClientAdapter) -> bool:
+    """The client adds a torrent stopped, chooses its files, reads the choice back and starts it:
+    what every add of TOW needs."""
+    capabilities = client.capabilities or {}
+    return all(
+        capabilities.get(name) is True for name in ("stopped_add", "file_selection", "priority_readback", "start_stop")
+    )
+
+
+def conflicting_topic_claim(state: dict[str, Any], topic: Topic, h: str, dest: str, plan: Any) -> str:
+    """Another topic that would change the same client task otherwise ("" when none does)."""
+    return _conflicting_topic_claim(state, topic, h, dest, plan.selected_files, plan.mode)
+
+
 def assert_client_can_add(
     state: dict[str, Any],
     topic: Topic,
@@ -274,17 +314,14 @@ def assert_client_can_add(
     replaces_revision: bool,
 ) -> None:
     """Refuse a client mutation that could clash with another topic or a live revision."""
-    conflicting_topic = _conflicting_topic_claim(state, topic, h, dest, plan.selected_files, plan.mode)
+    conflicting_topic = conflicting_topic_claim(state, topic, h, dest, plan)
     if conflicting_topic:
         raise TowError("check.hash_claimed", topic=conflicting_topic)
     if replaces_revision:
         overlap = live_previous_overlap(topic_client, [old, *map(str, topic.get("previous_hashes") or [])], files)
         if overlap:
             raise TowError(PREVIOUS_REVISION_ACTIVE, file=overlap, hash=h.upper())
-    capabilities = topic_client.capabilities or {}
-    if not all(
-        capabilities.get(name) is True for name in ("stopped_add", "file_selection", "priority_readback", "start_stop")
-    ):
+    if not can_add_selected(topic_client):
         raise TowError("check.client_cannot_select")
 
 

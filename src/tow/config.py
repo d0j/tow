@@ -111,6 +111,9 @@ DEFAULTS: dict[str, Any] = {
     "port": 8787,
     "interval_sec": 3600,
     "flash_ttl_sec": 60,
+    # The owner's opt-in: an applying check stops a topic's previous revision itself when the
+    # new one shares a file with it (``tow.check.replace``); a topic may say otherwise.
+    "replace_previous_revision": False,
     "client": {"kind": "qbittorrent"},
 }
 
@@ -244,8 +247,9 @@ def validated(raw: dict[str, Any]) -> dict[str, Any]:
     for key, value in defaults().items():
         data.setdefault(key, value)
     data["allow_lan"] = as_bool(data.get("allow_lan"))
-    _bool_field(data, "check_updates")
-    data["check_updates"] = as_bool(data.get("check_updates"))
+    for key in ("check_updates", "replace_previous_revision"):
+        _bool_field(data, key)
+        data[key] = as_bool(data.get(key))
     for key in OBSOLETE_KEYS:  # read from an older file and ignored; the next save leaves them out
         data.pop(key, None)
     _validate(data)
@@ -563,8 +567,9 @@ def save_config(data: dict[str, Any]) -> None:
     atomic_write_text(path, text)
 
 
-def _set_top_level_int(key: str, value: int) -> None:
-    """Set one top-level scalar in place, keeping the owner's comments and layout.
+def _set_top_level_int(key: str, value: int | bool) -> None:
+    """Set one top-level scalar (a number, or true/false) in place, keeping the owner's comments
+    and layout.
 
     The edit stays on the key's own line (``[ \\t]*`` cannot cross a newline, so an empty
     value never swallows the next key) and is verified by re-parsing: unless exactly
@@ -572,7 +577,7 @@ def _set_top_level_int(key: str, value: int) -> None:
     """
     path = config_path()
     text = _config_text(path)
-    line = f"{key}: {value}"
+    line = f"{key}: {str(value).lower() if isinstance(value, bool) else value}"
     new, count = re.subn(rf"(?m)^{re.escape(key)}:[ \t]*[^\s#]*", line, text, count=1)
     if not count:
         new = text.rstrip() + f"\n{line}\n"
@@ -598,3 +603,7 @@ def set_interval_sec(sec: int) -> None:
 
 def set_flash_ttl_sec(sec: int) -> None:
     _set_top_level_int("flash_ttl_sec", flash_ttl(sec))
+
+
+def set_replace_previous_revision(on: bool) -> None:
+    _set_top_level_int("replace_previous_revision", bool(on))

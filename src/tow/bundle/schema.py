@@ -15,6 +15,7 @@ import yaml
 from tow.bundle.errors import ExportImportError
 from tow.config import SAFE_ID, ConfigError, validated, web_address
 from tow.errors import Msg, TowError
+from tow.records import REPLACE_PREVIOUS_CHOICES
 from tow.store import StateVersionError, state_schema_version
 from tow.yaml_guard import YamlLimitError, normalize_utf8, validate_graph
 from tow.yaml_guard import load as load_yaml
@@ -151,6 +152,9 @@ def _validate_state_topic(index: int, topic: Any) -> None:
         "content_hash",
     ):
         validate_field(topic, key, str, label=label)
+    validate_field(topic, "replace_previous", str, label=label)
+    if topic.get("replace_previous") not in (None, *REPLACE_PREVIOUS_CHOICES):
+        raise ExportImportError(f"{label}.replace_previous must be on, off or empty")
     if topic.get("url") and not web_address(topic["url"]):  # a javascript: link would be one click away
         raise ExportImportError(f"{label}.url must be an http:// or https:// address")
     if "id" in topic and not SAFE_ID.fullmatch(str(topic["id"])):  # part of /topics/<id>/… addresses

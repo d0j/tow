@@ -459,6 +459,7 @@ def _run_check(
         readd_since=readd_since,
         rebind_volumes=rebind_volumes,
         private_tracker_hosts=as_bool(cfg.get("allow_private_tracker_hosts")),
+        replace_previous=as_bool(cfg.get("replace_previous_revision")),
     )
     results: list[CheckRow] = []
     for topic in topics_of(state):

@@ -119,6 +119,7 @@ def compose(items: Iterable[PendingNotification]) -> list[tuple[str, str, Topic 
             selected_files=item.topic.get("selected_file_count"),
             total_files=item.topic.get("torrent_file_count"),
             recovered=bool(getattr(item, "recovered", False)),
+            previous_stopped=bool(getattr(item, "previous_stopped", False)),
         )
         url = str(item.topic.get("url") or "")
         if url and item.kind not in _NO_LINK:

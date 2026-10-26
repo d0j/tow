@@ -562,14 +562,14 @@
     </details><!--/frag:acc-bots-->
 
     <!--frag:acc-intervals:<digest>-->
-    <details class="settings-section settings-accordion acc" id="acc-intervals" data-q="Checks intervals check minutes undo message">
+    <details class="settings-section settings-accordion acc" id="acc-intervals" data-q="Checks intervals check minutes undo message previous version stop replace">
       <summary>
         <span id="settings-intervals-title" class="settings-summary-title">Checks</span>
         <span class="pill mut">1 h</span>
       </summary>
       <div class="settings-panel">
         <form method="post" action="/settings/interval" class="settings-form form-grid" data-return-target="acc-intervals">
-          <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;intervals&#34;,&#34;id&#34;:&#34;intervals&#34;,&#34;f&#34;:{&#34;interval_min&#34;:60,&#34;flash_ttl_min&#34;:1},&#34;p&#34;:[]}">
+          <input type="hidden" name="base" value="{&#34;v&#34;:1,&#34;k&#34;:&#34;intervals&#34;,&#34;id&#34;:&#34;intervals&#34;,&#34;f&#34;:{&#34;interval_min&#34;:60,&#34;flash_ttl_min&#34;:1,&#34;replace_previous_revision&#34;:false},&#34;p&#34;:[]}">
           <div class="field">
             <label for="interval_min">Check topics every</label>
             <div class="input-unit"><input id="interval_min" name="interval_min" value="60" class="w-xs" type="number" min="1" step="1" inputmode="numeric" aria-describedby="interval-hint"><span>min</span></div>
@@ -578,6 +578,11 @@
           <div class="field">
             <label for="flash_ttl_min">Show “Undo” for</label>
             <div class="input-unit"><input id="flash_ttl_min" name="flash_ttl_min" value="1" class="w-xs" type="number" min="1" step="1" inputmode="numeric"><span>min</span></div>
+          </div>
+          <div class="check-field">
+            <input id="replace-previous" name="replace_previous_revision" value="1" type="checkbox" aria-describedby="replace-previous-hint">
+            <label for="replace-previous">Stop the previous version of a topic by itself</label>
+            <p id="replace-previous-hint">When a new version of a topic shares a file with its previous torrent, still running in the torrent client, the check stops the previous one (its files stay) and adds the new one in the same check. A topic can choose otherwise in its edit panel.</p>
           </div>
           <div class="stack-2">
             <div class="settings-actions"><button type="submit">Save</button></div>

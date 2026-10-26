@@ -159,6 +159,7 @@ OWNER_FIELDS = (
     "check_interval_min",
     "check_timer_revision",
     "check_timer_set_at_ts",
+    "replace_previous",
     "paused",
     "selection_dirty",
     "once_done",

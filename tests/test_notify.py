@@ -213,3 +213,22 @@ def test_a_long_failure_keeps_its_last_step_and_is_cut_between_words():
     long = event_text(title="Show", kind="error", error="word " * 200)
     assert long.endswith("word…")
     assert len(long) < 450
+
+
+def test_an_add_that_stopped_the_previous_version_says_so():
+    """tow.check.replace: the add's message says the previous version was stopped for it."""
+    text = event_text(title="Show", kind="updated", tracker="rutor", previous_stopped=True)
+    assert text.endswith("новая версия добавлена в торрент-клиент, прежняя версия остановлена")
+    assert "прежняя версия" not in event_text(title="Show", kind="updated", tracker="rutor")
+    assert "прежняя версия" not in event_text(title="Show", kind="completed", previous_stopped=True)
+
+
+def test_the_previous_version_stopped_stays_with_the_add_when_the_topic_also_works_again():
+    topic = {"id": "topic-1", "title": "Show"}
+    batch = NotificationBatch()
+    batch.queue(topic, kind="updated", operation_id="op-add", previous_stopped=True)
+    batch.queue(topic, kind="recovered", operation_id="op-ok")
+    batch.queue(topic, kind="error", operation_id="op-err", error="late")
+
+    (item,) = list(batch)
+    assert (item.kind, item.previous_stopped) == ("updated", True)
