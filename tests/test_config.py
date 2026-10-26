@@ -522,3 +522,23 @@ def test_the_web_rate_settings_are_optional_and_kept():
     assert load_config()["web"] == {"rate_burst": 10, "rate_per_sec": 0.5}
     _write("port: 8790\n")
     assert "web" not in load_config()
+
+
+def test_the_previous_version_setting_is_true_false_and_set_in_place():
+    """tow.check.replace's setting: off when absent, a true/false only, written on its own line."""
+    from tow.config import ConfigError, set_replace_previous_revision, validated
+
+    assert validated({})["replace_previous_revision"] is False
+    for value in ("maybe", 2, [], {}):
+        with pytest.raises(ConfigError):
+            validated({"replace_previous_revision": value})
+    _write("# owner notes\ninterval_sec: 3600\n")
+
+    set_replace_previous_revision(True)
+    assert (
+        config_path().read_text(encoding="utf-8")
+        == "# owner notes\ninterval_sec: 3600\nreplace_previous_revision: true\n"
+    )
+    set_replace_previous_revision(False)
+    assert config_path().read_text(encoding="utf-8").endswith("\nreplace_previous_revision: false\n")
+    assert load_config()["replace_previous_revision"] is False

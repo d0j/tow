@@ -28,7 +28,9 @@ class TopicForm:
     """The add and edit forms of a topic, as typed (the link already trimmed for an add).
 
     ``check_interval_min`` is None when an edit form had no such field: the topic keeps its
-    timer (an empty field gives it back the global one)."""
+    timer (an empty field gives it back the global one). ``replace_previous`` likewise: None
+    keeps the topic's choice, "" is "as in Settings", "on" or "off" its own
+    (``tow.check.replace``)."""
 
     url: str = ""
     title: str = ""
@@ -38,6 +40,7 @@ class TopicForm:
     selection_value: str = ""
     tracking_mode: str = "watch"
     check_interval_min: str | None = ""
+    replace_previous: str | None = None
     content_token: str = ""
     selection_indices: str = ""
     # The add form: the title TOW guessed and put into the name field (empty when none was):

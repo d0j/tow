@@ -73,6 +73,10 @@ class StoreTransaction:
         config_store.set_flash_ttl_sec(seconds)
         self._wrote("config")
 
+    def set_replace_previous_revision(self, on: bool) -> None:
+        config_store.set_replace_previous_revision(on)
+        self._wrote("config")
+
     def save_state(self, data: dict[str, Any]) -> None:
         store.save_state(data)
         self._wrote("state")

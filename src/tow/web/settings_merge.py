@@ -1,7 +1,8 @@
 """The Settings forms as the three-way merge sees them (``tow.web.edit_base``): the values each
 form showed and what its save asks for.
 
-- Checks: the check interval and the messages' time, each on its own.
+- Checks: the check interval, the messages' time and whether a check stops a topic's previous
+  version itself, each on its own.
 - Language and update checks: one value each (the theme is an instant choice, saved in the
   background as it is made: the last one made is the theme).
 - A torrent client's card: its address, port, user name and password are one group (a saved
@@ -37,7 +38,14 @@ from tow.web import edit_base
 from tow.web.edit_base import Row, Spec, digest, secret_intent, secret_token
 from tow.web.text import t
 
-INTERVALS = Spec("intervals", {"interval": ("interval_min",), "messages": ("flash_ttl_min",)})
+INTERVALS = Spec(
+    "intervals",
+    {
+        "interval": ("interval_min",),
+        "messages": ("flash_ttl_min",),
+        "replace": ("replace_previous_revision",),
+    },
+)
 LANGUAGE = Spec("language", {"language": ("language",)})
 UPDATES = Spec("updates", {"updates": ("check_updates",)})
 CLIENT = Spec("client", {"connection": ("host", "port", "username", "password")}, secret=frozenset({"password"}))
@@ -106,11 +114,12 @@ def intervals_now(cfg: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "interval_min": shown_minutes(interval_sec_of(dict(cfg))),
         "flash_ttl_min": shown_minutes(flash_ttl(cfg.get("flash_ttl_sec") or 60)),
+        "replace_previous_revision": as_bool(cfg.get("replace_previous_revision")),
     }
 
 
-def intervals_wanted(interval_min: str, flash_ttl_min: str) -> dict[str, Any]:
-    out: dict[str, Any] = {}
+def intervals_wanted(interval_min: str, flash_ttl_min: str, replace_previous_revision: str = "") -> dict[str, Any]:
+    out: dict[str, Any] = {"replace_previous_revision": as_bool(replace_previous_revision)}
     for name, raw in (("interval_min", interval_min), ("flash_ttl_min", flash_ttl_min)):
         number = whole_number(raw)
         out[name] = number if number is not None else f"invalid:{raw.strip()[:32]}"

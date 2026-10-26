@@ -124,6 +124,7 @@ class RunNotifications:
         error: Any = "",
         episodes: str = "",
         error_cls: str = "",
+        previous_stopped: bool = False,
     ) -> None:
         if not self.enabled:
             return
@@ -156,6 +157,7 @@ class RunNotifications:
             tracker=tracker,
             error=error,
             episodes=episodes,
+            previous_stopped=previous_stopped,
         )
 
 

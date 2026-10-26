@@ -17,8 +17,8 @@ downloads   confirmed client results: client_added, client_started, client_updat
             client_selection_updated, new_file, revision_updated, file_completed,
             episode_completed, client_adopted, client_restored, client_stopped, qbit_move,
             qbit_move_undo (ok; an unconfirmed move warn); client_removed (warn);
-            client_add_failed, client_adopt_failed, client_stop_failed, qbit_move_fail,
-            qbit_move_undo_fail (err)
+            client_add_failed, client_adopt_failed, client_stop_failed, client_start_failed,
+            qbit_move_fail, qbit_move_undo_fail (err)
 checks      check_fail, add_check_fail (warn for transport classes, else err; repeated
             failures of one site aggregate into one entry), check_blocked, add_check_blocked,
             reconcile_failed, check_report_failed, client_unreachable, browser_auth_failed
@@ -162,7 +162,14 @@ MATRIX: dict[str, tuple[str, Severity]] = {
     "qbit_move_undo": (DOWNLOADS, _move),
     "client_removed": (DOWNLOADS, WARN),
     **dict.fromkeys(
-        ("client_add_failed", "client_adopt_failed", "client_stop_failed", "qbit_move_fail", "qbit_move_undo_fail"),
+        (
+            "client_add_failed",
+            "client_adopt_failed",
+            "client_stop_failed",
+            "client_start_failed",
+            "qbit_move_fail",
+            "qbit_move_undo_fail",
+        ),
         (DOWNLOADS, ERR),
     ),
     "check_fail": (CHECKS, _by_class),
@@ -199,6 +206,7 @@ MATRIX: dict[str, tuple[str, Severity]] = {
             "settings_notifier",
             "settings_notifier_removed",
             "settings_interval",
+            "settings_replace_previous",
             "settings_language",
             "settings_theme",
             "settings_access",
@@ -843,6 +851,7 @@ _FEED_LABELS = {
         "log.feed.kind.qbit_move",
         "log.feed.kind.browser_auth",
         "log.feed.kind.settings_interval",
+        "log.feed.kind.settings_replace_previous",
         "log.feed.kind.settings_language",
         "log.feed.kind.settings_theme",
         "log.feed.kind.settings_password",

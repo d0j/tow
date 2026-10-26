@@ -3,8 +3,9 @@ panel showed, what a save asks for, the form ``topic_actions`` applies - the own
 the topic as it is now - and the rows a conflict shows.
 
 Groups: the link, the name, the folder, the client, the selection (mode, rule and an exact
-list's identity: one value), following, and the personal timer. Nothing a check writes is part
-of the form, so a save never puts back what a check found meanwhile.
+list's identity: one value), following, the personal timer and whether a check stops the
+previous version itself. Nothing a check writes is part of the form, so a save never puts back
+what a check found meanwhile.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from tow.clients.factory import client_configuration, client_name
 from tow.errors import TowError
 from tow.folders import paths_equal, resolve_save_path
 from tow.guess import canon_watch_url
-from tow.records import shown_title
+from tow.records import REPLACE_PREVIOUS_CHOICES, shown_title
 from tow.selection import normalize_policy
 from tow.topic_form import TopicForm, previous_selection
 from tow.topic_timers import parse_interval
@@ -42,6 +43,7 @@ TOPIC = Spec(
         "selection": ("selection",),
         "tracking": ("tracking_mode",),
         "timer": ("check_interval_min",),
+        "replace": ("replace_previous",),
     },
     same={"save_path": _same_path},
 )
@@ -55,6 +57,7 @@ FORM_FIELDS = {
     "selection": ("selection_mode", "selection_value", "content_token", "selection_indices"),
     "tracking": ("tracking_mode",),
     "timer": ("check_interval_min",),
+    "replace": ("replace_previous",),
 }
 
 
@@ -80,6 +83,12 @@ def _interval(topic: Mapping[str, Any]) -> int | None:
     return value if type(value) is int else None
 
 
+def _replace(topic: Mapping[str, Any]) -> str:
+    """The topic's own choice of ``tow.check.replace`` ("": as in Settings)."""
+    value = topic.get("replace_previous")
+    return value if value in REPLACE_PREVIOUS_CHOICES else ""
+
+
 def current(topic: Mapping[str, Any], default_client: str) -> dict[str, Any]:
     """The form's values of ``topic`` as saved now (and as its panel shows them)."""
     return {
@@ -90,6 +99,7 @@ def current(topic: Mapping[str, Any], default_client: str) -> dict[str, Any]:
         "selection": _stored_key(topic),
         "tracking_mode": "once" if topic.get("tracking_mode") == "once" else "watch",
         "check_interval_min": _interval(topic),
+        "replace_previous": _replace(topic),
     }
 
 
@@ -115,6 +125,9 @@ def submitted(form: TopicForm, base: Mapping[str, Any], state: dict[str, Any], d
             out["check_interval_min"] = parse_interval(form.check_interval_min)
         except TowError:
             out["check_interval_min"] = f"invalid:{form.check_interval_min.strip()[:32]}"
+    if form.replace_previous is not None:
+        choice = form.replace_previous.strip()
+        out["replace_previous"] = choice if choice in REPLACE_PREVIOUS_CHOICES else f"invalid:{choice[:32]}"
     return out
 
 
@@ -143,14 +156,17 @@ def effective_form(form: TopicForm, topic: Mapping[str, Any], merged: Merge) -> 
         keep["tracking_mode"] = "once" if topic.get("tracking_mode") == "once" else "watch"
     if "timer" not in changed:
         keep["check_interval_min"] = None  # keeps the topic's timer
+    if "replace" not in changed:
+        keep["replace_previous"] = None  # keeps the topic's choice
     return replace(form, **keep)
 
 
 def draft(form: TopicForm, groups: frozenset[str] | set[str]) -> dict[str, str]:
     """The fields of the groups the owner changed, as typed: a conflict brings them back."""
     values = form.draft()
-    if form.check_interval_min is None:
-        values.pop("check_interval_min", None)
+    for name in ("check_interval_min", "replace_previous"):
+        if getattr(form, name) is None:
+            values.pop(name, None)
     return {name: values[name] for group in groups for name in FORM_FIELDS[group] if name in values}
 
 
@@ -162,7 +178,9 @@ _LABELS = {
     "selection": "home.add.what",
     "tracking": "home.add.follow",
     "timer": "timer.field",
+    "replace": "home.topic.replace_previous",
 }
+_REPLACE_WORDS = {"on": "home.topic.replace_on", "off": "home.topic.replace_off"}
 _MODES = {"all": "home.add.mode_all", "episodes": "home.add.mode_episodes", "files": "home.add.mode_files"}
 
 
@@ -190,6 +208,9 @@ def _text(group: str, values: Mapping[str, Any], cfg: dict[str, Any]) -> str:
     if group == "timer":
         raw = str(values.get("check_interval_min") or "").strip()
         return t("web.edit.value.minutes", count=int(raw)) if raw.isdigit() else t("web.edit.value.global_timer")
+    if group == "replace":
+        choice = str(values.get("replace_previous") or "")
+        return t(_REPLACE_WORDS.get(choice, "web.edit.value.as_settings"))
     text = str(values.get(FORM_FIELDS[group][0]) or "").strip()
     return text or t("web.edit.value.empty")
 
@@ -207,6 +228,7 @@ def _shown(topic: Mapping[str, Any]) -> dict[str, Any]:
         "selection_value": str(selection.get("value") or ""),
         "tracking_mode": "once" if topic.get("tracking_mode") == "once" else "watch",
         "check_interval_min": "" if interval is None else str(interval),
+        "replace_previous": _replace(topic),
     }
 
 

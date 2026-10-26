@@ -422,6 +422,8 @@
     "existing_unconfirmed": "torrent client: the torrent already there was not confirmed by reading it back",
     "add_unconfirmed": "torrent client: the add was not confirmed by reading it back",
     "start_unconfirmed": "the torrent client did not confirm the start of the torrent that waited for disk space",
+    "stop_unconfirmed": "the torrent client did not confirm that the previous version stopped",
+    "restart_unconfirmed": "the torrent client did not confirm that the previous version started again",
     "waiting_episodes": "waiting for episodes ({pending})",
     "no_connection": "no connection",
     "client_unreachable": "client unreachable: {reason}",
@@ -1171,6 +1173,10 @@
       "last_error_at": "Last error ({at}): {error}",
       "replace_confirm": "Stop the previous version of this torrent in the torrent client (its files stay) and add the new one?",
       "replace": "Stop the previous one and add",
+      "replace_previous": "Stop the previous version by itself",
+      "replace_default": "As in Settings ({state})",
+      "replace_on": "Yes",
+      "replace_off": "No",
       "sign_in": "Sign in to the site",
       "adopt": "Adopt into TOW",
       "adopt_confirm": "Mark this torrent in the torrent client as TOW's (the tag or label tow)? Its files, folder, file selection and state stay as they are; from the next check on TOW manages it like a torrent it added.",
@@ -1452,6 +1458,7 @@
       "settings_client": "client",
       "settings_bot": "bot",
       "settings_interval": "interval",
+      "settings_replace_previous": "stopping the previous version by itself",
       "tracker_found": "found",
       "tracker_checked": "checked",
       "client_add_started": "adding",
@@ -1543,6 +1550,7 @@
       "client_adopted": "adopted into TOW",
       "client_adopt_failed": "not adopted into TOW",
       "client_stop_failed": "not stopped in client",
+      "client_start_failed": "not started in client",
       "client_unreachable": "torrent client unreachable",
       "reconcile_failed": "client check failed",
       "revision_updated": "new version",
@@ -1591,6 +1599,7 @@
     "check_outcomes": "updated: {new}, unchanged: {same}, waiting: {pending}, skipped: {skipped}, failed: {fail}",
     "client_pass_result": "topics: {n}",
     "site_skipped": "topics not checked: {n}",
+    "previous_stopped": "previous version stopped",
     "check_preview": "preview, nothing changed",
     "check_error": {
       "secrets": "saved passwords and tokens cannot be opened",
@@ -1615,6 +1624,7 @@
         "qbit_move": "Move to another folder",
         "browser_auth": "Browser sign-in confirmed",
         "settings_interval": "Check interval changed",
+        "settings_replace_previous": "Stopping the previous version by itself changed",
         "settings_language": "Language changed",
         "settings_theme": "Theme changed",
         "settings_password": "Password changed",
@@ -1795,6 +1805,7 @@
       "restored": "torrent is back in the torrent client"
     },
     "files_selected": "({selected}/{total} files)",
+    "previous_stopped_suffix": ", previous version stopped",
     "and_more": " and {count} more",
     "group_failure": {
       "one": "Problem — {tracker}: {problem} for {n} topic ({topics})",
@@ -2015,11 +2026,13 @@
       "pill_none": "Not connected"
     },
     "intervals": {
-      "q": "intervals check minutes undo message",
+      "q": "intervals check minutes undo message previous version stop replace",
       "title": "Checks",
       "check_topics": "Check topics every",
       "show_undo": "Show “Undo” for",
-      "check_hint": "Topics with their own interval keep using it."
+      "check_hint": "Topics with their own interval keep using it.",
+      "replace_previous": "Stop the previous version of a topic by itself",
+      "replace_previous_hint": "When a new version of a topic shares a file with its previous torrent, still running in the torrent client, the check stops the previous one (its files stay) and adds the new one in the same check. A topic can choose otherwise in its edit panel."
     },
     "access": {
       "q": "access lan local network password authentication",
@@ -2400,7 +2413,8 @@
         "empty": "(empty)",
         "secret_set": "a saved password or token",
         "on": "on",
-        "off": "off"
+        "off": "off",
+        "as_settings": "as in Settings"
       }
     },
     "title": {
@@ -2503,6 +2517,8 @@
       "check_failed": "the check failed: {error}",
       "blocked": "check blocked: saved passwords and tokens cannot be opened — see Settings",
       "added": "added to the torrent client",
+      "added_replaced": "added to the torrent client; the previous version was stopped",
+      "would_replace": "would stop the previous version and add the new one",
       "selection_updated": "file selection updated",
       "started": "started in the torrent client",
       "changed": "new version",
@@ -2651,6 +2667,7 @@
       "replace_paused": "the topic is paused: resume it first, then stop the previous torrent",
       "cannot_stop": "this client cannot stop a torrent",
       "replace_failed": "the previous torrent was not stopped: {error}",
+      "replace_choice_invalid": "Choose from the list whether the previous version is stopped by itself",
       "adopt_failed": "the torrent was not adopted into TOW: {error}",
       "not_owned": "torrent client: the torrent has no tow tag — TOW does not touch it",
       "move_back_unconfirmed": "torrent client: the check after the move did not confirm that the folder is back"

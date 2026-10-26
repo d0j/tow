@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from tow import access, undo
 from tow.clients.factory import client_configurations, default_client_id
+from tow.config import as_bool
 from tow.errors import TowError
 from tow.folders import recent_save_roots
 from tow.records import shown_title
@@ -29,6 +30,12 @@ async def _interval_form(request: Request) -> str | None:
     # intentionally restores the global timer; older callers omitting it keep theirs.
     form = await request.form()
     return str(form["check_interval_min"]) if "check_interval_min" in form else None
+
+
+async def _replace_form(request: Request) -> str | None:
+    # "" (as in Settings) is a choice of its own; a form without the field keeps the topic's.
+    form = await request.form()
+    return str(form["replace_previous"]) if "replace_previous" in form else None
 
 
 def _tracking(mode: str, unchecked: str) -> str:
@@ -98,6 +105,7 @@ def _topic_edit_context(request: Request, tid: str) -> dict[str, Any] | None:
         "default_client_id": default_client_id(cfg),
         "save_roots": recent_save_roots(state),
         "global_interval_min": global_interval_minutes(cfg),
+        "replace_previous_global": as_bool(cfg.get("replace_previous_revision")),
     }
 
 
@@ -199,6 +207,7 @@ def topics_edit(
     tracking_mode: str = Form(""),
     tracking_unchecked: str = Form(""),
     check_interval_min: str | None = Depends(_interval_form),
+    replace_previous: str | None = Depends(_replace_form),
     content_token: str = Form(""),
     selection_indices: str = Form(""),
     base: str = Form(""),
@@ -213,6 +222,7 @@ def topics_edit(
         selection_value=selection_value,
         tracking_mode=_tracking(tracking_mode, tracking_unchecked),
         check_interval_min=check_interval_min,
+        replace_previous=replace_previous,
         content_token=content_token,
         selection_indices=selection_indices,
     )

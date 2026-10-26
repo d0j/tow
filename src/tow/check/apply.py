@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from tow.check import space, verification
+from tow.check import replace, space, verification
 from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
     assert_client_can_add,
@@ -199,14 +199,27 @@ def _add_new_revision(
         selection_truncated=len(plan.selected_files) > 20,
         started=shortfall is None,
         status="succeeded",
+        **_stopped_fields(row),
         how=run.how,
     )
     if shortfall is not None:
         # Not started: "added" is told when TOW starts it; now the owner hears the wait.
         space.wait_for_space(topic, run, row, h=h, client_id=client_id, info=added, shortfall=shortfall, kind=kind)
     elif run.notify:
-        run.queue_notification(topic, kind=kind, operation_id=operation_id, tracker=str(row.get("tracker") or ""))
+        run.queue_notification(
+            topic,
+            kind=kind,
+            operation_id=operation_id,
+            tracker=str(row.get("tracker") or ""),
+            previous_stopped=bool(row.get("stopped_previous")),
+        )
     return h
+
+
+def _stopped_fields(row: dict[str, Any]) -> dict[str, Any]:
+    """The add's record names the previous revisions the check stopped for it (tow.check.replace)."""
+    stopped = row.get("stopped_previous")
+    return {"previous_stopped": list(stopped)} if stopped else {}
 
 
 def _unrecorded_own_add(state: dict[str, Any], topic: Topic, h: str) -> bool:
@@ -296,6 +309,7 @@ def _update_client_selection(
         recovered=pending_recovery or owned_add_recovery,
         started=shortfall is None,
         status="succeeded",
+        **(_stopped_fields(row) if completed_pending_add else {}),
         how=run.how,
     )
     kind = str(
@@ -309,7 +323,13 @@ def _update_client_selection(
     elif waiting is not None:
         space.started(topic, run, row, h=h, client_id=client_id, kind=kind)
     elif completed_pending_add and run.notify:
-        run.queue_notification(topic, kind=kind, operation_id=operation_id, tracker=str(row.get("tracker") or ""))
+        run.queue_notification(
+            topic,
+            kind=kind,
+            operation_id=operation_id,
+            tracker=str(row.get("tracker") or ""),
+            previous_stopped=bool(row.get("stopped_previous")),
+        )
 
 
 def _refuse_still_blocked(work: TopicCheck, metadata: Any, *, h: str, replaces: bool) -> None:
@@ -355,7 +375,14 @@ def apply_revision(
     dest = (topic.get("save_path") or "").strip()
     if not dest:
         raise TowError("check.no_save_path")
-    _refuse_still_blocked(work, metadata, h=h, replaces=bool(h != old and old and not migrates))
+    replaces = bool(h != old and old and not migrates)
+    stopped: list[str] = []
+    if replaces and replace.by_itself(topic, run.replace_previous):
+        # The owner's opt-in: the previous revision on the same files is stopped first (a stop
+        # that fails refuses here, before the add starts, as a waiting revision is refused).
+        stopped = replace.stop_previous(work, metadata, h=h, dest=dest, plan=plan)
+    if not stopped:  # nothing it may stop (or the opt-in is off): a waiting revision still waits
+        _refuse_still_blocked(work, metadata, h=h, replaces=replaces)
     operation_id = work.operation_id = new_operation_id("client-add")
     row["operation_id"] = operation_id
     run.record(
@@ -380,18 +407,18 @@ def apply_revision(
     client = work.client
     if client is None:
         raise client_unreachable(run, work.client_id)
-    assert_client_can_add(
-        run.state,
-        topic,
-        client,
-        h=h,
-        old=old,
-        dest=dest,
-        plan=plan,
-        files=metadata.files,
-        replaces_revision=bool(h != old and old and not migrates),
-    )
     try:
+        assert_client_can_add(
+            run.state,
+            topic,
+            client,
+            h=h,
+            old=old,
+            dest=dest,
+            plan=plan,
+            files=metadata.files,
+            replaces_revision=replaces,
+        )
         h, selection_verified = _hand_to_client(
             work,
             client,
@@ -405,8 +432,12 @@ def apply_revision(
             needs_selection_update=needs_selection_update,
         )
     except ClientVerificationPending as error:
-        h = verification.defer(work, error, metadata, plan)
+        h = verification.defer(work, error, metadata, plan)  # in the client: the stopped ones stay so
         selection_verified = True
+    except BaseException:
+        if row.get("status") != "succeeded":  # not added, or not confirmed: seed the previous again
+            replace.start_again(work, stopped, h=h)
+        raise
     else:
         topic.pop("verification_pending", None)
     store_revision(

@@ -53,7 +53,8 @@ class SiteChanged(TypedDict):
 
 
 class SettingsChanged(TypedDict):
-    """kind "settings": a client login, a messenger, the check interval or the message time."""
+    """kind "settings": a client login, a messenger, or the Checks form (the check interval, the
+    message time, whether a check stops a topic's previous version itself)."""
 
     kind: Literal["settings"]
     ts: str
@@ -61,6 +62,7 @@ class SettingsChanged(TypedDict):
     secret_scope: NotRequired[list[str] | None]  # the part of it the change touched (None: all, old)
     interval_sec: NotRequired[int]
     flash_ttl_sec: NotRequired[int]
+    replace_previous_revision: NotRequired[bool]
 
 
 class AccessChanged(TypedDict):

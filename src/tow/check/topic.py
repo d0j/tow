@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
 from tow import download_history
-from tow.check import space, verification
+from tow.check import replace, space, verification
 from tow.check.apply import apply_revision
 from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
@@ -232,6 +232,9 @@ class CheckRun:
     rebind_volumes: bool = False
     # allow_private_tracker_hosts: a page's magnet may name trackers in the home network.
     private_tracker_hosts: bool = False
+    # replace_previous_revision: a topic's previous revision on a file of its new one is stopped
+    # by the check itself (tow.check.replace), unless the topic says otherwise.
+    replace_previous: bool = False
     # (site, error code) -> {"error", "topics"}: topics not asked because of their site (SITE_SKIP_CODES).
     site_skips: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
 
@@ -630,6 +633,15 @@ def _check_revision(work: TopicCheck) -> None:
         migrates=hash_alias_migration,
         updates_selection=needs_selection_update,
     )
+    replaces = bool(old and h != old and not hash_alias_migration)
+    # A dry run: what an apply would stop first (the client is only asked).
+    if (
+        not run.apply
+        and replaces
+        and replace.by_itself(topic, run.replace_previous)
+        and (stops := replace.would_stop(work, metadata, h=h, plan=plan))
+    ):
+        row["would_stop_previous"] = stops
     readd = _readds_removed(work, h=h, needs_selection_update=needs_selection_update)
     row["readd_removed"] = readd
     if run.apply and (h != old or needs_selection_update or readd):

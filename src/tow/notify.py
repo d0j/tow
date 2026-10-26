@@ -78,6 +78,8 @@ class PendingNotification:
     error: Any = ""  # a text, a typed error (rendered in the owner's language) or a tuple of them
     episodes: str = ""
     recovered: bool = False  # an earlier error of this topic is gone (said in the same message)
+    # The add stopped the topic's previous version first (tow.check.replace): said with it.
+    previous_stopped: bool = False
 
 
 class NotificationBatch:
@@ -95,6 +97,7 @@ class NotificationBatch:
         tracker: str = "",
         error: Any = "",
         episodes: str = "",
+        previous_stopped: bool = False,
     ) -> None:
         topic_id = str(topic.get("id") or "")
         if not topic_id:
@@ -103,7 +106,7 @@ class NotificationBatch:
         if current and current.kind == "recovered" and kind not in {"recovered", "error"}:
             # "снова работает" must not disappear behind an add or a completion of the same topic.
             self._items[topic_id] = PendingNotification(
-                kind, operation_id, topic, tracker, error, episodes, recovered=True
+                kind, operation_id, topic, tracker, error, episodes, recovered=True, previous_stopped=previous_stopped
             )
             return
         if current and kind == "recovered" and current.kind not in {"recovered", "error"}:
@@ -115,6 +118,7 @@ class NotificationBatch:
                 current.error,
                 current.episodes,
                 recovered=True,
+                previous_stopped=current.previous_stopped,
             )
             return
         if current and kind == "error" and current.kind in _EVENTS:
@@ -127,12 +131,19 @@ class NotificationBatch:
                 current.tracker,
                 _joined(current.error, error),
                 current.episodes,
+                previous_stopped=current.previous_stopped,
             )
             return
         if current and current.kind == "error" and kind in _EVENTS:
             # The same, in the other order (reconcile events come after the check's error).
             self._items[topic_id] = PendingNotification(
-                kind, operation_id, topic, tracker or current.tracker, _joined(current.error, error), episodes
+                kind,
+                operation_id,
+                topic,
+                tracker or current.tracker,
+                _joined(current.error, error),
+                episodes,
+                previous_stopped=previous_stopped,
             )
             return
         if current:
@@ -148,6 +159,7 @@ class NotificationBatch:
                         _joined(current.error, error),
                         current.episodes,
                         recovered=current.recovered,
+                        previous_stopped=current.previous_stopped,
                     )
                 return
             if new_priority == current_priority:
@@ -162,7 +174,9 @@ class NotificationBatch:
                 error = _joined(current.error, error)
         # A later event of the same topic keeps "works again" said with an earlier one.
         recovered = bool(current and current.recovered and kind in _EVENTS)
-        self._items[topic_id] = PendingNotification(kind, operation_id, topic, tracker, error, episodes, recovered)
+        self._items[topic_id] = PendingNotification(
+            kind, operation_id, topic, tracker, error, episodes, recovered, previous_stopped
+        )
 
     def __iter__(self) -> Iterator[PendingNotification]:
         return iter(self._items.values())
@@ -228,9 +242,11 @@ def event_text(
     total_files: int | None = None,
     recovered: bool = False,
     episode_source: str = "",
+    previous_stopped: bool = False,
 ) -> str:
     """A message about a topic; ``episode_source`` is the site's title the episodes are read
-    from when ``title`` is the owner's own name (by default ``title`` itself)."""
+    from when ``title`` is the owner's own name (by default ``title`` itself);
+    ``previous_stopped``: an add that stopped the topic's previous version first says so."""
     lang = i18n.message_language()
     text = _event_text(
         lang,
@@ -242,6 +258,7 @@ def event_text(
         episode_source=episode_source,
         selected_files=selected_files,
         total_files=total_files,
+        previous_stopped=previous_stopped,
     )
     if recovered and kind not in {"recovered", "error"}:
         return t("notify.recovered_suffix", lang, text=text)
@@ -273,6 +290,7 @@ def _event_text(
     selected_files: int | None = None,
     total_files: int | None = None,
     episode_source: str = "",
+    previous_stopped: bool = False,
 ) -> str:
     error = error_text(error, lang)
     if kind in {"qbit_down", "qbit_up"}:
@@ -303,6 +321,8 @@ def _event_text(
     if action:
         if kind in {"added", "updated"} and selected_files is not None and total_files is not None:
             action += " " + t("notify.files_selected", lang, selected=selected_files, total=total_files)
+        if kind in _CLIENT_MUTATIONS and previous_stopped:
+            action += t("notify.previous_stopped_suffix", lang)
         parts.append(action)
     text = " — ".join(parts)
     err = _brief(error)

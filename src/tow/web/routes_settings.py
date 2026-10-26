@@ -106,6 +106,7 @@ def settings_view(request: Request, *, live: bool) -> Response:
             "flash_ttl_min": _shown_minutes(flash_ttl_sec()),
             "allow_lan": as_bool(cfg.get("allow_lan")),
             "check_updates": as_bool(cfg.get("check_updates", True)),
+            "replace_previous_revision": as_bool(cfg.get("replace_previous_revision")),
             # A refused save's recovery form draws the connections of its draft (settings_merge).
             "protection": settings_merge.protection_recovery(services.protection_settings_view(cfg), conflict),
             "lan_password_set": access.password_is_set(s),
@@ -442,28 +443,43 @@ def _shown_minutes(seconds: int) -> int:
 def settings_interval(
     interval_min: str = Form(""),
     flash_ttl_min: str = Form(""),
+    replace_previous_revision: str = Form(""),  # a box: sent only when ticked
     base: str = Form(""),
     resolutions: dict[str, str] = edit_base.RESOLUTIONS,
 ) -> Response:
     cfg_before = services.load_config()
     old_sec = interval_sec_of(cfg_before)
     old_ttl_sec = flash_ttl(cfg_before.get("flash_ttl_sec"))
+    old_replace = as_bool(cfg_before.get("replace_previous_revision"))
     # Only what this form changed since it was rendered: a field another device changed meanwhile
     # comes back as this page showed it and must not put the old value back.
     merged = settings_merge.merged(
         settings_merge.INTERVALS,
         "/settings?open=intervals",
         base,
-        {"interval_min": _shown_minutes(old_sec), "flash_ttl_min": _shown_minutes(old_ttl_sec)},
-        settings_merge.intervals_wanted(interval_min, flash_ttl_min),
+        {
+            "interval_min": _shown_minutes(old_sec),
+            "flash_ttl_min": _shown_minutes(old_ttl_sec),
+            "replace_previous_revision": old_replace,
+        },
+        settings_merge.intervals_wanted(interval_min, flash_ttl_min, replace_previous_revision),
         resolutions,
-        {"interval": t("settings.intervals.check_topics"), "messages": t("settings.intervals.show_undo")},
-        {"interval_min": interval_min, "flash_ttl_min": flash_ttl_min},
+        {
+            "interval": t("settings.intervals.check_topics"),
+            "messages": t("settings.intervals.show_undo"),
+            "replace": t("settings.intervals.replace_previous"),
+        },
+        {
+            "interval_min": interval_min,
+            "flash_ttl_min": flash_ttl_min,
+            "replace_previous_revision": "1" if as_bool(replace_previous_revision) else "",
+        },
     )
     if isinstance(merged, RedirectResponse):
         return merged
     interval_min = str(merged.values["interval_min"]).removeprefix("invalid:")
     flash_ttl_min = str(merged.values["flash_ttl_min"]).removeprefix("invalid:")
+    new_replace = bool(merged.values["replace_previous_revision"])
     requested, requested_ttl = whole_number(interval_min), whole_number(flash_ttl_min)
     if requested is None or requested_ttl is None:
         # Nothing is guessed: "", "abc", "1.5" or "٦٠" is refused, not replaced by a default.
@@ -484,7 +500,7 @@ def settings_interval(
     if ttl_min != requested_ttl:
         clamped.append(t("web.settings.clamped_messages", minutes=ttl_min))
     clamp_note = t("web.settings.clamp_note", items=", ".join(clamped)) if clamped else ""
-    if new_sec == old_sec and new_ttl_sec == old_ttl_sec:
+    if new_sec == old_sec and new_ttl_sec == old_ttl_sec and new_replace == old_replace:
         if clamped:  # 5000 minutes is 1440, which it already was: say so, not only "no changes"
             kept = t("web.settings.clamp_kept", items=", ".join(clamped))
             return flash_redirect("/settings?open=intervals", t("web.common.no_changes") + kept, "warn")
@@ -493,9 +509,11 @@ def settings_interval(
     undo_secrets = copy.deepcopy(services.load_secrets())
 
     def write(txn: StoreTransaction) -> None:
-        settings_undo(txn, state, undo_secrets, old_sec, [], old_ttl_sec)
+        settings_undo(txn, state, undo_secrets, old_sec, [], old_ttl_sec, old_replace)
         if new_ttl_sec != old_ttl_sec:
             txn.set_flash_ttl_sec(new_ttl_sec)
+        if new_replace != old_replace:
+            txn.set_replace_previous_revision(new_replace)  # the next check reads it
         if new_sec != old_sec:
             txn.set_interval_sec(new_sec)  # `tow run` reads it from the config within a minute
         txn.save_state(state)
@@ -507,6 +525,8 @@ def settings_interval(
         return _interval_not_saved(exc, new_sec)
     if new_sec != old_sec:
         services.log_event("settings_interval", interval_sec=new_sec, how="manual")
+    if new_replace != old_replace:
+        services.log_event("settings_replace_previous", enabled=new_replace, how="manual")
     return flash_redirect(
         "/settings?open=intervals", t("web.common.saved") + clamp_note, "warn" if clamp_note else "ok"
     )

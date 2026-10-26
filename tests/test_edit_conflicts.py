@@ -1114,3 +1114,89 @@ def test_a_stale_autostart_box_does_not_put_back_without_signing_in(settings_two
     assert status["autostart"] is False
     post(b, "/settings/service/autostart", {**b_form, "enabled": "1"})  # and on again, same page
     assert status["without_login"] is False  # the hidden stale "1" is not put back
+
+
+# --- the check stops the previous version itself (tow.check.replace) ---------------------------
+
+
+def test_the_checks_setting_saves_renders_and_undoes(settings_two):
+    from tow.config import config_path
+    from tow.log import read_events
+
+    a, _b = settings_two
+    form = settings_form(a, "/settings/interval")
+    assert "replace_previous_revision" not in form  # off by default: the box is clear
+    page = a.get("/settings").text
+    assert "Stop the previous version of a topic by itself" in page
+
+    response = post(a, "/settings/interval", {**form, "replace_previous_revision": "1"})
+
+    assert "conflict=" not in response.headers["location"]
+    assert load_config()["replace_previous_revision"] is True
+    assert "replace_previous_revision: true" in config_path().read_text(encoding="utf-8")
+    assert settings_form(a, "/settings/interval")["replace_previous_revision"] == "1"  # ticked now
+    assert [e["enabled"] for e in read_events(limit=50) if e.get("kind") == "settings_replace_previous"] == [True]
+    post(a, "/undo", {})
+    assert load_config()["replace_previous_revision"] is False
+
+
+def test_another_devices_checks_setting_survives_a_save_of_the_interval(settings_two):
+    a, b = settings_two
+    b_form = settings_form(b, "/settings/interval")
+    post(a, "/settings/interval", {**settings_form(a, "/settings/interval"), "replace_previous_revision": "1"})
+    response = post(b, "/settings/interval", {**b_form, "interval_min": "30"})  # B's box still clear
+    assert "conflict=" not in response.headers["location"]
+    assert (load_config()["interval_sec"], load_config()["replace_previous_revision"]) == (1800, True)
+
+
+def test_a_topics_own_choice_saves_renders_and_goes_back_to_settings(two):
+    a, _b = two
+    html = a.get("/topics/t1/edit-panel").text
+    select = re.search(r'<select id="edit-replace-previous-t1" class="(?P<cls>[^"]+)" name="replace_previous">', html)
+    assert select is not None
+    assert select["cls"] == "w-m"  # the standard size of every select
+    assert "As in Settings (off)" in html
+    form = panel(a)
+    assert form["replace_previous"] == ""
+
+    save(a, {**form, "replace_previous": "off"})
+    assert topic()["replace_previous"] == "off"
+    assert panel(a)["replace_previous"] == "off"
+    save(a, {**panel(a), "replace_previous": "on"})
+    assert topic()["replace_previous"] == "on"
+    save(a, {**panel(a), "replace_previous": ""})
+    assert "replace_previous" not in topic()  # as Settings says again
+
+
+def test_a_topics_choice_outside_the_list_is_refused(two):
+    a, _b = two
+    from helpers import flash_of
+
+    response = save(a, {**panel(a), "replace_previous": "always", "title": "Renamed"})
+    assert response.status_code == 303
+    assert "Choose from the list whether the previous version is stopped by itself" in flash_of(
+        response.headers["location"]
+    )
+    assert "replace_previous" not in topic()
+    assert topic()["title"] == "Show A"  # nothing of the refused save is written
+
+
+def test_another_devices_topic_choice_survives_a_rename(two):
+    a, b = two
+    b_form = panel(b)
+    save(a, {**panel(a), "replace_previous": "on"})
+    response = save(b, {**b_form, "title": "Renamed by B"})
+    assert "conflict=" not in response.headers["location"]
+    assert (topic()["title"], topic()["replace_previous"]) == ("Renamed by B", "on")
+
+
+def test_a_topics_choice_changed_on_both_sides_is_a_conflict_that_names_both(two):
+    a, b = two
+    b_form = panel(b)
+    save(a, {**panel(a), "replace_previous": "on"})
+    location = save(b, {**b_form, "replace_previous": "off"}).headers["location"]
+    assert "conflict=" in location
+    page = b.get(location).text
+    assert "Saved now: Yes" in page
+    assert "Yours: No" in page
+    assert topic()["replace_previous"] == "on"

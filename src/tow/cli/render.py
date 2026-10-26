@@ -74,11 +74,13 @@ def _check_state(row: dict[str, Any], outcome: str, *, preview: bool) -> str:
 
     if outcome == "new":
         if preview:
-            return t("cli.check.would_change")
+            return t("web.check.would_replace" if row.get("would_stop_previous") else "cli.check.would_change")
         for flag, key in (("selection_updated", "web.check.selection_updated"), ("started", "web.check.started")):
             if row.get(flag):
                 return t(key)
-        return t("web.check.added") if row.get("added") else t("web.check.changed")
+        if row.get("added"):
+            return t("web.check.added_replaced" if row.get("stopped_previous") else "web.check.added")
+        return t("web.check.changed")
     if outcome == "pending" and row.get("status") == "verification_pending":
         return t("web.check.verifying")
     if outcome == "fail":

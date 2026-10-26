@@ -10,7 +10,7 @@ import copy
 from typing import Any, cast
 
 from tow import access
-from tow.config import flash_ttl, interval_sec_of, load_config
+from tow.config import as_bool, flash_ttl, interval_sec_of, load_config
 from tow.log import error_fields, log_event
 from tow.records import shown_title
 from tow.store import load_secrets
@@ -38,6 +38,7 @@ TOPIC_EDIT_FIELDS = (
     "check_interval_min",
     "check_timer_revision",
     "check_timer_set_at_ts",
+    "replace_previous",
 )
 
 
@@ -223,12 +224,15 @@ def _settings(ctx: Context) -> Restore:
     target_sec = int(record.get("interval_sec") or old_sec)
     ttl = record.get("flash_ttl_sec")
     target_ttl = int(ttl) if ttl is not None else old_ttl
+    replace = record.get("replace_previous_revision")
+    old_replace = as_bool(config.get("replace_previous_revision"))
     # A changed check interval needs nothing outside the config: `tow run` reads it from there.
     return Restore(
         Outcome("web.undo.settings_done", "ok", page),
         secrets=secrets,
         interval_sec=target_sec if target_sec != old_sec else None,
         flash_ttl_sec=target_ttl if target_ttl != old_ttl else None,
+        replace_previous_revision=replace if isinstance(replace, bool) and replace != old_replace else None,
         failed=Outcome("web.undo.apply_failed", "err", page),
     )
 

@@ -64,6 +64,10 @@ class Client:
         self.adds: list[str] = []
         self.starts_confirmed = True
         self.down = False
+        self.stop_error: Exception | None = None  # stop_owned_torrent fails with it
+        self.stops_confirmed = True
+        self.add_error: Exception | None = None  # add_torrent_selected fails with it
+        self.stopped: list[str] = []
 
     def ping(self) -> str:
         if self.down:
@@ -86,6 +90,8 @@ class Client:
 
     def add_torrent_selected(self, content, save_path, h, selected, *, start=True):
         self.adds.append(h)
+        if self.add_error is not None:
+            raise self.add_error
         self.put(h, save_path, state="downloading" if start else "stoppedDL")
         for row in self.torrents[h]["files"]:
             row["progress"] = 0.0
@@ -108,7 +114,11 @@ class Client:
         self.torrents[h]["tags"].append("tow")
 
     def stop_owned_torrent(self, h):
-        self.torrents[h]["state"] = "stoppedUP"
+        self.stopped.append(h)
+        if self.stop_error is not None:
+            raise self.stop_error
+        if self.stops_confirmed:
+            self.torrents[h]["state"] = "stoppedUP"
         return self.inspect_torrent(h)
 
 
@@ -173,7 +183,7 @@ def world(monkeypatch, tmp_path):
             ]
         }
     )
-    return SimpleNamespace(site=site, client=client, reconcile=reconcile, sent=sent, folder=str(folder))
+    return SimpleNamespace(site=site, client=client, reconcile=reconcile, sent=sent, folder=str(folder), cfg=cfg)
 
 
 def _check(**kwargs: Any) -> dict[str, Any]:
@@ -572,3 +582,242 @@ def test_a_check_by_hand_that_did_not_reach_a_limited_site_keeps_its_daily_limit
 
     assert world.site.fetches == fetches
     assert load_state()["daily_limit"] == {"fake": check_run_module._today()}  # the limit still holds
+
+
+# --- the previous version stopped by the check itself (owner's opt-in, tow.check.replace) ------
+
+
+OLDER, OTHER = "D" * 40, "E" * 40
+
+
+def _events(kind: str) -> list[dict[str, Any]]:
+    """The log's events of ``kind``, oldest first."""
+    from tow.log import read_events
+
+    return [row for row in reversed(read_events(limit=500)) if row.get("kind") == kind]
+
+
+def _seeding_old(world) -> None:
+    """The topic has its first version in the client, seeding; the site has a new one."""
+    _check(how="manual", ids=["t1"])
+    world.client.torrents[OLD]["state"] = "uploading"
+    world.site.current = NEW
+
+
+def test_with_the_setting_on_the_previous_version_is_stopped_and_the_new_one_added_in_one_check(world):
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+
+    row = _check()
+
+    topic = _topic()
+    assert row["ok"] is True
+    assert row["added"] is True
+    assert world.client.stopped == [OLD]
+    assert world.client.torrents[OLD]["state"] == "stoppedUP"  # its files stay; only stopped
+    assert world.client.torrents[NEW]["state"] == "downloading"
+    assert topic["hash"] == NEW
+    assert topic["previous_hashes"] == [OLD]
+    assert "last_error_code" not in topic
+    stopped = _events("client_stopped")
+    assert [(e["hashes"], e["reason"], e["how"]) for e in stopped] == [([OLD], "replace_revision_auto", "auto")]
+    added = _events("client_added")[-1]
+    assert added["hash"] == NEW
+    assert added["previous_stopped"] == [OLD]
+    assert _history("errors") == []  # no refusal first: one check did it
+    assert world.sent[-1].startswith("Show — Fake — S01E01–02 из 2 — новая версия добавлена в торрент-клиент")
+    assert world.sent[-1].endswith(", прежняя версия остановлена")
+
+
+def test_history_says_the_add_stopped_the_previous_version(world):
+    from tow.log import format_event
+
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    _check()
+
+    line = format_event(_events("client_added")[-1])
+
+    assert "прежняя версия остановлена" in line["detail"]
+
+
+@pytest.mark.parametrize(
+    ("setting", "choice", "replaced"),
+    [(True, "", True), (False, "on", True), (True, "off", False), (False, "", False), (False, "off", False)],
+    ids=["settings-on", "topic-on-overrides-off", "topic-off-overrides-on", "default-off", "both-off"],
+)
+def test_the_topics_own_choice_overrides_the_setting(world, setting, choice, replaced):
+    world.cfg["replace_previous_revision"] = setting
+    _seeding_old(world)
+    _set_topic(**({"replace_previous": choice} if choice else {}))
+
+    row = _check()
+
+    topic = _topic()
+    assert row["ok"] is replaced
+    if replaced:
+        assert world.client.stopped == [OLD]
+        assert topic["hash"] == NEW
+    else:  # 1.33.3: refused, the previous one untouched and still seeding
+        assert world.client.stopped == []
+        assert world.client.torrents[OLD]["state"] == "uploading"
+        assert topic["hash"] == OLD
+        assert topic["last_error_code"] == "check.previous_revision_active"
+        assert _events("client_stopped") == []
+        assert world.client.adds == [OLD]
+
+
+def test_a_dry_run_says_it_would_stop_the_previous_version_and_stops_nothing(world):
+    from tow.cli.render import human
+    from tow.i18n import t
+
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    before = _data_files()
+
+    out = check.run_check(apply=False, notify=True, how="manual")
+
+    row = out["results"][0]
+    assert row["would_stop_previous"] == [OLD]
+    assert row["status"] == "preview"
+    assert world.client.stopped == []
+    assert world.client.torrents[OLD]["state"] == "uploading"
+    assert world.client.adds == [OLD]
+    assert _data_files() == before
+    assert t("web.check.would_replace") in human(out)
+
+
+def test_a_stop_that_fails_leaves_the_refusal_and_adds_nothing(world):
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    world.client.stop_error = ConnectionError("the client refused")
+
+    row = _check()
+
+    assert row["ok"] is False
+    assert row["error_record"]["code"] == "check.previous_revision_active"
+    assert world.client.adds == [OLD]
+    assert _topic()["hash"] == OLD
+    failed = _events("client_stop_failed")
+    assert len(failed) == 1
+    assert (failed[0]["reason"], failed[0]["hash"]) == ("replace_revision_auto", OLD)
+    assert "the client refused" in failed[0]["error"]
+    _check()  # still refused: the wait and its cause are logged once
+    assert len(_events("client_stop_failed")) == 1
+    assert _history("errors").count("check_fail") == 1
+
+
+def test_a_stop_the_client_does_not_confirm_is_a_failed_stop(world):
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    world.client.stops_confirmed = False
+
+    row = _check()
+
+    assert row["error_record"]["code"] == "check.previous_revision_active"
+    assert world.client.adds == [OLD]
+    assert _events("client_stop_failed")[0]["error_code"] == "check.stop_unconfirmed"
+
+
+def test_an_add_that_fails_after_the_stop_starts_the_previous_version_again(world):
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    world.client.add_error = ConnectionError("add refused")
+
+    row = _check()
+
+    assert row["ok"] is False
+    assert world.client.stopped == [OLD]
+    assert world.client.torrents[OLD]["state"] == "downloading"  # seeding again
+    assert NEW not in world.client.torrents
+    assert _topic()["hash"] == OLD
+    started = _events("client_started")
+    assert [(e["hashes"], e["reason"]) for e in started] == [([OLD], "replace_revision_auto")]
+    assert "previous_stopped" not in _events("client_add_failed")[-1]
+
+
+def test_an_unconfirmed_add_whose_torrent_runs_does_not_start_the_previous_version_beside_it(world):
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    client = world.client
+
+    def added_elsewhere(content, save_path, h, selected, *, start=True):
+        client.adds.append(h)
+        client.put(h, save_path + "-elsewhere", state="downloading")  # the read-back cannot confirm it
+        return {"hash": h}
+
+    client.add_torrent_selected = added_elsewhere
+
+    row = _check()
+
+    assert row["error_record"]["code"] == "check.add_unconfirmed"
+    assert client.torrents[OLD]["state"] == "stoppedUP"  # two torrents never write the same file
+    assert [e.get("status") for e in _events("client_start_failed")] == ["new_revision_running"]
+
+
+def test_only_a_running_previous_version_on_a_shared_file_is_stopped(world):
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    world.client.put(OLDER, world.folder, state="stoppedUP")  # already stopped
+    world.client.put(OTHER, world.folder, state="uploading")  # running, on other files
+    for row in world.client.torrents[OTHER]["files"]:
+        row["name"] = row["name"].replace("Show/", "Extras/")
+    _set_topic(previous_hashes=[OLDER, OTHER])
+
+    row = _check()
+
+    assert row["added"] is True
+    assert world.client.stopped == [OLD]
+    assert world.client.torrents[OLDER]["state"] == "stoppedUP"
+    assert world.client.torrents[OTHER]["state"] == "uploading"
+
+
+def test_another_topics_torrent_is_never_stopped(world):
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    world.client.put(OTHER, world.folder, state="uploading")  # another topic's, on the same file names
+    state = load_state()
+    state["topics"].append(
+        {"id": "t2", "title": "Other", "url": "https://tracker.example/2", "save_path": world.folder, "hash": OTHER}
+    )
+    save_state(state)
+
+    row = check.run_check(apply=True, notify=True, how="auto", ids=["t1"])["results"][0]
+
+    assert row["added"] is True
+    assert world.client.stopped == [OLD]
+    assert world.client.torrents[OTHER]["state"] == "uploading"
+
+
+def test_a_previous_version_another_topic_follows_now_is_not_stopped_and_nothing_is(world):
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    world.client.put(OLDER, world.folder, state="uploading")
+    _set_topic(previous_hashes=[OLDER])
+    state = load_state()
+    state["topics"].append(
+        {"id": "t2", "title": "Other", "url": "https://tracker.example/2", "save_path": world.folder, "hash": OLDER}
+    )
+    save_state(state)
+
+    row = check.run_check(apply=True, notify=True, how="auto", ids=["t1"])["results"][0]
+
+    assert row["error_record"]["code"] == "check.previous_revision_active"  # refused as without the setting
+    assert world.client.stopped == []
+    assert world.client.torrents[OLDER]["state"] == "uploading"
+    assert world.client.torrents[OLD]["state"] == "uploading"
+
+
+def test_a_previous_version_without_tows_mark_is_not_stopped_and_its_wait_is_logged_once(world):
+    world.cfg["replace_previous_revision"] = True
+    _seeding_old(world)
+    world.client.torrents[OLD]["tags"] = []  # the owner took TOW's mark off it
+
+    for _ in range(3):
+        row = _check()
+        assert row["error_record"]["code"] == "check.previous_revision_active"
+
+    assert world.client.stopped == []
+    assert world.client.adds == [OLD]
+    assert len(_events("client_add_failed")) == 1  # refused before any add starts, as without the setting
+    assert _history("errors").count("check_fail") == 1

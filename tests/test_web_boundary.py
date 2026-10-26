@@ -134,7 +134,8 @@ PURE: dict[str, set[str]] = {
     "tow.paths": {"tmp_dir"},
     "tow.pulse": {"clock"},
     # shown_title: the name a topic record is shown by, no I/O.
-    "tow.records": {"CheckRow", "shown_title"},
+    # REPLACE_PREVIOUS_CHOICES: the values of a topic's own replace_previous (a constant).
+    "tow.records": {"CheckRow", "REPLACE_PREVIOUS_CHOICES", "shown_title"},
     "tow.restore_points": {"CREATE_FAILED", "INVALID_FILE", "ROLLBACK_FAILED", "RestorePointError", "invalid_file"},
     "tow.selection": {"SelectionPendingError", "normalize_policy", "resolve_selection"},
     # status_failed: whether a night copy's status record (a dict) says the last one failed.

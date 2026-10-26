@@ -83,6 +83,7 @@ class Restore:
     config: dict[str, Any] | None = None
     interval_sec: int | None = None  # set in place in config.yaml (comments kept)
     flash_ttl_sec: int | None = None
+    replace_previous_revision: bool | None = None  # in place too
     secrets: dict[str, Any] | None = None
     failed: Outcome | None = None  # said when the transaction failed (default: the kind's)
     compensate: Callable[[], bool] | None = None  # undoes an outside effect; False if it could not
@@ -356,6 +357,8 @@ def _write(restore: Restore, state: dict[str, Any], record: dict[str, Any]) -> l
             txn.set_interval_sec(restore.interval_sec)
         if restore.flash_ttl_sec is not None:
             txn.set_flash_ttl_sec(restore.flash_ttl_sec)
+        if restore.replace_previous_revision is not None:
+            txn.set_replace_previous_revision(restore.replace_previous_revision)
         state.pop("undo", None)
         postponed = release(state, record, txn)  # the snapshot goes with the undo it belonged to
         txn.save_state(state)

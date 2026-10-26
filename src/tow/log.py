@@ -519,6 +519,7 @@ HISTORY_GROUPS = {
             "browser_auth_failed",
             "watchdog_alert",
             "client_stop_failed",
+            "client_start_failed",
             "client_adopt_failed",
             "add_check_fail",
             "add_check_blocked",
@@ -544,6 +545,7 @@ HISTORY_GROUPS = {
             "settings_client_remove",
             "settings_client_default",
             "settings_interval",
+            "settings_replace_previous",
             "backup_created",
             "backup_restored",
             "settings_restore_point_applied",
@@ -907,6 +909,16 @@ _HOW_KEYS = {
 }
 
 
+def _replace_bits(rec: Mapping[str, Any], kind: str, lang: str) -> list[str]:
+    """What a line says of the check stopping a topic's previous version itself (tow.check.replace):
+    an add that did, and the setting turned on or off."""
+    if rec.get("previous_stopped"):
+        return [t("log.previous_stopped", lang)]
+    if kind == "settings_replace_previous" and isinstance(rec.get("enabled"), bool):
+        return [t("web.edit.value.on" if rec["enabled"] else "web.edit.value.off", lang)]
+    return []
+
+
 def format_event(
     rec: Mapping[str, Any],
     *,
@@ -976,6 +988,7 @@ def format_event(
     alerts = rec.get("alerts")
     if isinstance(alerts, list):  # the watchdog's messages, as they were sent
         bits.extend(scrub_text(str(alert)).strip()[:400] for alert in alerts if str(alert).strip())
+    bits.extend(_replace_bits(rec, kind, lang))
     if rec.get("tracker"):
         bits.append(str(rec["tracker"]))
     bits.extend(_access_diagnostics(rec, lang))
