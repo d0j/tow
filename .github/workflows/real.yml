@@ -96,6 +96,9 @@ jobs:
         run: |
           printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null
           sudo chmod 755 /usr/sbin/policy-rc.d
+          # A stalled mirror is retried, not waited on until the step's own limit (26.10: a 51 MB
+          # download from the Azure mirror hung for ten minutes).
+          printf 'Acquire::Retries "5";\nAcquire::http::Timeout "60";\nAcquire::https::Timeout "60";\n' | sudo tee /etc/apt/apt.conf.d/80-tow-retries >/dev/null
           sudo apt-get update -q
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
             qbittorrent-nox transmission-daemon deluged deluge-web
@@ -452,13 +455,23 @@ jobs:
         run: uv sync --frozen
       - name: The images (Linux) - vfat, exFAT for the kernel's driver and for exfat-fuse
         if: runner.os == 'Linux'
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
+          # A stalled mirror is retried, not waited on until the step's own limit (26.10: a 51 MB
+          # download from the Azure mirror hung for ten minutes).
+          printf 'Acquire::Retries "5";\nAcquire::http::Timeout "60";\nAcquire::https::Timeout "60";\n' | sudo tee /etc/apt/apt.conf.d/80-tow-retries >/dev/null
           sudo apt-get update -q
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends dosfstools exfatprogs exfat-fuse
           sudo modprobe vfat
+          # The kernel's exFAT comes with linux-modules-extra; when the runner's Azure mirror only
+          # trickles it (26.10, three runs in a row), it is fetched from Ubuntu's own archive.
+          extra() { sudo DEBIAN_FRONTEND=noninteractive timeout 240 apt-get install -y -q --no-install-recommends "linux-modules-extra-$(uname -r)"; }
           sudo modprobe exfat || {
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "linux-modules-extra-$(uname -r)"
+            extra || {
+              printf 'http://archive.ubuntu.com/ubuntu/\n' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+              sudo apt-get update -q
+              extra
+            }
             sudo modprobe exfat
           }
           images="$RUNNER_TEMP/fs-images"
