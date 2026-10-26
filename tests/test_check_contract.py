@@ -1800,7 +1800,7 @@ def test_revision_overlap_guard_compares_readable_non_ascii_names_exactly(monkey
     )
     assert client.add_calls == (0 if blocked else 1)
     if blocked:
-        assert "остановите прежний торрент" in error
+        assert "«Остановить прежний и добавить»" in error
 
 
 def test_committed_transaction_with_failed_cleanup_does_not_block_later_checks():

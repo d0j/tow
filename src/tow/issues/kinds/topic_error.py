@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from tow import i18n
+from tow.check import PREVIOUS_REVISION_ACTIVE
 from tow.clients import factory
 from tow.errors import as_value, summary_record
 from tow.issues import clients
@@ -95,6 +96,10 @@ def collect(snapshot: Snapshot) -> list[Issue]:
                 ),
                 subjects=(identity,),
                 target=Target("home", open=identity, anchor=f"row-{identity}"),
+                # The previous revision still runs: the panel's one click stops it and adds the new.
+                fix=Fix("replace_revision", identity, label="home.topic.replace")
+                if topic.get("last_error_code") == PREVIOUS_REVISION_ACTIVE
+                else None,
             )
         )
     return found

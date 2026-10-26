@@ -5,6 +5,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- When a new version of a topic waits for its previous torrent, still running on the same file, the message and
+  **Needs attention** now name TOW's own one click: open the topic on **Home** and press **Stop the previous one and
+  add**; **Needs attention** opens the topic with that button ready. Before, they only said to stop it in the client.
+
 ## [1.33.2] — 2026-10-22
 
 ### Security
