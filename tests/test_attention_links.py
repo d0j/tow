@@ -341,6 +341,24 @@ def test_a_topic_error_opens_its_row_with_the_current_problem(client):
     assert re.search(r'<details class="row-edit[^\"]*" open>', page.split('id="row-a"', 1)[1])
 
 
+def test_a_previous_revision_still_running_lands_on_its_stop_and_add(client):
+    # 26.10.2026: the entry only told the owner to stop the torrent in the client; the topic's
+    # panel has the one click that does it (POST /topics/<id>/replace-revision).
+    blocked = _topic(
+        "a",
+        1,
+        hash="AB" * 20,
+        last_error="the previous version is still active",
+        last_error_class="qbit",
+        last_error_code="check.previous_revision_active",
+        last_error_params={"file": "Show.S01E01.mkv", "hash": "CD" * 20},
+    )
+    _home_state(blocked)
+    entry = _entries(client)["topic_error"]
+    page, _ = _land(client, entry, anchor="row-a", fix="replace_revision:a", label=t("home.topic.replace"))
+    assert "/topics/a/replace-revision" in page
+
+
 def test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore(client, monkeypatch, tmp_path_factory):
     from tow.config import load_config, save_config
     from tow.snapshots import create_snapshot

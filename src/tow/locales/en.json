@@ -434,7 +434,7 @@
     "no_tracker": "no site is set up for this link",
     "frozen": "the site is paused",
     "hash_claimed": "another topic ({topic}) already uses this torrent with a different folder or file selection",
-    "previous_revision_active": "the previous version of the torrent is still active on the same file: {file} — stop the previous torrent in the client; the new version will be added at the next check",
+    "previous_revision_active": "the previous version of the torrent is still active on the same file: {file} — on Home, open the topic and press “Stop the previous one and add” (its files stay), or stop it in the client and the next check adds the new version",
     "client_cannot_select": "the chosen torrent client cannot choose files safely",
     "client_cannot_update": "the chosen torrent client cannot change the file selection safely",
     "link_unavailable_selection": "the torrent file is not available (sign in to the site), and changing the file selection needs it",
