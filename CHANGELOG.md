@@ -5,6 +5,16 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Added
+
+- Quiet hours and the daily digest are set in Settings: **Notifications → Quiet hours and digest** has the quiet
+  hours from and to (local hours 0–23, e.g. 23 to 8; both empty is off) and the hour after which the daily digest
+  comes (empty is off). The card shows what is saved, saves it in `config.yaml` in place (`quiet_hours`,
+  `daily_digest_hour`; an empty field takes its line out, the comments stay), refuses what `config.yaml` would
+  refuse in its words with what was typed kept, keeps another device's change of the other field, and can be put
+  back with **Undo**. History and Recent messages say it was saved. A device signed in from the network may change
+  it, as it may the messengers. Setting both in `config.yaml` by hand still works.
+
 ### Fixed
 
 - A topic opened on **Home** from a link (**Needs attention**, a message) says in its edit panel what Settings says

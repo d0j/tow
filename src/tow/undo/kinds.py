@@ -202,6 +202,8 @@ def _settings_page(record: SettingsChanged) -> str:
     from tow import notifiers
 
     scope = record.get("secret_scope")
+    if "quiet_hours" in record or "daily_digest_hour" in record:
+        return "/settings?open=bots&card=quiet"  # quiet hours and the digest keep no secrets
     if scope is None:
         return "/settings"
     if not scope:  # the check interval and the Undo time keep no secrets
@@ -226,6 +228,9 @@ def _settings(ctx: Context) -> Restore:
     target_ttl = int(ttl) if ttl is not None else old_ttl
     replace = record.get("replace_previous_revision")
     old_replace = as_bool(config.get("replace_previous_revision"))
+    # Quiet hours and the digest hour as they were (None: not in config.yaml), when the change set them.
+    quiet = record.get("quiet_hours")
+    digest = record.get("daily_digest_hour")
     # A changed check interval needs nothing outside the config: `tow run` reads it from there.
     return Restore(
         Outcome("web.undo.settings_done", "ok", page),
@@ -233,6 +238,14 @@ def _settings(ctx: Context) -> Restore:
         interval_sec=target_sec if target_sec != old_sec else None,
         flash_ttl_sec=target_ttl if target_ttl != old_ttl else None,
         replace_previous_revision=replace if isinstance(replace, bool) and replace != old_replace else None,
+        quiet_hours=(quiet,)
+        if "quiet_hours" in record and (quiet is None or isinstance(quiet, str)) and quiet != config.get("quiet_hours")
+        else None,
+        daily_digest_hour=(digest,)
+        if "daily_digest_hour" in record
+        and (digest is None or type(digest) is int)
+        and digest != config.get("daily_digest_hour")
+        else None,
         failed=Outcome("web.undo.apply_failed", "err", page),
     )
 

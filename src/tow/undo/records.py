@@ -53,8 +53,9 @@ class SiteChanged(TypedDict):
 
 
 class SettingsChanged(TypedDict):
-    """kind "settings": a client login, a messenger, or the Checks form (the check interval, the
-    message time, whether a check stops a topic's previous version itself)."""
+    """kind "settings": a client login, a messenger, the Checks form (the check interval, the
+    message time, whether a check stops a topic's previous version itself), or quiet hours and
+    the daily digest (Notifications)."""
 
     kind: Literal["settings"]
     ts: str
@@ -63,6 +64,9 @@ class SettingsChanged(TypedDict):
     interval_sec: NotRequired[int]
     flash_ttl_sec: NotRequired[int]
     replace_previous_revision: NotRequired[bool]
+    # Present only when the change set them; None: the key was not in config.yaml.
+    quiet_hours: NotRequired[str | None]
+    daily_digest_hour: NotRequired[int | None]
 
 
 class AccessChanged(TypedDict):

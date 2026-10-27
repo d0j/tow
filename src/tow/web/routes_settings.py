@@ -1,7 +1,7 @@
 """Routes: the settings page and its cards - network access, language, theme, updates, check
-interval and help. The torrent clients are in ``routes_clients``, the messengers in
-``routes_notifiers``, copies of the data in ``routes_backup``, the service in ``routes_service``,
-the password in ``routes_password``."""
+interval and help. The torrent clients are in ``routes_clients``, the messengers with the quiet
+hours and the digest in ``routes_notifiers``, copies of the data in ``routes_backup``, the service
+in ``routes_service``, the password in ``routes_password``."""
 
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ from tow.web.views import (
     log_line,
     repeated_password,
     service_view,
+    settings_draft,
 )
 
 router = APIRouter()
@@ -107,6 +108,10 @@ def settings_view(request: Request, *, live: bool) -> Response:
             "allow_lan": as_bool(cfg.get("allow_lan")),
             "check_updates": as_bool(cfg.get("check_updates", True)),
             "replace_previous_revision": as_bool(cfg.get("replace_previous_revision")),
+            # Notifications → quiet hours and the digest; a refused save's ?draft= brings back
+            # what was typed (views.settings_draft).
+            "quiet": settings_merge.quiet_view(cfg),
+            "quiet_draft": settings_draft(request),
             # A refused save's recovery form draws the connections of its draft (settings_merge).
             "protection": settings_merge.protection_recovery(services.protection_settings_view(cfg), conflict),
             "lan_password_set": access.password_is_set(s),
@@ -152,6 +157,7 @@ def _bases(
         "intervals": edit_base.encode(settings_merge.INTERVALS, "intervals", settings_merge.intervals_now(cfg)),
         "language": edit_base.encode(settings_merge.LANGUAGE, "language", settings_merge.language_now(cfg)),
         "updates": edit_base.encode(settings_merge.UPDATES, "updates", settings_merge.updates_now(cfg)),
+        "quiet": edit_base.encode(settings_merge.QUIET, "quiet", settings_merge.quiet_now(cfg)),
         "protection": edit_base.encode(
             settings_merge.PROTECTION,
             "protection",

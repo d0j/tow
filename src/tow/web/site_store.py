@@ -75,13 +75,17 @@ def settings_undo(
     secret_scope: list[str] | None = None,
     old_ttl_sec: int | None = None,
     old_replace: bool | None = None,
+    previous: dict[str, Any] | None = None,
 ) -> None:
-    """The settings change's undo, its secrets snapshot written inside ``txn``."""
+    """The settings change's undo, its secrets snapshot written inside ``txn``. ``previous``: the
+    config keys the change sets in place (quiet hours, the digest hour) as they were, None for a
+    key that was not there."""
     fields: dict[str, Any] = {"interval_sec": old_sec, "secret_scope": secret_scope}
     if old_ttl_sec is not None:
         fields["flash_ttl_sec"] = old_ttl_sec
     if old_replace is not None:
         fields["replace_previous_revision"] = old_replace
+    fields.update(previous or {})
     undo.stamp(state, "settings", txn=txn, snapshot=secrets_before, **fields)
 
 

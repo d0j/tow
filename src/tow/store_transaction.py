@@ -77,6 +77,15 @@ class StoreTransaction:
         config_store.set_replace_previous_revision(on)
         self._wrote("config")
 
+    def set_quiet_hours(self, span: str | None) -> None:
+        """In place too ("23-8"; None takes the line out)."""
+        config_store.set_quiet_hours(span)
+        self._wrote("config")
+
+    def set_daily_digest_hour(self, hour: int | None) -> None:
+        config_store.set_daily_digest_hour(hour)
+        self._wrote("config")
+
     def save_state(self, data: dict[str, Any]) -> None:
         store.save_state(data)
         self._wrote("state")

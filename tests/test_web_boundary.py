@@ -72,12 +72,17 @@ PURE: dict[str, set[str]] = {
     # local_zone: the zone TOW shows times in (the clock's seam, as machine_now); parse_timestamp:
     # a stored time as an aware one; no I/O.
     "tow.clock": {"format_ui_timestamp", "iso_now", "local_zone", "machine_now", "parse_timestamp"},
-    # whole_number: reads a typed number, no I/O.
+    # whole_number: reads a typed number, no I/O. check_quiet_hours, check_digest_hour (with
+    # QUIET_HOURS and the ConfigError they raise): config.yaml's own rules for a value, no I/O.
     "tow.config": {
         "INTERVAL_MAX_MINUTES",
         "INTERVAL_MIN_MINUTES",
+        "QUIET_HOURS",
         "THEMES",
+        "ConfigError",
         "as_bool",
+        "check_digest_hour",
+        "check_quiet_hours",
         "flash_ttl",
         "interval_sec_of",
         "whole_number",

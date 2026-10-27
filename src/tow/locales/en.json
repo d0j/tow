@@ -1459,6 +1459,7 @@
       "settings_bot": "bot",
       "settings_interval": "interval",
       "settings_replace_previous": "stopping the previous version by itself",
+      "settings_quiet_hours": "quiet hours and digest",
       "tracker_found": "found",
       "tracker_checked": "checked",
       "client_add_started": "adding",
@@ -1600,6 +1601,12 @@
     "client_pass_result": "topics: {n}",
     "site_skipped": "topics not checked: {n}",
     "previous_stopped": "previous version stopped",
+    "quiet": {
+      "on": "quiet hours {span}",
+      "off": "no quiet hours",
+      "digest": "digest after {hour}:00",
+      "no_digest": "no daily digest"
+    },
     "check_preview": "preview, nothing changed",
     "check_error": {
       "secrets": "saved passwords and tokens cannot be opened",
@@ -1625,6 +1632,7 @@
         "browser_auth": "Browser sign-in confirmed",
         "settings_interval": "Check interval changed",
         "settings_replace_previous": "Stopping the previous version by itself changed",
+        "settings_quiet_hours": "Quiet hours and digest saved",
         "settings_language": "Language changed",
         "settings_theme": "Theme changed",
         "settings_password": "Password changed",
@@ -2011,7 +2019,7 @@
       "pill_not_answering": "Not answering"
     },
     "notify": {
-      "q": "bots tg notifications channels messengers",
+      "q": "bots tg notifications channels messengers quiet hours night digest summary",
       "title": "Notifications",
       "pill_down": "{names} — no connection",
       "not_connected": "Not connected",
@@ -2024,6 +2032,24 @@
       "send_test": "Send a test",
       "remove_confirm": "Disconnect {name}? Its settings will be removed (you can bring them back with “Undo”).",
       "pill_none": "Not connected"
+    },
+    "quiet": {
+      "title": "Quiet hours and digest",
+      "hours": "Quiet hours",
+      "from": "Quiet from",
+      "to": "To",
+      "hours_hint": "Messages are held during these hours and sent together afterwards. Hours from 0 to 23, the local time of this computer ({example}). Both empty: no quiet hours.",
+      "example": "23 to 8",
+      "digest": "Daily digest after",
+      "digest_hint": "Once a day after that hour (not during quiet hours), a summary of the day: how many torrents were added, how many new versions or files were found, how many downloads completed, and the names of up to ten of them. It comes on top of the usual messages. Empty: no digest.",
+      "span": "{start}–{end}",
+      "pill_quiet": "Quiet {span}",
+      "pill_digest": "Digest after {hour}:00",
+      "pill_off": "Off",
+      "pill_invalid": "Error in config.yaml",
+      "stored": "config.yaml holds “{value}”.",
+      "saved": "quiet hours and digest saved",
+      "not_saved": "not saved: {problem}"
     },
     "intervals": {
       "q": "intervals check minutes undo message previous version stop replace",

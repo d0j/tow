@@ -546,6 +546,7 @@ HISTORY_GROUPS = {
             "settings_client_default",
             "settings_interval",
             "settings_replace_previous",
+            "settings_quiet_hours",
             "backup_created",
             "backup_restored",
             "settings_restore_point_applied",
@@ -919,6 +920,25 @@ def _replace_bits(rec: Mapping[str, Any], kind: str, lang: str) -> list[str]:
     return []
 
 
+def _quiet_bits(rec: Mapping[str, Any], kind: str, lang: str) -> list[str]:
+    """What a save of quiet hours and the digest (Settings → Notifications) set them to."""
+    if kind != "settings_quiet_hours":
+        return []
+    bits = []
+    span = rec.get("quiet_hours")
+    parts = str(span).split("-") if isinstance(span, str) else []
+    if len(parts) == 2:
+        bits.append(t("log.quiet.on", lang, span=t("settings.quiet.span", lang, start=parts[0], end=parts[1])))
+    elif span is None and "quiet_hours" in rec:
+        bits.append(t("log.quiet.off", lang))
+    hour = rec.get("daily_digest_hour")
+    if type(hour) is int:
+        bits.append(t("log.quiet.digest", lang, hour=hour))
+    elif hour is None and "daily_digest_hour" in rec:
+        bits.append(t("log.quiet.no_digest", lang))
+    return bits
+
+
 def format_event(
     rec: Mapping[str, Any],
     *,
@@ -989,6 +1009,7 @@ def format_event(
     if isinstance(alerts, list):  # the watchdog's messages, as they were sent
         bits.extend(scrub_text(str(alert)).strip()[:400] for alert in alerts if str(alert).strip())
     bits.extend(_replace_bits(rec, kind, lang))
+    bits.extend(_quiet_bits(rec, kind, lang))
     if rec.get("tracker"):
         bits.append(str(rec["tracker"]))
     bits.extend(_access_diagnostics(rec, lang))

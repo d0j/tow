@@ -18,6 +18,8 @@ form showed and what its save asks for.
 - Network access and its password: one indivisible card, guarded by its revision (an opaque
   token of the switch, the address and the password's record): a form opened before another
   device changed it saves nothing.
+- Quiet hours and the daily digest (Notifications): the quiet hours' "from" and "to" one group
+  (they name one part of the day), the digest's hour another.
 """
 
 from __future__ import annotations
@@ -30,7 +32,16 @@ from typing import Any
 from fastapi.responses import RedirectResponse
 
 from tow.backup_retention import retention_settings
-from tow.config import as_bool, flash_ttl, interval_sec_of, whole_number
+from tow.config import (
+    QUIET_HOURS,
+    ConfigError,
+    as_bool,
+    check_digest_hour,
+    check_quiet_hours,
+    flash_ttl,
+    interval_sec_of,
+    whole_number,
+)
 from tow.i18n import AUTO, canonical, setting
 from tow.notifiers import kinds as notifier_kinds
 from tow.notifiers import storage_scope
@@ -64,6 +75,7 @@ BACKUP_RETENTION = Spec("backup-retention", {"retention": ("backup_days",)})
 BACKUP_FOLDER = Spec("backup-folder", {"folder": ("path",)})  # one per kind of copy (its ident)
 AUTOSTART = Spec("autostart", {"autostart": ("enabled",), "without_login": ("without_login",)})
 ACCESS = Spec("access", {"card": ("revision",)}, secret=frozenset({"revision"}))
+QUIET = Spec("quiet", {"quiet": ("quiet_from", "quiet_to"), "digest": ("daily_digest_hour",)})
 
 
 def merged(
@@ -420,3 +432,130 @@ def access_guard(
     """The network access card's guard (its switch, its address and the password together): None
     when the form shows the card as saved now, else the refusal."""
     return guard_refusal(ACCESS, "access", target, base, access_now(cfg, record))
+
+
+# --------------------------------------------------------------------------- quiet hours, digest
+
+INVALID = "invalid:"
+
+
+def quiet_parts(value: object) -> tuple[str, str]:
+    """``quiet_hours`` as the form's "from" and "to" show and compare it: ("", "") for none, the
+    whole hours ("23", "8"; an end of 24 is 0, as delivery reads it), or what config.yaml holds
+    when it names no hours at all (``"invalid:<as written>", ""``)."""
+    if value is None:
+        return "", ""
+    span = QUIET_HOURS.fullmatch(str(value))
+    if not span:
+        return f"{INVALID}{str(value).strip()[:32]}", ""
+    end = int(span[2])
+    return str(int(span[1])), str(0 if end == 24 else end)
+
+
+def digest_text(value: object) -> str:
+    """``daily_digest_hour`` as its field shows and compares it ("" for none)."""
+    if value is None:
+        return ""
+    try:
+        return str(check_digest_hour(value))
+    except ConfigError:
+        return f"{INVALID}{str(value).strip()[:32]}"
+
+
+def quiet_now(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    start, end = quiet_parts(cfg.get("quiet_hours"))
+    return {"quiet_from": start, "quiet_to": end, "daily_digest_hour": digest_text(cfg.get("daily_digest_hour"))}
+
+
+def quiet_wanted(quiet_from: str, quiet_to: str, daily_digest_hour: str) -> dict[str, Any]:
+    """What the form asks for: both hours empty is no quiet hours, an empty hour no digest."""
+    start, end, hour = quiet_from.strip(), quiet_to.strip(), daily_digest_hour.strip()
+    shown = quiet_parts(f"{start}-{end}") if start or end else ("", "")
+    return {"quiet_from": shown[0], "quiet_to": shown[1], "daily_digest_hour": digest_text(hour) if hour else ""}
+
+
+def quiet_problem(quiet_from: str, quiet_to: str) -> str:
+    """config.yaml's own words for typed quiet hours it would refuse ("": none; only one of the
+    two filled is refused as well)."""
+    start, end = quiet_from.strip(), quiet_to.strip()
+    if not start and not end:
+        return ""
+    try:
+        check_quiet_hours(f"{start}-{end}")
+    except ConfigError as exc:
+        return str(exc)
+    return ""
+
+
+def digest_problem(daily_digest_hour: str) -> str:
+    """config.yaml's own words for a typed digest hour it would refuse ("": none)."""
+    hour = daily_digest_hour.strip()
+    if not hour:
+        return ""
+    try:
+        check_digest_hour(hour)
+    except ConfigError as exc:
+        return str(exc)
+    return ""
+
+
+def quiet_saved(values: Mapping[str, Any]) -> tuple[str | None, int | None]:
+    """What a checked save writes: ``quiet_hours`` ("23-8") and ``daily_digest_hour``, None for
+    a key taken out."""
+    start, end, hour = (str(values.get(name) or "") for name in ("quiet_from", "quiet_to", "daily_digest_hour"))
+    return (f"{start}-{end}" if start and end else None), (int(hour) if hour else None)
+
+
+def _quiet_shown(start: object, end: object) -> str:
+    start, end = str(start or "").removeprefix(INVALID), str(end or "")
+    if not start and not end:
+        return t("web.edit.value.off")
+    return t("settings.quiet.span", start=start, end=end) if end else start
+
+
+def quiet_rows(groups: tuple[str, ...], now: Mapping[str, Any], wanted: Mapping[str, Any]) -> list[Row]:
+    """The card's conflict: the quiet hours as one span, the digest by its hour."""
+    out = []
+    if "quiet" in groups:
+        out.append(
+            Row(
+                "quiet",
+                t("settings.quiet.hours"),
+                _quiet_shown(now.get("quiet_from"), now.get("quiet_to")),
+                _quiet_shown(wanted.get("quiet_from"), wanted.get("quiet_to")),
+            )
+        )
+    if "digest" in groups:
+        saved, mine = (str(side.get("daily_digest_hour") or "").removeprefix(INVALID) for side in (now, wanted))
+        off = t("web.edit.value.off")
+        out.append(Row("digest", t("settings.quiet.digest"), saved or off, mine or off))
+    return out
+
+
+def quiet_view(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    """The card as Settings draws it: its fields as saved, its pill, and config.yaml's own words
+    when what it holds cannot be used (shown as it is, never a crash)."""
+    now = quiet_now(cfg)
+    problems = []
+    for check, key in ((check_quiet_hours, "quiet_hours"), (check_digest_hour, "daily_digest_hour")):
+        try:
+            check(cfg.get(key))
+        except ConfigError as exc:
+            problems.append(str(exc))
+    start, end, hour = (str(now[name]) for name in ("quiet_from", "quiet_to", "daily_digest_hour"))
+    pill = []
+    if start and not problems:
+        pill.append(t("settings.quiet.pill_quiet", span=t("settings.quiet.span", start=start, end=end)))
+    if hour and not problems:
+        pill.append(t("settings.quiet.pill_digest", hour=hour))
+    unshown = start.startswith(INVALID)  # no hours to show ("night" in a field of hours)
+    return {
+        "quiet_from": "" if unshown else start,
+        "quiet_to": end,
+        "daily_digest_hour": hour.removeprefix(INVALID),
+        # What config.yaml holds when the fields cannot show it, said under the problem.
+        "stored": str(cfg.get("quiet_hours")) if unshown else "",
+        "problem": " ".join(problems),
+        "set": bool(start or hour),
+        "pill": " · ".join(pill),
+    }

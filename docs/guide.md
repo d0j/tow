@@ -242,14 +242,18 @@ once it is connected, **Send a test** sends a test message and **Disconnect** re
   now and then does not send “error” and “works again” every other check.
   When one site fails the same way for three or more topics in one check, you get one message for the site.
 - Every message goes to every connected messenger. An undelivered message waits in a queue and goes first next time.
-- Optional in `config.yaml`, off when left out:
-  - `quiet_hours: "23-8"`: messages are held and sent together afterwards. At most 200 are held; older ones are
-    dropped, and the message after the quiet hours says how many.
-  - `daily_digest_hour: 9`: once a day after that hour (not during quiet hours), a summary of the day: how many
-    torrents were added, how many new versions or files were found, how many downloads completed, and the names of
-    up to ten of them. It comes on top of the usual messages.
-  - `heartbeat_url: https://…` (it must start with `https://`): an external monitor such as healthchecks.io that
-    TOW pings every 10 minutes and that alerts you when TOW goes silent.
+- **Quiet hours and digest** (the last card of Settings → Notifications), off while its fields are empty; a device
+  signed in from the network may change them too, and **Undo** puts back what was there before:
+  - **Quiet hours** from and to (hours 0–23, the local time of the computer running TOW, for example 23 to 8):
+    messages are held and sent together afterwards. At most 200 are held; older ones are dropped, and the message
+    after the quiet hours says how many.
+  - **Daily digest after** an hour (0–23): once a day after that hour (not during quiet hours), a summary of the
+    day: how many torrents were added, how many new versions or files were found, how many downloads completed,
+    and the names of up to ten of them. It comes on top of the usual messages.
+  - The card writes `quiet_hours: "23-8"` and `daily_digest_hour: 9` in `config.yaml` (an empty field takes its
+    line out); setting them there by hand still works.
+- Optional in `config.yaml`, off when left out: `heartbeat_url: https://…` (it must start with `https://`): an
+  external monitor such as healthchecks.io that TOW pings every 10 minutes and that alerts you when TOW goes silent.
 - The watchdog tells you when TOW was down and why (sleep, a restart or a shutdown, Windows Update, a crash), and
   when scheduled checks or nightly backups fall behind. On Windows it tells a restart from a shutdown by the kind
   Windows records for it, whatever the language of Windows; when that record is missing or unclear it says “shut

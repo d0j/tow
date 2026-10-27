@@ -126,6 +126,7 @@ ROUTES = frozenset(
         ("POST", "/settings/notifier/{kind}"),
         ("POST", "/settings/notifier/{kind}/test"),
         ("POST", "/settings/notifier/{kind}/remove"),
+        ("POST", "/settings/quiet-hours"),
         ("POST", "/settings/client/ping"),
         ("POST", "/settings/interval"),
         ("GET", "/setup"),

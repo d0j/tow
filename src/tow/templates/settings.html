@@ -172,7 +172,7 @@
     </details><!--/frag:acc-clients-->
 
     <!--frag:acc-bots-->
-    <details class="settings-section settings-accordion acc" id="acc-bots"{% if open_section == 'bots' %} open{% endif %} data-q="{{ t('settings.notify.title') }} {{ notifiers | map(attribute='title') | unique | join(' ') }} {{ search_words.notify }}">
+    <details class="settings-section settings-accordion acc" id="acc-bots"{% if open_section == 'bots' %} open{% endif %} data-q="{{ t('settings.notify.title') }} {{ notifiers | map(attribute='title') | unique | join(' ') }} {{ t('settings.quiet.title') }} {{ search_words.notify }}">
       <summary>
         <span id="settings-bots-title" class="settings-summary-title">{{ t('settings.notify.title') }}</span>
         {#- The connected messengers by name: green once each has delivered, red while one fails,
@@ -262,6 +262,47 @@
             </div>
           </details>
           {% endfor %}
+          {#- Quiet hours and the daily digest (tow.delivery: config.yaml's quiet_hours and
+              daily_digest_hour). Open while either is on, after its save (?card=quiet), with a
+              refused save's draft (?draft=) or a conflict; folded to one line while both are off. -#}
+          {%- set qc = edit_conflict if edit_conflict and edit_conflict.kind == 'quiet' else none %}
+          {%- set qd = qc.draft if qc else quiet_draft %}
+          {%- set qbad = quiet_draft.get('field', '') %}
+          <details class="integration-card quiet-card" id="quiet-hours"{% if quiet.set or quiet.problem or qc or quiet_draft or open_card == 'quiet' %} open{% endif %}>
+            <summary class="integration-head">
+              <h2>{{ t('settings.quiet.title') }}</h2>
+              {% if quiet.problem %}<span class="pill bad">{{ t('settings.quiet.pill_invalid') }}</span>{% else %}<span class="pill mut">{{ quiet.pill or t('settings.quiet.pill_off') }}</span>{% endif %}
+            </summary>
+            <div class="card-body">
+            {% if quiet.problem %}{{ note(quiet.problem ~ ('. ' ~ t('settings.quiet.stored', value=quiet.stored) if quiet.stored else ''), 'bad') }}{% endif %}
+            <form id="quiet-form" method="post" action="/settings/quiet-hours" class="settings-form form-grid" data-return-target="quiet-hours">
+              {{ base_field(qc.base if qc else quiet_draft.get('base') or bases.quiet) }}
+              {{ conflict_box(qc, 'quiet') }}
+              <div class="field">
+                <div class="field-row">
+                  <div class="field">
+                    <label for="quiet-from">{{ t('settings.quiet.from') }}</label>
+                    <input id="quiet-from" name="quiet_from" value="{{ qd.get('quiet_from', quiet.quiet_from) }}" class="w-xs" type="number" min="0" max="23" step="1" inputmode="numeric" aria-describedby="quiet-hint"{% if qbad in ('quiet_from', 'quiet_to') %} aria-invalid="true"{% if qbad == 'quiet_from' %} autofocus{% endif %}{% endif %}>
+                  </div>
+                  <div class="field">
+                    <label for="quiet-to">{{ t('settings.quiet.to') }}</label>
+                    <input id="quiet-to" name="quiet_to" value="{{ qd.get('quiet_to', quiet.quiet_to) }}" class="w-xs" type="number" min="0" max="23" step="1" inputmode="numeric" aria-describedby="quiet-hint"{% if qbad in ('quiet_from', 'quiet_to') %} aria-invalid="true"{% if qbad == 'quiet_to' %} autofocus{% endif %}{% endif %}>
+                  </div>
+                </div>
+                <p class="field-hint" id="quiet-hint">{{ t('settings.quiet.hours_hint', example=t('common.example', example=t('settings.quiet.example'))) }}</p>
+              </div>
+              <div class="field">
+                <label for="digest-hour">{{ t('settings.quiet.digest') }}</label>
+                <input id="digest-hour" name="daily_digest_hour" value="{{ qd.get('daily_digest_hour', quiet.daily_digest_hour) }}" class="w-xs" type="number" min="0" max="23" step="1" inputmode="numeric" aria-describedby="digest-hint"{% if qbad == 'daily_digest_hour' %} aria-invalid="true" autofocus{% endif %}>
+                <p class="field-hint" id="digest-hint">{{ t('settings.quiet.digest_hint') }}</p>
+              </div>
+              <div class="stack-2">
+                <div class="settings-actions"><button type="submit">{{ t('settings.common.save') }}</button></div>
+                <p class="unsaved-state" role="status" hidden>{{ t('settings.common.unsaved') }}</p>
+              </div>
+            </form>
+            </div>
+          </details>
         </div>
       </div>
     </details><!--/frag:acc-bots-->

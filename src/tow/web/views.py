@@ -116,6 +116,26 @@ def site_edit_draft(request: Request) -> dict[str, str] | None:
     return draft if draft and draft.get("site") == request.query_params.get("open") else None
 
 
+# A refused save of a Settings card that holds no secret (quiet hours and the digest): what was
+# typed and the base it was drawn with, kept as the site edits are, for the card that opens again.
+_SETTINGS_DRAFTS = _TokenStore(ttl=600, limit=64)
+
+
+def keep_settings_draft(card: str, draft: dict[str, str]) -> str:
+    """The token (``?draft=``) of Settings card ``card``'s refused ``draft``."""
+    kept = {key: str(value) if key == "base" else str(value)[:256] for key, value in draft.items()}
+    return _SETTINGS_DRAFTS.put({**kept, "card": card})
+
+
+def settings_draft(request: Request) -> dict[str, str]:
+    """What a refused save of the card ``?card=`` names had typed in it ({}: nothing kept), with
+    the field it was refused for (``?field=``) as ``"field"``."""
+    draft = _SETTINGS_DRAFTS.get(request.query_params.get("draft") or "")
+    if not draft or draft.get("card") != request.query_params.get("card"):
+        return {}
+    return {**draft, "field": str(request.query_params.get("field") or "")[:64]}
+
+
 def credential_prompt(request: Request) -> dict[str, Any] | None:
     topic_id = (request.query_params.get("credential_topic") or "").strip()
     if not topic_id or len(topic_id) > 64 or not re.fullmatch(r"[A-Za-z0-9_-]+", topic_id):

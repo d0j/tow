@@ -516,13 +516,32 @@ def _validate(data: dict[str, Any]) -> None:
     if data.get("daily_digest_hour") is not None:
         _int_field(data, "daily_digest_hour", 0, 23)
     _validate_look(data)
-    quiet = data.get("quiet_hours")
-    span = re.fullmatch(r"\s*(\d{1,2})\s*-\s*(\d{1,2})\s*", str(quiet))
+    check_quiet_hours(data.get("quiet_hours"))
+
+
+QUIET_HOURS = re.compile(r"\s*(\d{1,2})\s*-\s*(\d{1,2})\s*")
+
+
+def check_quiet_hours(quiet: object) -> None:
+    """``quiet_hours`` as config.yaml takes it ("23-8", local hours; None: none), or the
+    ConfigError that names what is wrong. Settings → Notifications saves through this too."""
+    span = QUIET_HOURS.fullmatch(str(quiet))
     if quiet is not None and not span:
         raise ConfigError("config_error.quiet_hours")
     if span and not (int(span[1]) <= 23 and int(span[2]) <= 24 and int(span[1]) % 24 != int(span[2]) % 24):
         # "0-24" or "8-8" would be read as no quiet hours at all.
         raise ConfigError("config_error.quiet_hours_span", value=str(quiet).strip())
+
+
+def check_digest_hour(hour: object) -> int | None:
+    """``daily_digest_hour`` as config.yaml takes it (0..23, a number or its text; None: no
+    digest), or the ConfigError that names what is wrong."""
+    if hour is None:
+        return None
+    data: dict[str, Any] = {"daily_digest_hour": hour}
+    _int_field(data, "daily_digest_hour", 0, 23)
+    checked: int = data["daily_digest_hour"]  # a whole number from 0 to 23 now
+    return checked
 
 
 def _validate_look(data: dict[str, Any]) -> None:
@@ -567,9 +586,9 @@ def save_config(data: dict[str, Any]) -> None:
     atomic_write_text(path, text)
 
 
-def _set_top_level_int(key: str, value: int | bool) -> None:
-    """Set one top-level scalar (a number, or true/false) in place, keeping the owner's comments
-    and layout.
+def _set_top_level(key: str, value: int | bool | str | None) -> None:
+    """Set one top-level scalar (a number, true/false, or a text written in quotes) in place, or
+    take its line out (``None``), keeping the owner's comments and layout.
 
     The edit stays on the key's own line (``[ \\t]*`` cannot cross a newline, so an empty
     value never swallows the next key) and is verified by re-parsing: unless exactly
@@ -577,33 +596,57 @@ def _set_top_level_int(key: str, value: int | bool) -> None:
     """
     path = config_path()
     text = _config_text(path)
-    line = f"{key}: {str(value).lower() if isinstance(value, bool) else value}"
-    new, count = re.subn(rf"(?m)^{re.escape(key)}:[ \t]*[^\s#]*", line, text, count=1)
-    if not count:
-        new = text.rstrip() + f"\n{line}\n"
+    if value is None:
+        # The key's line, with what follows it on that line (a comment), and its line break.
+        new = re.sub(rf"(?m)^{re.escape(key)}:[^\n]*(?:\n|\Z)", "", text, count=1)
+    else:
+        shown = str(value).lower() if isinstance(value, bool) else f'"{value}"' if isinstance(value, str) else value
+        line = f"{key}: {shown}"
+        new, count = re.subn(rf"(?m)^{re.escape(key)}:[ \t]*[^\s#]*", line, text, count=1)
+        if not count:
+            new = text.rstrip() + f"\n{line}\n"
     try:
         before = load_yaml(text) or {}
         after = load_yaml(new) or {}
     except yaml.YAMLError:
         before = after = None
-    if isinstance(before, dict) and after == {**before, key: value}:
-        atomic_write_text(path, new)
-        return
+    if isinstance(before, dict):
+        wanted = {name: kept for name, kept in before.items() if name != key}
+        if value is not None:
+            wanted = {**before, key: value}
+        if after == wanted:
+            atomic_write_text(path, new)
+            return
     # Raw (unvalidated) data: the broken value being replaced must not block its own fix.
     data = _parsed_config_file(path)
     if not isinstance(data, dict):
         raise ConfigError("config_error.mapping")
-    data[key] = value
+    if value is None:
+        data.pop(key, None)
+    else:
+        data[key] = value
     save_config(data)
 
 
 def set_interval_sec(sec: int) -> None:
-    _set_top_level_int("interval_sec", int(sec))
+    _set_top_level("interval_sec", int(sec))
 
 
 def set_flash_ttl_sec(sec: int) -> None:
-    _set_top_level_int("flash_ttl_sec", flash_ttl(sec))
+    _set_top_level("flash_ttl_sec", flash_ttl(sec))
 
 
 def set_replace_previous_revision(on: bool) -> None:
-    _set_top_level_int("replace_previous_revision", bool(on))
+    _set_top_level("replace_previous_revision", bool(on))
+
+
+def set_quiet_hours(span: str | None) -> None:
+    """``quiet_hours: "23-8"`` in place, or its line taken out (None: no quiet hours)."""
+    if span is not None:
+        check_quiet_hours(span)
+    _set_top_level("quiet_hours", span)
+
+
+def set_daily_digest_hour(hour: int | None) -> None:
+    """``daily_digest_hour: 9`` in place, or its line taken out (None: no daily digest)."""
+    _set_top_level("daily_digest_hour", check_digest_hour(hour))
