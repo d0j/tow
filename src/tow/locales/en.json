@@ -2049,7 +2049,10 @@
       "pill_invalid": "Error in config.yaml",
       "stored": "config.yaml holds “{value}”.",
       "saved": "quiet hours and digest saved",
-      "not_saved": "not saved: {problem}"
+      "not_saved": "not saved: {problem}",
+      "err_both": "give both hours, from and to (or leave both empty)",
+      "err_hour": "an hour is a whole number from 0 to 23",
+      "err_same": "the quiet hours must start and end at different hours"
     },
     "intervals": {
       "q": "intervals check minutes undo message previous version stop replace",

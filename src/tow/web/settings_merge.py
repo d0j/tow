@@ -474,12 +474,23 @@ def quiet_wanted(quiet_from: str, quiet_to: str, daily_digest_hour: str) -> dict
     return {"quiet_from": shown[0], "quiet_to": shown[1], "daily_digest_hour": digest_text(hour) if hour else ""}
 
 
+def _hour(text: str) -> int | None:
+    """A typed hour 0-23, None for anything else."""
+    return int(text) if text.isascii() and text.isdigit() and int(text) <= 23 else None
+
+
 def quiet_problem(quiet_from: str, quiet_to: str) -> str:
-    """config.yaml's own words for typed quiet hours it would refuse ("": none; only one of the
-    two filled is refused as well)."""
+    """Why typed quiet hours are refused, in the form's own words ("": none): both hours are
+    needed, each 0-23, and they differ; config.yaml's own check stays the last word."""
     start, end = quiet_from.strip(), quiet_to.strip()
     if not start and not end:
         return ""
+    if not start or not end:
+        return t("settings.quiet.err_both")
+    if _hour(start) is None or _hour(end) is None:
+        return t("settings.quiet.err_hour")
+    if _hour(start) == _hour(end):
+        return t("settings.quiet.err_same")
     try:
         check_quiet_hours(f"{start}-{end}")
     except ConfigError as exc:
@@ -492,6 +503,8 @@ def digest_problem(daily_digest_hour: str) -> str:
     hour = daily_digest_hour.strip()
     if not hour:
         return ""
+    if _hour(hour) is None:
+        return t("settings.quiet.err_hour")
     try:
         check_digest_hour(hour)
     except ConfigError as exc:

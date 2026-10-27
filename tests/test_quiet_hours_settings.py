@@ -223,21 +223,23 @@ def test_the_save_is_in_recent_messages(two):
 @pytest.mark.parametrize(
     ("start", "end", "hour", "words", "field"),
     [
-        ("8", "8", "", 'config.yaml: quiet_hours "8-8" does not name a part of the day', "quiet_from"),
-        ("24", "8", "", 'config.yaml: quiet_hours "24-8" does not name a part of the day', "quiet_from"),
-        ("ab", "8", "", 'config.yaml: quiet_hours must look like "23-8"', "quiet_from"),
-        ("23", "", "", 'config.yaml: quiet_hours must look like "23-8"', "quiet_from"),
-        ("", "8", "", 'config.yaml: quiet_hours must look like "23-8"', "quiet_to"),
-        ("23", "8", "24", "config.yaml: daily_digest_hour must be a whole number from 0 to 23", "daily_digest_hour"),
-        ("23", "8", "nine", "config.yaml: daily_digest_hour must be a whole number from 0 to 23", "daily_digest_hour"),
+        ("8", "8", "", "the quiet hours must start and end at different hours", "quiet_from"),
+        ("24", "8", "", "an hour is a whole number from 0 to 23", "quiet_from"),
+        ("ab", "8", "", "an hour is a whole number from 0 to 23", "quiet_from"),
+        ("23", "", "", "give both hours, from and to (or leave both empty)", "quiet_from"),
+        ("", "8", "", "give both hours, from and to (or leave both empty)", "quiet_to"),
+        ("23", "8", "24", "an hour is a whole number from 0 to 23", "daily_digest_hour"),
+        ("23", "8", "nine", "an hour is a whole number from 0 to 23", "daily_digest_hour"),
     ],
 )
-def test_a_refused_save_says_configs_words_saves_nothing_and_keeps_what_was_typed(two, start, end, hour, words, field):
+def test_a_refused_save_says_why_in_plain_words_saves_nothing_and_keeps_what_was_typed(
+    two, start, end, hour, words, field
+):
     a, _b = two
     response = save(a, start, end, hour)
     location = response.headers["location"]
     assert flash_kind(location) == "err"
-    assert flash_of(location).startswith(f"not saved: {words}")
+    assert flash_of(location) == f"not saved: {words}"  # the form's words, never config.yaml's
     assert stored() == (None, None)
     query = parse_qs(urlsplit(location).query)
     assert query["field"] == [field]
