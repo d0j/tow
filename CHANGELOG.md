@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- A topic opened on **Home** from a link (**Needs attention**, a message) says in its edit panel what Settings says
+  for **Stop the previous version by itself**: it said "As in Settings (off)" even with Settings on.
+
 ## [1.34.0] — 2026-10-26
 
 ### Added

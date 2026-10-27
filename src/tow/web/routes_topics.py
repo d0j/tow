@@ -10,8 +10,6 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from tow import access, undo
-from tow.clients.factory import client_configurations, default_client_id
-from tow.config import as_bool
 from tow.errors import TowError
 from tow.folders import recent_save_roots
 from tow.records import shown_title
@@ -20,7 +18,7 @@ from tow.web import _context, edit_base, services, topic_actions
 from tow.web.messages import flash_redirect, home_redirect, request_flash
 from tow.web.templating import TEMPLATES
 from tow.web.text import t, time_parts
-from tow.web.views import event_output, global_interval_minutes, topic_progress_summary, topic_rows, ui_time
+from tow.web.views import event_output, topic_edit_settings, topic_progress_summary, topic_rows, ui_time
 
 router = APIRouter()
 
@@ -101,11 +99,8 @@ def _topic_edit_context(request: Request, tid: str) -> dict[str, Any] | None:
         "edit_base": conflict["base"] if conflict else topic_actions.edit_base_of(topic),
         "conflict": conflict,
         "topic": topic_rows({**state, "topics": [topic]}, local=access.is_local(request))[0],
-        "client_options": [row for row in client_configurations(cfg) if row.get("enabled", True)],
-        "default_client_id": default_client_id(cfg),
         "save_roots": recent_save_roots(state),
-        "global_interval_min": global_interval_minutes(cfg),
-        "replace_previous_global": as_bool(cfg.get("replace_previous_revision")),
+        **topic_edit_settings(cfg),
     }
 
 

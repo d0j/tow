@@ -776,6 +776,20 @@ def global_interval_minutes(cfg: Mapping[str, Any]) -> int:
     return max(1, interval_sec_of(cfg) // 60)
 
 
+def topic_edit_settings(cfg: dict[str, Any]) -> dict[str, Any]:
+    """What a topic's edit panel (``_topic_edit.html``) reads of Settings, wherever it is drawn:
+    Home's opened row (``?open=``), the panel fetched on demand and its page of its own. Home's
+    landing row lacked ``replace_previous_global``: "As in Settings (off)" with Settings on."""
+    from tow.clients.factory import client_configurations, default_client_id
+
+    return {
+        "client_options": [row for row in client_configurations(cfg) if row.get("enabled", True)],
+        "default_client_id": default_client_id(cfg),
+        "global_interval_min": global_interval_minutes(cfg),
+        "replace_previous_global": as_bool(cfg.get("replace_previous_revision")),
+    }
+
+
 # A row's words about its error, as a network device gets them: scrubbed as Recent messages are
 # (a link keeps its host, a folder or file path goes): what the PC running TOW keeps for itself.
 _ERROR_FIELDS = ("last_error", "last_error_human", "error_line", "last_error_details")

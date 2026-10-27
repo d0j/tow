@@ -22,7 +22,7 @@ from tow.web.views import (
     check_result_flash,
     credential_prompt,
     first_run,
-    global_interval_minutes,
+    topic_edit_settings,
     topic_rows,
 )
 
@@ -72,8 +72,6 @@ def _without(request: Request, name: str) -> str:
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request) -> Response:
-    from tow.clients.factory import client_configurations, default_client_id
-
     cfg = _context.config()  # read-only snapshots of this request (tow.web._context)
     if is_browser_navigation(request) and access.is_local(request) and first_run(cfg):
         return RedirectResponse("/setup", status_code=303)
@@ -87,7 +85,6 @@ def index(request: Request) -> Response:
         {str(name) for name in cfg.get("trackers") or {} if str(name)}
         | {str(row["tracker"]) for row in rows if row.get("tracker")}
     )
-    client_options = [row for row in client_configurations(cfg) if row.get("enabled", True)]
     result_id = str(request.query_params.get("check_result") or "")
     result = check_jobs.get(result_id) if result_id else None
     active_id = str(request.query_params.get("check_job") or "")
@@ -108,10 +105,9 @@ def index(request: Request) -> Response:
             "topics": rows,
             "tracker_options": tracker_options,
             "save_roots": recent_save_roots(state),
-            "client_options": client_options,
-            "default_client_id": default_client_id(cfg),
-            # What an empty timer field means, said under it (the add form and an opened row).
-            "global_interval_min": global_interval_minutes(cfg),
+            # The clients, what an empty timer field means and the topic's "as in Settings": the
+            # add form and an opened row (?open=), as the edit panel has them.
+            **topic_edit_settings(cfg),
             "credential_prompt": credential_prompt(request),
             "add_draft": add_draft(request),
             "flash": request_flash(request) or said,

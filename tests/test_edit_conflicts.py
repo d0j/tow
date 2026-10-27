@@ -1168,6 +1168,20 @@ def test_a_topics_own_choice_saves_renders_and_goes_back_to_settings(two):
     assert "replace_previous" not in topic()  # as Settings says again
 
 
+def test_every_edit_panel_says_what_settings_says_also_on_home_opened_on_the_topic(two):
+    """1.34.0: Home opened on a topic (``/?open=<id>``, a "Needs attention" link) drew the row's
+    panel without the setting and said "As in Settings (off)" with Settings on."""
+    from tow.config import set_replace_previous_revision
+
+    a, _b = two
+    set_replace_previous_revision(True)
+    for page in ("/?open=t1", "/topics/t1/edit-panel", "/topics/t1/edit"):
+        html = a.get(page).text
+        assert 'id="edit-replace-previous-t1"' in html, page
+        assert "As in Settings (on)" in html, page
+        assert "As in Settings (off)" not in html, page
+
+
 def test_a_topics_choice_outside_the_list_is_refused(two):
     a, _b = two
     from helpers import flash_of
