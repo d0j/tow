@@ -389,8 +389,9 @@ _OTHER_KEY = frozenset(i18n.translate("backup.restore_point.reason_other_key", c
 
 @router.post("/settings/portable/import")
 async def settings_portable_import(
-    backup_file: Annotated[UploadFile, File()],
-    operation: Annotated[str, Form()],
+    # No file chosen (a form sent without scripts): FastAPI 0.150 gives None, said as an empty file.
+    backup_file: Annotated[UploadFile | None, File()] = None,
+    operation: Annotated[str, Form()] = "",  # none: refused below as an unknown action
 ) -> Response:
     action = str(operation or "").strip().lower()
     if action not in {"check", "restore"}:
@@ -401,7 +402,7 @@ async def settings_portable_import(
         temp_dir = Path(tempfile.mkdtemp(prefix="tow-browser-import-", dir=tmp_dir()))
         upload_path = temp_dir / "uploaded.towx"
         with upload_path.open("xb") as handle:
-            while chunk := await backup_file.read(1024 * 1024):
+            while backup_file is not None and (chunk := await backup_file.read(1024 * 1024)):
                 total += len(chunk)
                 if total > MAX_BUNDLE_BYTES:
                     raise invalid_file("backup.restore_point.portable_invalid", "too_large")
@@ -453,7 +454,8 @@ async def settings_portable_import(
             flash = t("web.settings.restore_failed")
     finally:
         try:
-            await backup_file.close()
+            if backup_file is not None:
+                await backup_file.close()
         finally:
             if temp_dir is not None:
                 shutil.rmtree(temp_dir, ignore_errors=True)

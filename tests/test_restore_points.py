@@ -777,3 +777,28 @@ def test_restore_keeps_this_installs_backup_folders(monkeypatch, tmp_path, live_
     assert restored.get("restore_points_dir") == live.get("restore_points_dir")
     # The safety point just made is in the folder Settings lists.
     assert result["safety_point"] in {point["id"] for point in list_restore_points()}
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {"backup_file": ("", b"", "application/octet-stream")},  # a browser's unselected input
+        None,  # no file part at all
+    ],
+)
+def test_an_import_without_a_chosen_file_says_so_never_a_422(files):
+    # FastAPI 0.150 treats an unselected file input as missing: a required field answered 422
+    # JSON instead of the page's own words (a form sent without scripts can do it).
+    client = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+    empty = client.post(
+        "/settings/portable/import",
+        data={"operation": "check"},
+        files={"backup_file": ("backup.towx", b"", "application/octet-stream")},
+        follow_redirects=False,
+    )
+    response = client.post(
+        "/settings/portable/import", data={"operation": "check"}, files=files, follow_redirects=False
+    )
+    assert response.status_code == 303
+    words = shown(response.headers["location"]).split(" ", 1)[1]  # past the address, its own flash id
+    assert words == shown(empty.headers["location"]).split(" ", 1)[1]
