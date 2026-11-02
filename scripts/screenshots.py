@@ -210,14 +210,16 @@ def shoot(base: str, out: Path, env: dict[str, str]) -> list[Path]:
                     }"""
                 )
                 page.reload(wait_until="networkidle")
-                page.add_style_tag(
-                    content="*, *::before, *::after { transition: none !important; caret-color: transparent; }"
-                )
                 path = out / f"home-{language}-{scheme}.png"
                 # The frame ends below the list: no empty page, no floating version badge.
                 bottom = page.evaluate("Math.ceil(document.querySelector('main').getBoundingClientRect().bottom)")
                 height = min(int(bottom) + 16, page.viewport_size["height"] if page.viewport_size else 800)
-                page.screenshot(path=str(path), clip={"x": 0, "y": 0, "width": WIDTH, "height": height})
+                page.screenshot(
+                    path=str(path),
+                    clip={"x": 0, "y": 0, "width": WIDTH, "height": height},
+                    animations="disabled",
+                    caret="hide",
+                )
                 written.append(path)
                 context.close()
         browser.close()

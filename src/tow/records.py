@@ -50,6 +50,8 @@ class Topic(TypedDict, total=False):
     url: str
     save_path: str
     client_id: str
+    # Changes with this client's connection; stale in-flight file observations cannot return.
+    file_observation_revision: str
     selection: Selection
     # A topic added with a prepared torrent (the file picker), until its first add: the
     # preparation's id and the torrent's info hash. 1.23.0-1.31.2 named the id
@@ -84,6 +86,8 @@ class Topic(TypedDict, total=False):
     waiting_space: dict[str, Any]
     # the save folder is off the volume recorded for it: {"folder", "at"} (tow.progress.reconcile)
     volume_unseen: dict[str, Any]
+    # Freshly observed missing selected files, bound to this revision/client/folder/selection.
+    files_missing: dict[str, Any]
     # A selected revision whose client is still verifying existing files, not a failed add.
     verification_pending: dict[str, Any]
     # A revision still awaiting an authorized replacement, retained across intervening site

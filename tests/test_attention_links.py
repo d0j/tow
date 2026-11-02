@@ -391,6 +391,28 @@ def test_a_folder_off_its_disk_lands_on_the_volumes_page_with_its_accept(client,
     assert str(folder) in page
 
 
+def test_missing_files_open_the_topic_and_its_file_status_link(client, tmp_path):
+    from tow import file_presence
+    from tow.clients.factory import default_client_id
+    from tow.config import load_config
+
+    topic = _topic("a", 1, hash="a" * 40, save_path=str(tmp_path), selection={"mode": "all"})
+    file_presence.observe(
+        topic,
+        {"missing_files": 3, "unverified_files": 0},
+        client_id=default_client_id(load_config()),
+        at="2026-09-12T20:00:00+00:00",
+    )
+    _home_state(topic)
+    entry = _entries(client)["files_missing"]
+
+    page, _ = _land(client, entry, anchor="row-a", fix="", label="")
+
+    assert t("home.topic.files_missing", count=3) in page
+    assert 'class="download-details" href="/topics/a/downloads.json"' in page
+    assert re.search(r'<details class="row-edit[^\"]*" open>', page)
+
+
 LANDINGS = {
     "site_needs_login": test_one_topic_asking_for_a_sign_in_opens_its_row_with_the_sign_in_focused,
     "client_down": test_the_client_down_opens_its_card_with_the_status_and_check,
@@ -401,6 +423,7 @@ LANDINGS = {
     "data_lost": test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore,
     "topic_error": test_a_topic_error_opens_its_row_with_the_current_problem,
     "volume_missing": test_a_folder_off_its_disk_lands_on_the_volumes_page_with_its_accept,
+    "files_missing": test_missing_files_open_the_topic_and_its_file_status_link,
 }
 
 

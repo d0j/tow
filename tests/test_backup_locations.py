@@ -571,8 +571,82 @@ def test_an_import_keeps_no_backup_volumes_of_the_exporting_computer():
     from tow.bundle.importer import _forget_volumes
 
     state = {
-        "topics": [{"id": "1", "volume_unseen": {"folder": "/srv/tv", "at": 1}}, {"id": "2"}],
+        "topics": [
+            {
+                "id": "1",
+                "volume_unseen": {"folder": "/srv/tv", "at": 1},
+                "files_missing": {"binding": "source-computer", "count": 3, "at": "2026-09-12T20:00:00+00:00"},
+            },
+            {"id": "2"},
+        ],
         "backup_volumes": {"night": {"path": "/mnt/b", "id": "ext4 /mnt/b"}},
     }
     _forget_volumes(state)
     assert state == {"topics": [{"id": "1"}, {"id": "2"}]}
+
+
+def test_import_with_identical_paths_and_ids_forgets_file_absence_but_preserves_history_and_owner_intent(tmp_path):
+    from tow import file_presence
+    from tow.bundle import export_bundle, import_bundle
+    from tow.store import load_download_history, load_state, save_download_history, save_secrets, save_state
+
+    topic = {
+        "id": "portable-show",
+        "title": "Synthetic Show [3 of 24]",
+        "url": "https://tracker.example/topic/1",
+        "hash": "a" * 40,
+        "save_path": str(tmp_path / "media"),
+        "client_id": "main",
+        "selection": {"mode": "episodes", "value": "1-3"},
+        "selection_hash": "a" * 40,
+        "selection_verified": True,
+        "tracking_mode": "once",
+        "once_done": True,
+        "paused": True,
+    }
+    file_presence.observe(
+        topic,
+        {"missing_files": 3, "unverified_files": 0},
+        client_id="main",
+        at="2026-09-12T20:00:00+00:00",
+    )
+    assert file_presence.count(topic, load_config()) == 3
+    topic["volume_unseen"] = {"folder": topic["save_path"], "at": 1}
+    save_state({"topics": [topic], "backup_volumes": {"night": {"path": "/source/copies", "id": "source-disk"}}})
+    history = {
+        "schema_version": 1,
+        "topics": {
+            topic["id"]: {
+                "volume": {"path": topic["save_path"], "id": "source-media-disk"},
+                "expected": {"kind": "episodes", "total": 24},
+                "items": {
+                    "episode:s01e01": {
+                        "label": "S01E01",
+                        "episode_key": "episode:s01e01",
+                        "status": "completed",
+                        "completed_observed_at": "2026-09-12T19:00:00+00:00",
+                    }
+                },
+            }
+        },
+    }
+    save_download_history(history)
+    save_secrets({})
+    archive = tmp_path / "portable.towx"
+    export_bundle(archive, "synthetic-transfer-passphrase")
+
+    preview = import_bundle(archive, "synthetic-transfer-passphrase")
+
+    assert preview["preview"] is True
+    assert load_state()["topics"][0]["files_missing"] == topic["files_missing"]  # preview writes nothing
+    imported = import_bundle(archive, "synthetic-transfer-passphrase", apply=True)
+
+    assert imported["committed"] is True
+    restored = load_state()
+    assert restored["topics"] == [
+        {key: value for key, value in topic.items() if key not in {"files_missing", "volume_unseen"}}
+    ]
+    assert "backup_volumes" not in restored
+    assert file_presence.count(restored["topics"][0], load_config()) == 0
+    expected_record = {key: value for key, value in history["topics"][topic["id"]].items() if key != "volume"}
+    assert load_download_history()["topics"][topic["id"]] == expected_record

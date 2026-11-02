@@ -26,6 +26,11 @@ let modal = 0;
 dialog.showModal = () => { modal += 1; };
 dialog.close = () => {};
 document.body.append(list, dialog);
+document.body.append(build(document, ["script", { id: "tow-i18n" }, JSON.stringify({
+  "js.downloads.missing": "File missing or incomplete",
+  "js.downloads.unverified": "File presence could not be verified",
+  "js.downloads.superseded": "Previous version",
+})]));
 const fetched = [];
 class FormData { constructor() { this.fields = {}; } set(name, value) { this.fields[name] = value; } }
 const context = {
@@ -38,7 +43,14 @@ const context = {
   performance: { now: () => 0 },
   fetch: (url) => {
     fetched.push(String(url));
-    return Promise.resolve({ ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => ({ ok: true, items: [] }), text: async () => "" });
+    return Promise.resolve({ ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => ({
+      ok: true, topic: { title: "Show" }, summary: { completed: 2, expected: 24 }, items: [
+        { label: "Missing episode", status: "missing", progress: 1, completed_at: "OLD_COMPLETION" },
+        { label: "Unknown episode", status: "unverified", progress: 1, completed_at: "OLD_COMPLETION" },
+        { label: "Ready episode", status: "completed", progress: 1 },
+        { label: "Historical episode", status: "completed", progress: 1, superseded: true },
+      ],
+    }), text: async () => "" });
   },
   setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {},
 };
@@ -59,6 +71,18 @@ assert.equal(linkClick.defaultPrevented, true);
 assert.equal(modal, 1);
 assert.ok(fetched.includes("http://127.0.0.1/topics/a/downloads.json") || fetched.some((url) => url.endsWith("/topics/a/downloads.json")));
 verdict.downloadsDialog = true;
+const lines = dialog.querySelectorAll(".log-line");
+assert.ok(lines[0].textContent.includes("File missing or incomplete"));
+assert.ok(lines[1].textContent.includes("File presence could not be verified"));
+for (const line of [lines[0], lines[1]]) {
+  assert.ok(!line.textContent.includes("100%"));
+  assert.ok(!line.textContent.includes("OLD_COMPLETION"));
+  assert.ok(!line.textContent.includes("✓"));
+}
+assert.ok(lines[2].textContent.includes("✓"));
+assert.ok(lines[3].textContent.includes("Previous version"));
+assert.equal(dialog.querySelector("#download-title").textContent, "Show — 2/24");
+verdict.missingAndUnknownNeverLookComplete = true;
 
 // A click on its icons stays with them (as on the rows the page opened with).
 const iconClick = document.dispatch(fresh.querySelector(".row-ops button"), "click");

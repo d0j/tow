@@ -850,6 +850,7 @@ def topic_rows(state: Mapping[str, Any], *, local: bool) -> list[dict[str, Any]]
                 "name": shown_title(topic),
                 "series": shown_title(topic).split(" / ")[0],
                 "download_summary": summary,
+                "missing_file_count": services.missing_file_count(topic, cfg),
                 "last_event_label": _event_display(event) if event else "",
                 "last_event_at": ui_time(event.get("at")) if event else "",
                 "last_event_iso": str(event.get("at") or "") if event else "",

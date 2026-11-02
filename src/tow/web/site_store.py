@@ -86,13 +86,22 @@ def settings_undo(
 
 
 def save_secrets_with_undo(
-    target: str, secrets_before: dict[str, Any], secrets: dict[str, Any], old_sec: int, secret_scope: list[str]
+    target: str,
+    secrets_before: dict[str, Any],
+    secrets: dict[str, Any],
+    old_sec: int,
+    secret_scope: list[str],
+    *,
+    client_observation_id: str | None = None,
 ) -> RedirectResponse | None:
     """New secrets and the undo that puts the ``secret_scope`` part back, as one transaction."""
     state = services.load_state()
 
     def write(txn: StoreTransaction) -> None:
         settings_undo(txn, state, secrets_before, old_sec, secret_scope)
+        if client_observation_id:
+            services.invalidate_file_observations(state, services.load_config(), client_observation_id)
+            state["undo"]["file_observation_client_id"] = client_observation_id
         txn.save_secrets(secrets)
         txn.save_state(state)
 

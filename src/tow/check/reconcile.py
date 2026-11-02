@@ -7,7 +7,7 @@ import copy
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
-from tow import check_transaction, download_history
+from tow import check_transaction, download_history, file_presence
 from tow.check.client_ops import client_unreachable
 from tow.check.notices import queue_recoveries
 from tow.check.rows import fail_row, note_removed, row_error, stamp_result
@@ -219,6 +219,8 @@ def _reconcile_one(
     try:
         # Only the owner's --rebind-volumes passes the option: every other run calls it as before.
         rebind = {"rebind_volume": True} if getattr(run, "rebind_volumes", False) else {}
+        if client_id in getattr(run, "remote_clients", frozenset()):
+            rebind["local_files"] = False
         reconcile = reconcile_topic(topic, topic_client, history, now=iso_now(), **rebind)
     except Exception as exc:  # noqa: BLE001 - a failed reconcile is the topic's result (recorded), never the run's end
         if had_history:
@@ -252,6 +254,28 @@ def _reconcile_one(
             how=run.how,
         )
         return
+    presence_transition = file_presence.observe(topic, reconcile, client_id=client_id, at=iso_now())
+    if presence_transition:
+        pending_records.append(
+            (
+                "files_missing" if presence_transition == "missing" else "files_restored",
+                {
+                    "operation_id": new_operation_id("file-presence"),
+                    "component": "client/filesystem",
+                    "integration_id": client_id,
+                    "client_id": client_id,
+                    "client_kind": topic_client.client_kind,
+                    "topic_id": topic.get("id"),
+                    "topic": topic.get("id"),
+                    "title": topic.get("title"),
+                    "hash": topic.get("hash"),
+                    "status": "observed",
+                    "n": reconcile["missing_files"],
+                    "observation_binding": file_presence.binding(topic, client_id),
+                    "how": run.how,
+                },
+            )
+        )
     for event_kind in reconcile.get("events") or []:
         operation_id = new_operation_id("reconcile")
         pending_records.append(

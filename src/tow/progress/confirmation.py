@@ -9,8 +9,8 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from tow import platform
 from tow.folders import windows_shaped
 
-# How long a file seen on disk counts as confirmed (see reconcile_topic).
-CONFIRMATION_REUSE_SEC = 24 * 3600
+# Compatibility constant: positive presence evidence is never reused across passes.
+CONFIRMATION_REUSE_SEC = 0
 _DRIVE_ABSOLUTE = re.compile(r"[A-Za-z]:/")
 
 

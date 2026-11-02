@@ -5,6 +5,15 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- Episode and file counts use fresh filesystem metadata on every reconciliation: an earlier confirmation and a
+  client's stale 100% cannot keep removed or shortened files complete. Missing files have a shared warning linked
+  to their topic, and the file list distinguishes missing, unverified and previous-version items. Unavailable or
+  replaced disks stay unknown; restoring files does not repeat completion notifications.
+- Recreating an empty pending qBittorrent magnet requires its exact identity, both ownership marks, the expected
+  folder, a confirmed stop and explicit zero payload counters, checked again before removal. Its files are kept.
+
 ## [1.34.1] — 2026-11-02
 
 ### Fixed

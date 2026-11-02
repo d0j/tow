@@ -93,6 +93,8 @@ def test_a_failed_append_says_so_without_raising(monkeypatch):
         ("episode_completed", {"topic": "t1"}, "downloads", "ok"),
         ("qbit_move", {"topic": "t1", "status": "unconfirmed"}, "downloads", "warn"),
         ("client_removed", {"topic": "t1"}, "downloads", "warn"),
+        ("files_missing", {"topic": "t1", "n": 3}, "downloads", "warn"),
+        ("files_restored", {"topic": "t1", "n": 0}, "downloads", "ok"),
         ("client_add_failed", {"topic": "t1", "cls": "qbit"}, "downloads", "err"),
         ("check_fail", {"topic": "t1", "tracker": "rutor", "cls": "tracker"}, "checks", "warn"),
         ("check_fail", {"topic": "t1", "tracker": "rutor", "cls": "qbit"}, "checks", "err"),

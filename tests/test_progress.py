@@ -115,7 +115,7 @@ def test_a_stream_name_under_a_windows_folder_is_not_tracked():
     assert [item["relative_path"] for item in items] == ["Show/S01E02.mkv"]
 
 
-def test_a_pass_looks_at_the_disk_only_for_files_it_must_confirm(tmp_path: Path, monkeypatch):
+def test_each_pass_resolves_its_base_once_and_checks_current_files(tmp_path: Path, monkeypatch):
     client = FakeClient()
     client.progress = 1.0
     (tmp_path / "Show").mkdir()
@@ -131,7 +131,7 @@ def test_a_pass_looks_at_the_disk_only_for_files_it_must_confirm(tmp_path: Path,
 
     again = reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00")
     assert again["summary"]["completed"] == 1
-    assert resolved == []  # confirmed within the day and still complete: no disk access at all
+    assert resolved.count(tmp_path) == 1  # an old confirmation cannot prove current presence
 
 
 @pytest.mark.skipif(platform.this_os() != "windows", reason="the Windows file API's 260-character limit")
@@ -178,8 +178,7 @@ def test_a_pass_asks_once_whether_the_save_folder_is_seen_from_here(tmp_path: Pa
     assert statuses == ({"completed"} if seen else {"unverified"})  # an explicit "not seen" stays unknown
 
     reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00")
-    # Seen: all confirmed within the day, nothing to look at. Not seen: one more question for the new pass.
-    assert asked == ([str(tmp_path)] if seen else [str(tmp_path)] * 2)
+    assert asked == [str(tmp_path)] * 2  # one current folder/volume observation per pass
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "nan", "inf"])
@@ -529,7 +528,6 @@ def test_temporary_verification_failure_does_not_repeat_completion(tmp_path: Pat
     history = {"topics": {"offline": {"baseline_at": "2026-09-12T20:00:00+03:00", "items": {}}}}
     evidence = iter((True, None, True))
     monkeypatch.setattr("tow.progress.reconcile.filesystem_confirmation", lambda *_args, **_kw: next(evidence))
-    monkeypatch.setattr("tow.progress.reconcile.CONFIRMATION_REUSE_SEC", 0)  # every pass looks at the disk here
     first = reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
     assert "episode_completed" in first["events"]
     second = reconcile_topic(topic, client, history, "2026-09-12T21:01:00+03:00")
@@ -549,7 +547,6 @@ def test_baseline_completion_survives_offline_storage_without_new_event(
     history: dict = {"topics": {}}
     evidence = iter((True, None, True))
     monkeypatch.setattr("tow.progress.reconcile.filesystem_confirmation", lambda *_args, **_kw: next(evidence))
-    monkeypatch.setattr("tow.progress.reconcile.CONFIRMATION_REUSE_SEC", 0)  # every pass looks at the disk here
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
     reconcile_topic(topic, client, history, "2026-09-12T21:01:00+03:00")
     result = reconcile_topic(topic, client, history, "2026-09-12T21:02:00+03:00")
@@ -2201,7 +2198,9 @@ def test_history_index_skips_moved_items_and_finds_readded_ones():
     assert [identity for identity, _ in index.at_path("show/e02.mkv")] == ["b"]
 
 
-def test_a_file_confirmed_today_is_not_looked_at_again(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_a_previous_confirmation_is_history_not_proof_of_current_presence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     client = FakeClient()
     client.progress = 1.0
     topic = {"id": "quiet", "title": "Show [1 из 1]", "hash": "ABC", "save_path": str(tmp_path)}
@@ -2211,11 +2210,11 @@ def test_a_file_confirmed_today_is_not_looked_at_again(tmp_path: Path, monkeypat
     reconcile_topic(topic, client, history, "2026-09-12T21:00:00+03:00")
     reconcile_topic(topic, client, history, "2026-09-12T21:30:00+03:00")
     reconcile_topic(topic, client, history, "2026-09-12T22:00:00+03:00")
-    assert len(looks) == 1  # sleeping drives are not woken every 30 minutes
+    assert len(looks) == 3  # current metadata, with the folder probe shared within each pass
     item = next(iter(history["topics"]["quiet"]["items"].values()))
-    item["confirmed_ts"] -= 25 * 3600  # a day later the disk is looked at again
+    item["confirmed_ts"] -= 25 * 3600  # timestamp age never substitutes for current metadata
     reconcile_topic(topic, client, history, "2026-09-13T22:30:00+03:00")
-    assert len(looks) == 2
+    assert len(looks) == 4
 
 
 def test_the_new_episode_is_the_latest_event_of_a_new_revision():

@@ -1345,8 +1345,13 @@ if (downloadPop && downloadBody) {
     const rows = loadedDownloads.map((item) => {
       const line = document.createElement("div");
       line.className = "log-line";
-      const status = item.status === "completed" ? "✓" : "·";
+      const status = item.status === "completed" ? "✓" : item.status === "missing" ? "!" : "·";
       line.append(status, " ", item.label || item.identity || t("js.downloads.file"));
+      if (item.superseded) line.append(" · ", t("js.downloads.superseded"));
+      if (item.status === "missing" || item.status === "unverified") {
+        line.append(" · ", t(item.status === "missing" ? "js.downloads.missing" : "js.downloads.unverified"));
+        return line;
+      }
       // The time by the one rule (the server's words for the stored time); its written words when it is not one.
       if (item.completed_at) line.append(" · ", towTime.element(item.completed_time || item.completed_observed_at || item.completed_at, item.completed_at));
       else if (item.progress != null) line.append(" · ", `${Math.round(Number(item.progress) * 100)}%`);

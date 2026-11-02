@@ -18,7 +18,7 @@ from tow.folders import paths_equal
 from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import owner_language
-from tow.progress.confirmation import CONFIRMATION_REUSE_SEC, filesystem_confirmation, safe_relative_path
+from tow.progress.confirmation import filesystem_confirmation, safe_relative_path
 from tow.progress.expected import preferred_season_for, selected_files, selection_fingerprint, selection_is_current
 from tow.progress.history import HistoryIndex, adopt_previous_item, carry_completion, path_key, revision_identity
 from tow.progress.labels import (
@@ -82,13 +82,14 @@ def _check_save_path(topic: Topic, info: Any) -> str:
     """The folder whose files are evidence; the client must agree with the topic.
 
     A move the owner started (move_pending) is accepted while the client still
-    moves or still reports the old folder; the marker is dropped once they agree.
+    moves or still reports the old folder; the marker is dropped once they agree and the
+    client no longer reports an active move.
     """
     topic_save_path = str(topic.get("save_path") or "")
     client_save_path = str(_get(info, "save_path", "") or "")
+    client_state = str(_get(info, "state", "") or "").casefold()
     move_pending = topic.get("move_pending") if isinstance(topic.get("move_pending"), dict) else None
     if client_save_path and topic_save_path and not paths_equal(client_save_path, topic_save_path):
-        client_state = str(_get(info, "state", "") or "").casefold()
         still_moving = bool(
             move_pending
             and paths_equal(str(move_pending.get("to") or ""), topic_save_path)
@@ -96,7 +97,12 @@ def _check_save_path(topic: Topic, info: Any) -> str:
         )
         if not still_moving:
             raise TowError("progress.path_differs")
-    elif move_pending and client_save_path and paths_equal(client_save_path, str(move_pending.get("to") or "")):
+    elif (
+        move_pending
+        and client_save_path
+        and paths_equal(client_save_path, str(move_pending.get("to") or ""))
+        and client_state != "moving"
+    ):
         # Only what this check saw ends the move: the client now reports the folder it was sent to.
         topic.pop("move_pending", None)
     return client_save_path or topic_save_path
@@ -157,6 +163,8 @@ class _ReconcilePass:
     # The owner's ``tow check --rebind-volumes``: the folder's recorded volume is not compared,
     # and a file confirmed now records the volume it is on instead.
     rebind_volume: bool = False
+    # A remote path or a location still being moved is not settled evidence here.
+    local_files: bool = True
     # A file was confirmed on disk in full by this pass (not reused): its folder's volume is proven.
     volume_confirmed: bool = False
     # This pass recorded the volume the folder is on now (``_record_volume``).
@@ -170,6 +178,8 @@ class _ReconcilePass:
         """Whether this PC sees the save folder, asked once per pass and only when a file is
         looked at on disk (a share or a sleeping NAS can take its timeout for each look). With a
         recorded volume the folder must be on it: an unmounted disk is not seen, never "missing"."""
+        if not self.local_files:
+            return False
         if self._seen is None:
             from tow import folders
 
@@ -312,29 +322,28 @@ def _track_item(
     return item, carried_completion
 
 
-def _file_confirmed(
-    work: _ReconcilePass, item: HistoryItem, rel: str, size: int | None, progress: float
-) -> bool | None:
-    """Is the file on disk in full? A file confirmed within the day, still complete in the
-    client, is not looked at again: every 30 minutes woke sleeping drives and a NAS for nothing.
-    The owner's rebind always looks: it binds the disk the file is found on now."""
-    confirmed_ts = item.get("confirmed_ts")
-    fresh = (
-        not work.rebind_volume
-        and item.get("status") == "completed"
-        and progress >= 1.0
-        and isinstance(confirmed_ts, (int, float))
-        and 0 <= time.time() - float(confirmed_ts) < CONFIRMATION_REUSE_SEC
-    )
-    confirmed = (
-        True
-        if fresh
-        else filesystem_confirmation(
-            work.evidence_save_path, rel, size, base=work.evidence_base(), seen=work.seen_from_here()
-        )
-    )
-    if confirmed is True and not fresh:
-        item["confirmed_ts"] = int(time.time())
+def _file_confirmed(work: _ReconcilePass, item: HistoryItem, rel: str, size: int | None) -> bool | None:
+    """Current metadata must confirm presence: a client's 100% and an earlier confirmation
+    survive a file's removal or truncation. Probe the folder/volume once per pass, and never
+    look at individual files when that evidence is unavailable. No media bytes are read."""
+    if not work.seen_from_here():
+        return None
+    base = work.evidence_base()
+    if base is None:
+        return None
+    confirmed = filesystem_confirmation(work.evidence_save_path, rel, size, base=base, seen=True)
+    if confirmed is True:
+        # Historical confirmation time, never authority for this pass. An unchanged positive
+        # observation need not rewrite every item and the history journal on every poll.
+        timestamp = int(time.time())
+        previous = item.get("confirmed_ts")
+        if (
+            work.rebind_volume
+            or item.get("status") != "completed"
+            or type(previous) is not int
+            or not 0 < previous <= timestamp
+        ):
+            item["confirmed_ts"] = timestamp
         work.volume_confirmed = True
     return confirmed
 
@@ -397,7 +406,7 @@ def _update_item_status(
         or item.get("status") == "completed"
         or carried_completion is not None
     )
-    confirmed = _file_confirmed(work, item, rel, size, progress)
+    confirmed = _file_confirmed(work, item, rel, size)
     item.pop("verification_unavailable", None)
     if progress >= 1.0 and confirmed is True:
         item["status"] = "completed"
@@ -452,10 +461,13 @@ def reconcile_topic(
     now: str,
     *,
     rebind_volume: bool = False,
+    local_files: bool = True,
 ) -> dict[str, Any]:
     """Look at the topic's torrent in its client and its files on disk; record in ``history``
     what changed (new files, completions, the torrent gone or back) and return the events.
-    ``rebind_volume``: the owner's ``tow check --rebind-volumes`` (``_record_volume``)."""
+    ``rebind_volume``: the owner's ``tow check --rebind-volumes`` (``_record_volume``).
+    ``local_files``: the caller knows this client's paths name files on this computer. A remote
+    client's coincidentally identical path must not be inspected as local evidence."""
     record, initial_baseline, expected = _open_record(topic, history)
     events: list[str] = []
     if (client_adapter.capabilities or {}).get("inspect") is False:
@@ -515,6 +527,7 @@ def reconcile_topic(
         current_client_paths={rel.casefold() for _row, rel, _size, _selected in prepared_all},
         events=events,
         rebind_volume=rebind_volume,
+        local_files=local_files and not bool(as_dict(topic.get("move_pending"))),
     )
     for (row, rel, size), coverage in prepared:
         item, carried_completion = _track_item(work, rel, size, coverage)
@@ -537,7 +550,7 @@ def reconcile_topic(
     repair_last_event_semantics(record)
     summary = summary_record(record, expected)
     labels = work.completed_file_labels
-    return {
+    result: dict[str, Any] = {
         "summary": summary,
         "events": list(dict.fromkeys(events)),
         "completed_episode_label": completed_episode_label,
@@ -545,3 +558,7 @@ def reconcile_topic(
         if labels
         else "",
     }
+    if work.seen_identities:
+        statuses = [items[identity].get("status") for identity in work.seen_identities]
+        result.update(missing_files=statuses.count("missing"), unverified_files=statuses.count("unverified"))
+    return result
