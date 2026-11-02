@@ -180,7 +180,7 @@ class Fake(updater.System):
         self.calls.append(f"manager stop {kind}")
         return True
 
-    def supervisor_running(self):
+    def supervisor_running(self, *, strict=False):
         return {"pid": 4242} if self.supervisor else None
 
     def request_stop(self) -> None:
@@ -270,6 +270,141 @@ def test_autostart_starts_the_new_version_when_it_is_on(install):
     code, _ = run(fake)
     assert code == 0
     assert fake.calls[-1] == "autostart systemd"
+
+
+class ScheduledStart(Fake):
+    """A scheduler accepting the request before any supervisor has started."""
+
+    def __init__(self, app: Path, *, delay: float | None, **scenario):
+        super().__init__(app, windows=True, autostart="task", **scenario)
+        self.delay = delay
+        self.pending_at: float | None = None
+
+    def start_autostart(self, kind: str) -> bool:
+        self.calls.append(f"autostart {kind}")
+        self.pending_at = self.t + self.delay if self.delay is not None else None
+        return True
+
+    def supervisor_running(self, *, strict=False):
+        if self.pending_at is not None and self.t >= self.pending_at:
+            self.pending_at = None
+            self._started()
+        return super().supervisor_running(strict=strict)
+
+
+@pytest.mark.parametrize("health_timeout", [0.5, 5.0, 90.0])
+def test_an_accepted_windows_task_without_a_process_uses_bounded_direct_start(install, health_timeout):
+    fake = ScheduledStart(install["app"], delay=None)
+
+    code, lines = run(fake, health_timeout=health_timeout)
+
+    assert code == 0, lines
+    assert fake.calls[-2:] == ["autostart task", "spawn tow run 1.21.0"]
+    assert fake.t == min(5.0, health_timeout)
+    assert state(install)["service_running"] is True
+
+
+@pytest.mark.parametrize("delay", [0.0, 0.5, 4.5, 5.0])
+def test_a_delayed_windows_task_gets_its_grace_without_a_duplicate_start(install, delay):
+    fake = ScheduledStart(install["app"], delay=delay)
+
+    code, lines = run(fake)
+
+    assert code == 0, lines
+    assert fake.calls[-1] == "autostart task"
+    assert not any(call.startswith("spawn") for call in fake.calls)
+    assert state(install)["service_running"] is True
+
+
+def test_an_accepted_windows_task_with_a_held_lock_but_no_pid_does_not_spawn_again(install):
+    class NoPid(Fake):
+        def supervisor_running(self, *, strict=False):
+            return {} if self.supervisor else None
+
+    fake = NoPid(install["app"], windows=True, autostart="task")
+
+    code, lines = run(fake)
+
+    assert code == 0, lines
+    assert fake.calls[-1] == "autostart task"
+    assert not any(call.startswith("spawn") for call in fake.calls)
+
+
+def test_an_unhealthy_supervisor_started_by_the_task_is_rolled_back_without_a_second_start(install):
+    fake = Fake(install["app"], windows=True, autostart="task", bad_target=True, new_version_migrates=True)
+    before = head(install)
+
+    code, lines = run(fake)
+
+    assert code == 1, lines
+    assert head(install) == before
+    assert state(install)["status"] == "rolled_back"
+    assert state(install)["data_restored"] is True
+    assert not any(call.startswith("spawn") for call in fake.calls)
+    assert fake.calls[-1] == "autostart task"
+
+
+def test_the_direct_start_after_a_missing_windows_task_is_also_used_for_rollback(install):
+    fake = ScheduledStart(install["app"], delay=None, bad_target=True, new_version_migrates=True)
+    before = head(install)
+
+    code, lines = run(fake)
+
+    assert code == 1, lines
+    assert head(install) == before
+    assert state(install)["status"] == "rolled_back"
+    assert state(install)["data_restored"] is True
+    assert state(install)["service_running"] is True
+    assert fake.calls.count("autostart task") == 2
+    assert [call for call in fake.calls if call.startswith("spawn")] == ["spawn tow run 1.21.0", "spawn tow run 1.20.0"]
+
+
+def test_a_rejected_windows_task_does_not_delay_the_direct_start(install):
+    class RejectedTask(Fake):
+        def start_autostart(self, kind):
+            self.calls.append(f"autostart {kind}")
+            return False
+
+    fake = RejectedTask(install["app"], windows=True, autostart="task")
+
+    code, lines = run(fake)
+
+    assert code == 0, lines
+    assert fake.calls[-2:] == ["autostart task", "spawn tow run 1.21.0"]
+    assert fake.t == 0.0
+
+
+def test_a_failed_windows_direct_fallback_does_not_skip_restoring_the_previous_version(install):
+    class FailedNewStart(ScheduledStart):
+        def spawn_supervisor(self):
+            if self.head_version() == "1.21.0":
+                self.calls.append("failed direct start 1.21.0")
+                raise OSError("synthetic new supervisor spawn failure")
+            super().spawn_supervisor()
+
+    fake = FailedNewStart(install["app"], delay=None)
+    before = head(install)
+
+    code, lines = run(fake)
+
+    assert code == 1, lines
+    assert head(install) == before
+    assert state(install)["status"] == "rolled_back"
+    assert state(install)["service_running"] is True
+    assert "synthetic new supervisor spawn failure" in state(install)["error"]
+    assert fake.calls[-2:] == ["autostart task", "spawn tow run 1.20.0"]
+
+
+@pytest.mark.parametrize("kind", ["systemd", "launchd"])
+def test_posix_managers_are_not_replaced_by_the_windows_start_fallback(install, kind):
+    fake = Fake(install["app"], autostart=kind)
+
+    code, lines = run(fake)
+
+    assert code == 0, lines
+    assert fake.calls[-1] == f"autostart {kind}"
+    assert fake.t == 0.0
+    assert not any(call.startswith("spawn") for call in fake.calls)
 
 
 def test_a_new_version_that_does_not_answer_is_rolled_back_with_its_data(install):
@@ -579,6 +714,54 @@ class Recorder(updater.System):
     def _run(self, argv, *, cwd=None, env=None, timeout=600):
         self.argv.append(list(argv))
         return self.results.get(argv[1], 0), ""
+
+
+def test_strict_supervisor_readback_does_not_create_a_missing_lock(tmp_path):
+    system = updater.System(tmp_path / "TOW" / "app")
+
+    assert system.supervisor_running(strict=True) is None
+    assert not system.run_dir().exists()
+
+
+@pytest.mark.parametrize("failure", [PermissionError, IsADirectoryError])
+def test_unreadable_supervisor_lock_does_not_trigger_a_blind_start(install, monkeypatch, failure):
+    system = updater.System(install["app"])
+    lock = system.run_dir() / "run.lock"
+    lock.parent.mkdir()
+    lock.write_bytes(b"lock")
+    opened = Path.open
+    spawned = []
+
+    def unreadable(path, *args, **kwargs):
+        if path == lock:
+            raise failure("synthetic lock read failure")
+        return opened(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", unreadable)
+    monkeypatch.setattr(system, "autostart_kind", lambda: "task")
+    monkeypatch.setattr(system, "start_autostart", lambda kind: True)
+    monkeypatch.setattr(system, "spawn_supervisor", lambda: spawned.append(True))
+    work = updater.Update(system, "v1.21.0", health_timeout=5)
+
+    with pytest.raises(failure, match="synthetic lock read failure"):
+        work.start()
+
+    assert spawned == []
+    assert system.supervisor_running() is None  # legacy stop probes retain their earlier contract
+
+
+def test_strict_supervisor_readback_recognizes_a_held_lock_without_a_pid(install):
+    system = updater.System(install["app"])
+    lock = system.run_dir() / "run.lock"
+    lock.parent.mkdir()
+    with lock.open("a+b") as held:
+        assert updater._try_lock(held)
+        try:
+            assert system.supervisor_running(strict=True) == {}
+        finally:
+            updater._unlock(held)
+
+    assert system.supervisor_running(strict=True) is None
 
 
 def test_the_os_manager_stops_and_starts_tow(install, monkeypatch):

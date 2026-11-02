@@ -595,6 +595,11 @@ OEM code page whatever the program writes, so `tow.cmd status --json | ConvertFr
    `launchctl bootstrap gui/<uid> ~/Library/LaunchAgents/io.tow.plist` when the agent is not
    loaded, else `kickstart`), otherwise `tow run` detached in the background (pythonw, no
    console; outlives the updater).
+   On Windows, a successful Task Scheduler command is only an acknowledgement: an interactive task may not run
+   in a service session. The updater waits up to 5 seconds (bounded by the health timeout) for this install's
+   supervisor lock to be held; otherwise it starts the supervisor directly. A delayed task and the direct start
+   still share the install's single-owner lock. This applies to rollback too and does not change the task or its
+   sign-in policy; Linux and macOS keep their OS-managed start paths.
 6. Health: `/healthz` must report the **target version** and `/health.json` must answer (it reads
    the state), within `--health-timeout` (90 s); no proxies.
 7. On failure every rollback step runs in its own `try` and is recorded: stop the new one, check
