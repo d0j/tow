@@ -14,7 +14,7 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Recent messages reject stale responses after read or clear, reconcile uncertain results without repeating a
   possibly committed request, and stay consistent across browsers. Final manual check results, refused forms,
   client connection checks and messenger tests are shared; duplicate tab feedback retains Undo. Delivery messages
-  name their messenger.
+  name their messenger and open its own settings card. Queue workers cannot inherit another request's context.
 - The Windows web server explicitly uses the supported selector loop, preventing the Proactor connection-cleanup
   failures seen after disconnects. Normal requests, keep-alive, aborted requests and shutdown are checked together.
 
