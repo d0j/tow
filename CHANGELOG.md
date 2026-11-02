@@ -5,8 +5,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
-## [1.34.1] — 2026-11-02
-
 ### Fixed
 
 - Transmission also keeps administrative stop separate from local file errors. Missing or malformed RPC status
