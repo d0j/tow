@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.34.2] — 2026-11-03
+
 ### Fixed
 
 - Episode and file counts use fresh filesystem metadata on every reconciliation: an earlier confirmation and a
