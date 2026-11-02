@@ -932,6 +932,19 @@ def test_serve_uses_config_bind_and_port(uvicorn_runs):
     assert kwargs["log_config"] is None
 
 
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("windows", "asyncio:SelectorEventLoop"), ("linux", "auto"), ("macos", "auto")],
+)
+def test_serve_selects_a_socket_loop_on_windows_only(uvicorn_runs, name, expected):
+    from tow import platform
+
+    with platform.use(platform.backend_for(name)):
+        assert cli.main(["serve"]) == 0
+
+    assert uvicorn_runs[0][1]["loop"] == expected
+
+
 def test_serve_trusts_no_forwarded_headers(monkeypatch):
     # Audit 08.10.2026: uvicorn's defaults trusted X-Forwarded-For/-Proto from 127.0.0.1, or from
     # anyone with FORWARDED_ALLOW_IPS=*: a header could make a device on the network look local.

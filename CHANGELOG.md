@@ -12,6 +12,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   or changing selection. Blocked replacements keep their precise cause and get bounded early retries without resetting their
   budget on progress updates or alternating site/client failures.
 
+- The Windows web server explicitly uses the supported selector loop, preventing the Proactor connection-cleanup
+  failures seen after disconnects. Normal requests, keep-alive, aborted requests and shutdown are checked together.
+
 ## [1.34.0] — 2026-10-26
 
 ### Added
