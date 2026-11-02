@@ -144,6 +144,9 @@ before replacing it. An authorized replacement blocked by the previous version r
 up to three early retries
 with backoff; the site's cooldown and download quota still apply. Pausing the topic or switching automatic
 replacement off cancels those retries. Repeated progress updates and changes of the failure do not reset the budget.
+Transmission's administrative stop is also checked independently of file errors. Deluge's API cannot reliably
+confirm a stop while it reports Error; that case waits for reliable client evidence instead of allowing two
+versions to write the same files. Resolve the file error in Deluge before retrying.
 While it waits, scheduled checks do not download the new version's `.torrent` again when the topic page's magnet
 still names it, or, on a page without a magnet, when the site has a daily download limit (a newer upload there is
 found once the previous torrent is stopped, or by a check you start); the wait is logged once, not at every check.

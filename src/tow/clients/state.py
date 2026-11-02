@@ -19,9 +19,9 @@ def matches_hash(info: Mapping[str, Any] | None, infohash: str) -> bool:
 def is_stopped(info: Mapping[str, Any] | None) -> bool:
     """A stopped/paused task, or an errored task independently confirmed stopped.
 
-    qBittorrent displays missing files and errors ahead of its independent stopped flag.
-    Only the adapter's fresh, identity-bound evidence can resolve those ambiguous states;
-    a flag must never turn an unknown or visibly running task into a stopped one.
+    qBittorrent and Transmission can report a file error while independently confirming
+    the task stopped. Only the adapter's fresh, identity-bound native evidence resolves
+    those ambiguous states; a flag never overrides an unknown or visibly running state.
     """
     state = str((info or {}).get("state") or "").casefold()
     if state in {"error", "missingfiles"}:

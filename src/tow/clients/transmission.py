@@ -56,6 +56,24 @@ _FIELDS = [
 _STATES = {1: "checkingDL", 2: "checkingDL", 3: "queuedDL", 4: "downloading", 5: "queuedUP", 6: "uploading"}
 
 
+def _state_of(row: dict[str, Any], progress: float = 0.0) -> tuple[str, bool]:
+    """RPC status and local health are independent enums, not truthy numeric values.
+
+    Transmission reports status=0 for a stopped torrent even while error=3 describes a
+    local file failure. Missing, boolean, string or unknown status is no stop evidence.
+    """
+    raw_status, error = row.get("status"), row.get("error")
+    status = raw_status if type(raw_status) is int and 0 <= raw_status <= 6 else None
+    valid_error = type(error) is int and 0 <= error <= 3
+    if valid_error and error == 3:
+        return "error", status == 0
+    if status is None or not valid_error:
+        return "unknown", False
+    if status == 0:
+        return ("stoppedUP" if progress >= 1 else "stoppedDL"), True
+    return _STATES[status], False
+
+
 def _labels(row: dict[str, Any]) -> list[str]:
     return sorted({str(label) for label in row.get("labels") or [] if str(label).strip()})
 
@@ -144,13 +162,7 @@ class TransmissionClient(ManagedClient):
         if row is None:
             return None
         progress = float(row.get("percentDone") or 0)
-        status = int(row.get("status") or 0)
-        if int(row.get("error") or 0) == 3:
-            state = "error"  # local error: data missing or not writable
-        elif status == 0:
-            state = "stoppedUP" if progress >= 1 else "stoppedDL"
-        else:
-            state = _STATES.get(status, "unknown")
+        state, stopped = _state_of(row, progress)
         files = []
         stats = row.get("fileStats") or []
         for index, item in enumerate(row.get("files") or []):
@@ -172,7 +184,7 @@ class TransmissionClient(ManagedClient):
         added = int(row.get("addedDate") or 0)
         done_at = int(row.get("doneDate") or 0)
         return {
-            "hash": str(row.get("hashString") or infohash),
+            "hash": str(row.get("hashString") or ""),
             "infohash_v1": str(row.get("hashString") or ""),
             "infohash_v2": "",
             "progress": progress,
@@ -182,6 +194,7 @@ class TransmissionClient(ManagedClient):
             "save_path": save_path,
             "content_path": f"{save_path.rstrip('/\\')}/{row.get('name')}" if save_path else None,
             "state": state,
+            "stopped": stopped,
             "tags": _labels(row),
             "files": files,
         }
@@ -224,13 +237,8 @@ class TransmissionClient(ManagedClient):
         row = self._get(infohash, ["hashString", "status", "error", "labels"])
         if row is None:
             return None
-        status = int(row.get("status") or 0)
-        state = (
-            "error"
-            if int(row.get("error") or 0) == 3
-            else _STATES.get(status, "stoppedDL" if status == 0 else "unknown")
-        )
-        return {"hash": str(row.get("hashString") or infohash), "state": state, "tags": _labels(row)}
+        state, stopped = _state_of(row)
+        return {"hash": str(row.get("hashString") or ""), "state": state, "stopped": stopped, "tags": _labels(row)}
 
     def _wait_initial_verification(self, added: dict[str, Any]) -> dict[str, Any]:
         if str(added.get("state") or "").casefold().startswith("checking"):
