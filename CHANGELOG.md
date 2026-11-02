@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.34.1] — 2026-11-02
+
 ### Fixed
 
 - Windows updates and rollbacks confirm that the supervisor actually started after Task Scheduler accepts a
