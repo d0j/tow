@@ -7,6 +7,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Windows updates and rollbacks confirm that the supervisor actually started after Task Scheduler accepts a
+  request. If the task cannot start in the current session, TOW starts its supervisor directly without changing
+  autostart settings; the target version and health checks are still required.
 - Transmission also keeps administrative stop separate from local file errors. Missing or malformed RPC status
   cannot be mistaken for a stop; Deluge errors remain unconfirmed when its API cannot provide reliable evidence.
 - Bundle creation retries temporary GitHub download failures within a finite budget, respects a valid Retry-After

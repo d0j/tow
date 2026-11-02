@@ -125,6 +125,8 @@ SNAPSHOT_RE = re.compile(r"^(?:update|data)-(\d{8}-\d{6})-before-")
 MINIMUM_TARGET = (1, 18, 0)
 # Seconds after a health check in which a rollback still stops the version it started.
 STOP_GRACE = 300.0
+# A successful Task Scheduler request may launch nothing without an interactive logon.
+TASK_START_GRACE = 5.0
 # A rollback's checkout of the previous code, tried this often this many seconds apart.
 SWITCH_BACK_TRIES = 6
 SWITCH_BACK_PAUSE = 5.0
@@ -1088,14 +1090,18 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
     def run_dir(self) -> Path:
         return self.root / "data" / "run"
 
-    def supervisor_running(self) -> dict[str, Any] | None:
+    def supervisor_running(self, *, strict: bool = False) -> dict[str, Any] | None:
         """``tow run`` holds data/run/run.lock while it runs (a crash releases it)."""
         lock = self.run_dir() / "run.lock"
-        if not lock.exists():
+        if not strict and not lock.exists():
             return None
         try:
-            handle = lock.open("a+b")
+            handle = lock.open("r+b" if strict else "a+b")
+        except FileNotFoundError:
+            return None
         except OSError:
+            if strict:
+                raise  # an unreadable lock cannot confirm that a task launched nothing
             return None
         try:
             if not _try_lock(handle):
@@ -2039,7 +2045,15 @@ class Update:
 
     def start(self) -> None:
         kind = self.sys.autostart_kind()
-        if not (kind and self.sys.start_autostart(kind)):
+        managed = bool(kind and self.sys.start_autostart(kind))
+        if managed and kind == "task":
+            managed = self.wait(
+                lambda: self.sys.supervisor_running(strict=True) is not None,
+                min(TASK_START_GRACE, self.health_timeout),
+                0.25,
+            )
+        if not managed:
+            # The install's run.lock also fences a delayed task against this direct start.
             self.sys.spawn_supervisor()
 
     def healthy(self, version: str) -> bool:
