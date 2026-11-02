@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.34.1] — 2026-11-02
+
 ### Fixed
 
 - Automatic replacement recognizes qBittorrent's independently confirmed stopped flag even when the old torrent
