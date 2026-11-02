@@ -634,6 +634,165 @@ def test_stale_pending_magnet_whose_removal_is_not_confirmed_is_not_readded(qbit
     assert "add" not in api.calls
 
 
+@pytest.mark.parametrize("tags", ["tow-pending", "manual,tow-pending"])
+def test_pending_mark_alone_never_authorizes_magnet_removal(qbit, tags):
+    client, api = qbit
+    api.put(HASH, files=[], tags=tags)
+
+    with raises_code("client.managed.not_owned", RuntimeError):
+        client.materialize_magnet(MAGNET, SAVE, HASH)
+
+    assert api.torrents[HASH]["tags"] == tags
+    assert api.calls == ["files"]
+
+
+@pytest.mark.parametrize("folder", ["", r"M:\Other", "/srv/other"])
+def test_pending_magnet_in_another_or_unknown_folder_is_not_removed(qbit, folder):
+    client, api = qbit
+    api.put(HASH, files=[], save_path=folder)
+
+    with raises_code("client.managed.wrong_folder", RuntimeError):
+        client.materialize_magnet(MAGNET, SAVE, HASH)
+
+    assert HASH in api.torrents
+    assert api.calls == ["files"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("downloaded", 1),
+        ("downloaded", -1),
+        ("downloaded", True),
+        ("downloaded", False),
+        ("downloaded", 0.0),
+        ("downloaded", "0"),
+        ("downloaded", None),
+        ("progress", 0.5),
+        ("progress", 1.0),
+        ("progress", True),
+        ("progress", False),
+        ("progress", "0"),
+        ("progress", None),
+        ("progress", float("nan")),
+        ("progress", float("inf")),
+    ],
+)
+def test_empty_file_list_cannot_discard_possible_payload_or_unknown_counters(qbit, field, value):
+    client, api = qbit
+    row = api.put(HASH, files=[])
+    row[field] = value
+
+    with raises_code("client.qbittorrent.cannot_recreate_magnet", RuntimeError):
+        client.materialize_magnet(MAGNET, SAVE, HASH)
+
+    assert HASH in api.torrents
+    assert api.calls == ["files"]
+
+
+@pytest.mark.parametrize("field", ["downloaded", "progress"])
+def test_missing_payload_counter_is_not_normalized_to_zero_before_magnet_removal(qbit, field):
+    client, api = qbit
+    row = api.put(HASH, files=[])
+    row.pop(field)
+
+    with raises_code("client.qbittorrent.cannot_recreate_magnet", RuntimeError):
+        client.materialize_magnet(MAGNET, SAVE, HASH)
+
+    assert HASH in api.torrents
+    assert api.calls == ["files"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        ("tags", "tow-pending", "client.managed.not_owned"),
+        ("tags", "tow", "client.qbittorrent.cannot_recreate_magnet"),
+        ("save_path", r"M:\Other", "client.managed.wrong_folder"),
+        ("state", "downloading", "client.qbittorrent.pending_magnet_active"),
+        ("downloaded", 10, "client.qbittorrent.cannot_recreate_magnet"),
+    ],
+)
+def test_magnet_removal_rechecks_control_evidence_after_slow_file_read(qbit, monkeypatch, field, value, error):
+    client, api = qbit
+    row = api.put(HASH, files=[])
+    files = api.torrents_files
+
+    def read_then_change(**kwargs):
+        result = files(**kwargs)
+        row[field] = value
+        return result
+
+    monkeypatch.setattr(api, "torrents_files", read_then_change)
+
+    with raises_code(error, RuntimeError):
+        client.materialize_magnet(MAGNET, SAVE, HASH)
+
+    assert HASH in api.torrents
+    assert api.calls == ["files"]
+
+
+def test_magnet_removal_refuses_a_changed_primary_identity_even_with_matching_alias(qbit, monkeypatch):
+    client, api = qbit
+    api.put(HASH, files=[])
+    listing = api.torrents_info
+
+    def changed_after_file_read(**kwargs):
+        rows = listing(**kwargs)
+        if "files" in api.calls:
+            for row in rows:
+                row.hash = "AB" * 20
+                row.infohash_v1 = HASH
+        return rows
+
+    monkeypatch.setattr(api, "torrents_info", changed_after_file_read)
+
+    with raises_code("client.managed.hash_changed_add", RuntimeError):
+        client.materialize_magnet(MAGNET, SAVE, HASH)
+
+    assert HASH in api.torrents
+    assert api.calls == ["files"]
+
+
+@pytest.mark.parametrize("at_file_read", [False, True])
+def test_pending_magnet_removed_elsewhere_does_not_need_another_delete(qbit, monkeypatch, at_file_read):
+    client, api = qbit
+    api.put(HASH, files=[])
+    listing, files = api.torrents_info, api.torrents_files
+    _registers(api)
+    disappeared = False
+
+    def query(**kwargs):
+        nonlocal disappeared
+        if not disappeared and not at_file_read and api.info_queries:
+            api.torrents.pop(HASH)
+            disappeared = True
+        return listing(**kwargs)
+
+    def read_files(**kwargs):
+        nonlocal disappeared
+        result = files(**kwargs)
+        if not disappeared and at_file_read:
+            api.torrents.pop(HASH)
+            disappeared = True
+        return result
+
+    monkeypatch.setattr(api, "torrents_info", query)
+    monkeypatch.setattr(api, "torrents_files", read_files)
+
+    assert client.materialize_magnet(MAGNET, SAVE, HASH) == TORRENT
+    assert not any(isinstance(call, tuple) and call[0] == "delete" for call in api.calls)
+    assert api.calls.count("add") == 1
+
+
+def test_existing_foreign_magnet_with_metadata_is_only_exported(qbit):
+    client, api = qbit
+    api.put(HASH, files=SHOW_FILES, tags="manual,tow-pending", save_path=r"M:\Other")
+
+    assert client.materialize_magnet(MAGNET, SAVE, HASH) == TORRENT
+    assert set(api.calls) == {"files", "export"}
+
+
 def test_magnet_metadata_waits_for_files_and_retries_export(qbit):
     client, api = qbit
     _registers(api)

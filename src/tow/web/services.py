@@ -51,6 +51,8 @@ from tow.doctor import reason_text as doctor_reason
 from tow.errors import diagnostic_details as _diagnostic_details
 from tow.errors import render as _render_error
 from tow.errors import summary_record as _summary_record
+from tow.file_presence import count as missing_file_count
+from tow.file_presence import invalidate_client as invalidate_file_observations
 from tow.guess import guess_site
 from tow.issues import collect as collect_issues
 from tow.lifecycle import request_restart, service_status, set_autostart
@@ -194,6 +196,7 @@ __all__ = [
     "guess_topic_title",
     "history_events",
     "install_id",
+    "invalidate_file_observations",
     "is_sign_in_secret",
     "list_restore_points",
     "list_snapshots",
@@ -206,6 +209,7 @@ __all__ = [
     "login_throttle",
     "message_feed",
     "mirror_observations",
+    "missing_file_count",
     "network_credential",
     "next_check_at",
     "night_cleanup_status",

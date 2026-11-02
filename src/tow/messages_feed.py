@@ -16,7 +16,7 @@ Category    Events
 downloads   confirmed client results: client_added, client_started, client_updated,
             client_selection_updated, new_file, revision_updated, file_completed,
             episode_completed, client_adopted, client_restored, client_stopped, qbit_move,
-            qbit_move_undo (ok; an unconfirmed move warn); client_removed (warn);
+            qbit_move_undo, files_restored (ok; an unconfirmed move warn); client_removed, files_missing (warn);
             client_add_failed, client_adopt_failed, client_stop_failed, client_start_failed,
             qbit_move_fail, qbit_move_undo_fail (err)
 checks      check_fail, add_check_fail (warn for transport classes, else err; repeated
@@ -156,12 +156,14 @@ MATRIX: dict[str, tuple[str, Severity]] = {
             "client_adopted",
             "client_restored",
             "client_stopped",
+            "files_restored",
         ),
         (DOWNLOADS, OK),
     ),
     "qbit_move": (DOWNLOADS, _move),
     "qbit_move_undo": (DOWNLOADS, _move),
     "client_removed": (DOWNLOADS, WARN),
+    "files_missing": (DOWNLOADS, WARN),
     **dict.fromkeys(
         (
             "client_add_failed",
@@ -347,6 +349,7 @@ _KEEP = (
     "alerts",
     "paused",
     "topics",
+    "n",
     "copy_kind",
     "undo",
     "ok",
@@ -909,6 +912,7 @@ _FORMAT_FIELDS = (
     "status",
     "paused",
     "alerts",
+    "n",
 )
 
 
@@ -923,6 +927,8 @@ def _href(entry: Mapping[str, Any]) -> str:
         return "/settings?open=clients#acc-clients"
     topic = str(rec.get("topic") or rec.get("topic_id") or "")
     if entry["count"] == 1 and topic and _TOPIC_ID.fullmatch(topic) and category in (DOWNLOADS, CHECKS, ACTIONS):
+        if rec["_kind"] in {"files_missing", "files_restored"}:
+            return f"/?open={topic}#row-{topic}"
         return f"/#row-{topic}"
     if category == UPDATES:
         return "/settings?open=updates#acc-updates"

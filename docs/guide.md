@@ -102,6 +102,18 @@ Episode progress counts by the last episode of the topic's title: “Серии 
 13–17 and 24/24 once 13–24 are there; “73-176 серии из 176” shows 176/176 when they are all there. When the files
 number each season from episode 1 again, TOW counts the episodes it finds.
 
+The counter describes the current selected files, not every completion in the history. On each reconciliation
+(normally every 30 minutes, without asking the site) TOW checks their presence and size on an available local
+disk; it does not read or hash media. An earlier confirmation or the client's 100% is not proof that a file is
+still there. Missing or shortened files do not count as complete; an inaccessible folder, permission error or
+another disk is unverified, not missing. The warning triangle links missing files to their topic and file list;
+it clears after a fresh successful observation. Previous versions in the list are marked separately.
+
+Different versions of a torrent may share the same paths. Removing an older torrent **with its content** in the
+client can therefore remove files the current version uses too, while the client still reports 100% until it
+checks them again. To keep shared files, remove only the torrent task. TOW never requests deletion of media and
+does not automatically re-download missing files or change a torrent you stopped.
+
 Specials (`Season 00`, `S00`, OVA and bonus folders) stay separate files, not ordinary season episodes.
 They can be downloaded with **All files of the torrent** or **Files by pattern**, without inflating the episode counter.
 Invalid episode ranges or unsafe file patterns are refused when saving, before a client check.

@@ -63,6 +63,7 @@ class SettingsChanged(TypedDict):
     interval_sec: NotRequired[int]
     flash_ttl_sec: NotRequired[int]
     replace_previous_revision: NotRequired[bool]
+    file_observation_client_id: NotRequired[str]
 
 
 class AccessChanged(TypedDict):

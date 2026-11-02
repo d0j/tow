@@ -29,9 +29,18 @@ WRITERS = ("log_event", "append_event")
 MANUAL: dict[tuple[str, str, str], tuple[tuple[str, ...], tuple[str, ...]]] = {
     # check/run.py: pending_reconcile_records holds (event_kind, fields) collected from
     # tow.progress: work.events.append(...) in reconcile.py, events.append(...) in presence.py.
-    ("src/tow/check/run.py", "_run_check", "event_kind"): (
-        ("new_file", "revision_updated", "file_completed", "episode_completed", "client_removed", "client_restored"),
-        ("src/tow/progress/reconcile.py", "src/tow/progress/presence.py"),
+    ("src/tow/check/run.py", "_publish_reconcile_records", "kind"): (
+        (
+            "new_file",
+            "revision_updated",
+            "file_completed",
+            "episode_completed",
+            "client_removed",
+            "client_restored",
+            "files_missing",
+            "files_restored",
+        ),
+        ("src/tow/progress/reconcile.py", "src/tow/progress/presence.py", "src/tow/check/reconcile.py"),
     ),
     # undo/engine.py: ``name, fields = restore.event``; Restore(event=(...)) only in undo/kinds.py.
     ("src/tow/undo/engine.py", "_commit", "name"): (

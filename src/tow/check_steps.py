@@ -131,6 +131,7 @@ _CHECK_OWNED_FIELDS = (
 _CHECK_CLEARABLE_FIELDS = (
     "file_aliases",
     "volume_unseen",  # the save folder is off its recorded volume (tow.progress.reconcile)
+    "files_missing",
     "move_pending",
     "error_notified",
     "error_streak",
@@ -156,6 +157,7 @@ OWNER_FIELDS = (
     "save_path",
     "client_id",
     "selection",
+    "file_observation_revision",
     "tracking_mode",
     "check_interval_min",
     "check_timer_revision",
@@ -188,6 +190,8 @@ def identity_changed(changed: Collection[str], topic: Topic, source: Topic) -> b
     """The owner gave the topic another link or another client while the check ran: the check
     worked on a torrent (or in a client) that is no longer the topic's."""
     if "url" in changed:
+        return True
+    if "file_observation_revision" in changed:
         return True
     # The check sets the client it used on its copy; an edit that only wrote the same client
     # down (a topic saved without one) is not a change of client.

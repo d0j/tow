@@ -516,6 +516,8 @@ HISTORY_GROUPS = {
             "new_file",
             "revision_updated",
             "file_completed",
+            "files_missing",
+            "files_restored",
             "episode_completed",
             "client_removed",
             "client_restored",
@@ -529,6 +531,7 @@ HISTORY_GROUPS = {
     "errors": frozenset(
         {
             "check_fail",
+            "files_missing",
             "check_site_skipped",
             "content_cache_failed",
             "client_add_failed",
@@ -939,6 +942,16 @@ def _replace_bits(rec: Mapping[str, Any], kind: str, lang: str) -> list[str]:
     return []
 
 
+def _file_presence_bits(rec: Mapping[str, Any], kind: str, lang: str) -> list[str]:
+    """Presence transitions are observations, not tracker errors or completed downloads."""
+    count = rec.get("n")
+    if kind == "files_missing" and type(count) is int and count > 0:
+        return [errors.Msg("log.files_missing_detail", n=count).text(lang)]
+    if kind == "files_restored":
+        return [errors.Msg("log.files_restored_detail").text(lang)]
+    return []
+
+
 def format_event(
     rec: Mapping[str, Any],
     *,
@@ -1009,6 +1022,7 @@ def format_event(
     if isinstance(alerts, list):  # the watchdog's messages, as they were sent
         bits.extend(scrub_text(str(alert)).strip()[:400] for alert in alerts if str(alert).strip())
     bits.extend(_replace_bits(rec, kind, lang))
+    bits.extend(_file_presence_bits(rec, kind, lang))
     if rec.get("tracker"):
         bits.append(str(rec["tracker"]))
     bits.extend(_access_diagnostics(rec, lang))

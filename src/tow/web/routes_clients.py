@@ -199,7 +199,14 @@ def settings_client(
         if cfg.get("clients")
         else [spec.secrets_key]
     )
-    if refused := save_secrets_with_undo(target, undo_secrets, s, old_sec, secret_scope):
+    if refused := save_secrets_with_undo(
+        target,
+        undo_secrets,
+        s,
+        old_sec,
+        secret_scope,
+        client_observation_id=ident if endpoint_changed else None,
+    ):
         return refused
     services.log_event("settings_client", client_id=configuration["id"], client_kind=selected_kind, how="manual")
     return flash_redirect(target, "web.common.saved", "ok")

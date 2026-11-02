@@ -277,7 +277,7 @@ def test_a_row_drawn_again_behaves_like_a_row_the_page_opened_with():
     # The progress link of a refreshed row opened downloads.json instead of the dialog.
     verdict = _verdict("row_listeners.mjs")
     assert verdict == dict.fromkeys(verdict, True), verdict
-    assert len(verdict) == 4
+    assert len(verdict) == 5
 
 
 @pytest.mark.allow_system  # runs node on a local script; no network, no system changes

@@ -4,10 +4,11 @@ health record of the header and the sites' daily download limits."""
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from tow import check_transaction, download_history
+from tow import check_transaction, download_history, file_presence
 from tow.check import rows, space, verification
 from tow.check.client_ops import ClientPool, remote_clients
 from tow.check.notices import RunNotifications, flush_notifications
@@ -370,6 +371,32 @@ def _clients_expected_to_list(state: dict[str, Any], want: set[str] | None, defa
     )
 
 
+def _publish_reconcile_records(records: list[tuple[str, dict[str, Any]]], record: Callable[..., None]) -> None:
+    """Only current-context presence transitions enter the shared log after the commit."""
+    presence_kinds = {"files_missing", "files_restored"}
+    if not any(kind in presence_kinds for kind, _fields in records):
+        for kind, fields in records:
+            record(kind, **fields)
+        return
+    # Keep comparison and append under the data lock: an owner edit cannot land between
+    # them. The event log has its own lock and never takes the data lock while holding it.
+    with persistence_lock():
+        try:
+            current = {str(topic.get("id")): topic for topic in topics_of(load_state(quarantine=False))}
+            config = load_config()
+        except Exception:  # noqa: BLE001 - unreadable evidence suppresses a diagnostic, not a committed action
+            current, config = {}, {}
+        for kind, fields in records:
+            if kind not in presence_kinds:
+                record(kind, **fields)
+                continue
+            public = dict(fields)
+            observed = public.pop("observation_binding", None)
+            topic = current.get(str(public.get("topic_id") or public.get("topic") or ""))
+            if topic is not None and file_presence.matches(topic, config, str(public.get("client_id") or ""), observed):
+                record(kind, **public)
+
+
 def _run_check(
     *,
     apply: bool,
@@ -495,8 +522,7 @@ def _run_check(
         want,
         lambda rebuilt: _commit_run_state(outcome, rebuilt, history_trimmed=run.history_started_over > 0),
     )
-    for event_kind, fields in pending_reconcile_records:
-        _record(event_kind, **fields)
+    _publish_reconcile_records(pending_reconcile_records, _record)
     flush_notifications(cfg, secrets, how=how, notify=notify)
     if cleanup_pending:
         _record("check_persistence_cleanup_pending", how=how)

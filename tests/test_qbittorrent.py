@@ -76,6 +76,7 @@ class _SelectionAPI:
             SimpleNamespace(
                 hash=torrent_hashes.upper(),
                 progress=0,
+                downloaded=0,
                 added_on=1,
                 completion_on=0,
                 save_path=r"M:\TV",

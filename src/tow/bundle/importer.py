@@ -206,11 +206,12 @@ def _apply_config_overrides(parsed: dict[str, Any], overrides: dict[str, Any]) -
 
 def _forget_volumes(state: dict[str, Any]) -> None:
     """The volumes the exporting computer recorded for its backup folders, and its notes of
-    missing ones, are its own observations: an import keeps neither."""
+    missing volumes or files, are its own observations: an import keeps none of them."""
     state.pop("backup_volumes", None)
     for topic in state.get("topics") or []:
         if isinstance(topic, dict):
             topic.pop("volume_unseen", None)
+            topic.pop("files_missing", None)
 
 
 def _without_volumes(history: Any) -> Any:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 from typing import Any, cast
 
-from tow import access
+from tow import access, file_presence
 from tow.config import as_bool, flash_ttl, interval_sec_of, load_config
 from tow.log import error_fields, log_event
 from tow.records import shown_title
@@ -220,6 +220,8 @@ def _settings(ctx: Context) -> Restore:
     secrets = snapshots.restore_scoped(load_secrets(), ctx.snapshot, record.get("secret_scope"))
     config = load_config()
     old_sec = interval_sec_of(config)
+    if client_id := record.get("file_observation_client_id"):
+        file_presence.invalidate_client(ctx.state, config, client_id)
     old_ttl = flash_ttl(config.get("flash_ttl_sec"))
     target_sec = int(record.get("interval_sec") or old_sec)
     ttl = record.get("flash_ttl_sec")

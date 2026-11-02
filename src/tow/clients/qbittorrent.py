@@ -12,6 +12,7 @@ from qbittorrentapi import Client, NotFound404Error
 from tow.clients import files
 from tow.clients.managed import OWNER, PENDING, ClientError, ManagedClient
 from tow.clients.spec import TorrentClientAdapter
+from tow.clients.state import matches_hash
 from tow.errors import Msg
 from tow.folders import paths_equal
 from tow.torrent import TorrentFile, TorrentMetadata, parse_magnet_hashes, parse_torrent_metadata
@@ -231,7 +232,7 @@ class QBittorrentClient(ManagedClient):
         lookup_hash = expected[:40] if len(expected) == 64 else expected
         resolved = self._resolved_hash(lookup_hash)
         if resolved is not None:
-            resolved = self._drop_stale_magnet(resolved, lookup_hash)
+            resolved = self._drop_stale_magnet(resolved, lookup_hash, destination)
         created = resolved is None
         try:
             if created:
@@ -338,14 +339,44 @@ class QBittorrentClient(ManagedClient):
             raise _fail("client.qbittorrent.webapi_too_old")
         return btih, btmh
 
-    def _drop_stale_magnet(self, resolved: str, lookup_hash: str) -> str | None:
+    def _drop_stale_magnet(self, resolved: str, lookup_hash: str, destination: str) -> str | None:
         """A stopped magnet TOW left pending without metadata is removed (and None returned) so
         it can be added again; any other torrent under the hash is kept (its hash returned)."""
         existing = self.inspect_torrent(resolved)
-        if (existing or {}).get("files") or PENDING not in self._tags(existing):
+        if existing is None:
+            return None
+        if existing.get("files") or PENDING not in self._tags(existing):
             return resolved
+        # Reading files can take time. Re-read the identity and control marks after
+        # that request, immediately before authorizing removal of this one task.
+        rows = self._c.torrents_info(torrent_hashes=resolved.lower())
+        if not rows:
+            return None
+        if len(rows) != 1:
+            raise _fail("client.qbittorrent.hash_ambiguous")
+        existing = self._report(rows[0], [], resolved)
+        if str(existing.get("hash") or "").upper() != resolved.upper() or not matches_hash(existing, lookup_hash):
+            raise _fail("client.managed.hash_changed_add")
+        if OWNER not in self._tags(existing):
+            raise _fail("client.managed.not_owned")
+        if PENDING not in self._tags(existing):
+            raise _fail("client.qbittorrent.cannot_recreate_magnet")
+        if not paths_equal(str(existing.get("save_path") or ""), destination):
+            raise _fail("client.managed.wrong_folder")
         if not self._stopped(existing):
             raise _fail("client.qbittorrent.pending_magnet_active")
+        # KeepContent also discards qBittorrent's part-file. An empty file-list answer
+        # alone is not evidence that this unfinished task has never fetched payload.
+        downloaded, progress = existing.get("downloaded"), existing.get("progress")
+        if (
+            isinstance(downloaded, bool)
+            or not isinstance(downloaded, int)
+            or downloaded != 0
+            or isinstance(progress, bool)
+            or not isinstance(progress, (int, float))
+            or progress != 0
+        ):
+            raise _fail("client.qbittorrent.cannot_recreate_magnet")
         delete = getattr(self._c, "torrents_delete", None)
         if not callable(delete):
             raise _fail("client.qbittorrent.cannot_recreate_magnet")
@@ -637,10 +668,8 @@ class QBittorrentClient(ManagedClient):
             "hash": str(getattr(torrent, "hash", "") or ""),
             "infohash_v1": str(getattr(torrent, "infohash_v1", "") or ""),
             "infohash_v2": str(getattr(torrent, "infohash_v2", "") or ""),
-            "progress": torrent.get("progress", 0.0)
-            if isinstance(torrent, Mapping)
-            else getattr(torrent, "progress", 0.0),
-            "downloaded": getattr(torrent, "downloaded", 0),
+            "progress": torrent.get("progress") if isinstance(torrent, Mapping) else getattr(torrent, "progress", None),
+            "downloaded": getattr(torrent, "downloaded", None),
             "added_on": getattr(torrent, "added_on", None),
             "completion_on": getattr(torrent, "completion_on", None),
             "save_path": getattr(torrent, "save_path", None),
