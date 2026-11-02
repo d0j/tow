@@ -2543,7 +2543,7 @@ def test_a_check_held_back_by_the_previous_version_does_not_blame_the_client():
     error = TowError("check.previous_revision_active", file="Show.S01E01.mkv")
     row = {"id": "t1", "ok": False, "error": error.text(), "error_class": "qbit", "error_record": error.record()}
     text = flash_of(manual_check_flash(row, topic_id="t1").headers["location"])
-    assert text.startswith("проверка не прошла: прежняя версия раздачи ещё активна")
+    assert text.startswith("проверка не прошла: новая версия ожидает остановки прежней")
     refused = dict(row, error="refused", error_record=TowError("check.add_unconfirmed").record())
     assert flash_of(manual_check_flash(refused, topic_id="t1").headers["location"]).startswith("торрент-клиент")
 

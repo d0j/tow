@@ -34,6 +34,12 @@ MovePending = TypedDict("MovePending", {"from": str, "to": str, "since": str}, t
 REPLACE_PREVIOUS_CHOICES = ("", "on", "off")
 
 
+def replaces_previous(topic: Mapping[str, Any], default: bool) -> bool:
+    """The owner's effective permission to stop this topic's own previous version."""
+    choice = str(topic.get("replace_previous") or "")
+    return choice == "on" if choice in {"on", "off"} else bool(default)
+
+
 class Topic(TypedDict, total=False):
     """One watched topic (``state.json`` → ``topics[]``)."""
 
@@ -80,6 +86,9 @@ class Topic(TypedDict, total=False):
     volume_unseen: dict[str, Any]
     # A selected revision whose client is still verifying existing files, not a failed add.
     verification_pending: dict[str, Any]
+    # A revision still awaiting an authorized replacement, retained across intervening site
+    # failures so alternating failures cannot reset the bounded automatic retry budget.
+    replacement_pending_hash: str
     # when a check first saw its torrent gone from the client (kept while it stays gone)
     client_removed_at: str
     # the latest result (the Home status colour, AGENTS.md)

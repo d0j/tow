@@ -13,6 +13,7 @@ from tow.clients import files
 from tow.clients.managed import OWNER, PENDING, ClientError, ManagedClient
 from tow.clients.spec import TorrentClientAdapter
 from tow.errors import Msg
+from tow.folders import paths_equal
 from tow.torrent import TorrentFile, TorrentMetadata, parse_magnet_hashes, parse_torrent_metadata
 
 _LOG = logging.getLogger("tow.clients")
@@ -617,6 +618,8 @@ class QBittorrentClient(ManagedClient):
         rows = self._c.torrents_info(torrent_hashes=infohash.lower())
         if not rows:
             return None
+        if len(rows) != 1:
+            raise _fail("client.qbittorrent.hash_ambiguous")
         return self._report(rows[0], self._c.torrents_files(torrent_hash=infohash.lower()), infohash)
 
     def _report(self, torrent: Any, files: Any, infohash: str) -> dict[str, Any]:
@@ -630,8 +633,8 @@ class QBittorrentClient(ManagedClient):
             }
             for row in files or []
         ]
-        return {
-            "hash": str(getattr(torrent, "hash", infohash) or infohash),
+        report: dict[str, Any] = {
+            "hash": str(getattr(torrent, "hash", "") or ""),
             "infohash_v1": str(getattr(torrent, "infohash_v1", "") or ""),
             "infohash_v2": str(getattr(torrent, "infohash_v2", "") or ""),
             "progress": torrent.get("progress", 0.0)
@@ -646,6 +649,37 @@ class QBittorrentClient(ManagedClient):
             "tags": self._tag_list(torrent),
             "files": normalized_files,
         }
+        if report["state"].casefold() in {"error", "missingfiles"}:
+            report["stopped"] = self._stopped_evidence(torrent, infohash)
+        return report
+
+    def _stopped_evidence(self, torrent: Any, infohash: str) -> bool:
+        """Read qBittorrent's independent stopped flag for an ambiguous health state.
+
+        The pinned API library translates ``stopped`` to ``paused`` before Web API 2.11.
+        Trying both names would be unsafe: an unknown filter can return every torrent.
+        Never accept another hash, owner or folder returned by a stale/contradictory read.
+        """
+        h = str(getattr(torrent, "hash", "") or "").upper()
+        v1 = str(getattr(torrent, "infohash_v1", "") or "").upper()
+        v2 = str(getattr(torrent, "infohash_v2", "") or "").upper()
+        folder = str(getattr(torrent, "save_path", "") or "").strip()
+        tags = self._tag_list(torrent)
+        if not h or infohash.upper() not in {h, v1, v2, v2[:40] if len(v2) == 64 else ""}:
+            return False
+        if not folder or OWNER not in self._tags({"tags": tags}):
+            return False
+        rows = self._c.torrents_info(torrent_hashes=h.lower(), status_filter="stopped")
+        if len(rows) != 1:
+            return False
+        checked = rows[0]
+        state = str(getattr(checked, "state", "") or "").casefold()
+        return (
+            str(getattr(checked, "hash", "") or "").upper() == h
+            and self._tag_list(checked) == tags
+            and paths_equal(str(getattr(checked, "save_path", "") or ""), folder)
+            and (state in {"error", "missingfiles"} or state.startswith(("stopped", "paused")))
+        )
 
     @staticmethod
     def _tag_list(torrent: Any) -> list[str]:

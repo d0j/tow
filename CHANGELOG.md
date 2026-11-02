@@ -5,6 +5,13 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- Automatic replacement recognizes qBittorrent's independently confirmed stopped flag even when the old torrent
+  displays a missing-files error. Stop confirmation remains separate from the safety checks for adding, starting
+  or changing selection. Blocked replacements keep their precise cause and get bounded early retries without resetting their
+  budget on progress updates or alternating site/client failures.
+
 ## [1.34.0] — 2026-10-26
 
 ### Added

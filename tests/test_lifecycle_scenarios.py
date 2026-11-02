@@ -821,3 +821,93 @@ def test_a_previous_version_without_tows_mark_is_not_stopped_and_its_wait_is_log
     assert world.client.adds == [OLD]
     assert len(_events("client_add_failed")) == 1  # refused before any add starts, as without the setting
     assert _history("errors").count("check_fail") == 1
+
+
+def test_stopped_previous_versions_with_missing_files_do_not_hold_back_automatic_replacement(world):
+    _seeding_old(world)
+    assert _check()["error_record"]["code"] == "check.previous_revision_active"
+    assert _topic()["replacement_pending_hash"] == NEW
+    world.cfg["replace_previous_revision"] = True
+    previous = [OLD, "C" * 40, "D" * 40, "E" * 40, "F" * 40]
+    for index, h in enumerate(previous):
+        world.client.put(h, world.folder, state="missingFiles" if index < 2 else "stoppedUP")
+        if index < 2:
+            world.client.torrents[h]["stopped"] = True  # native stopped read-back, health kept separately
+    _set_topic(previous_hashes=previous[1:])
+
+    row = _check()
+
+    assert row["ok"]
+    assert row["added"]
+    assert _topic()["hash"] == NEW
+    assert not _topic().get("last_error")
+    assert world.client.stopped == []  # all five were already stopped
+    assert [world.client.torrents[h]["state"] for h in previous] == ["missingFiles", "missingFiles", *["stoppedUP"] * 3]
+    assert _events("client_started") == []
+
+
+def test_the_first_actual_stop_failure_and_a_changed_cause_are_recorded_after_an_existing_wait(world):
+    _seeding_old(world)
+    assert _check()["error_record"]["code"] == "check.previous_revision_active"
+    world.cfg["replace_previous_revision"] = True
+    world.client.stop_error = TowError("client.managed.error_state", state="synthetic-error")
+
+    row = _check()
+    cause = row["error_record"]["params"]["reason"]
+    assert cause["$msg"]["code"] == "client.managed.error_state"
+    assert cause == _topic()["last_error_params"]["reason"]
+    assert len(_events("client_stop_failed")) == 1
+    assert _history("errors").count("check_fail") == 2
+    _check()
+    assert len(_events("client_stop_failed")) == 1
+    assert _history("errors").count("check_fail") == 2
+
+    world.client.stop_error = TowError("check.stop_unconfirmed")
+    _check()
+    assert len(_events("client_stop_failed")) == 2
+    assert _history("errors").count("check_fail") == 3
+    assert _topic()["last_error_params"]["reason"]["$msg"]["code"] == "check.stop_unconfirmed"
+    world.client.stop_error = None
+    assert _check()["ok"]
+    assert not _topic().get("last_error")
+    assert not _topic().get("error_notified")
+
+
+@pytest.mark.parametrize("evidence", ["magnet", "probe", "none", "changed"])
+def test_an_automatic_recovery_downloads_no_metadata_when_the_site_confirms_the_waiting_copy(world, evidence):
+    _seeding_old(world)
+    assert _check()["error_record"]["code"] == "check.previous_revision_active"
+    world.cfg["replace_previous_revision"] = True
+    world.client.torrents[OLD].update(state="missingFiles", stopped=True)
+    before = world.site.fetches
+    if evidence == "probe":
+        world.site.spec = {"infohash_path": "/hash/{id}"}
+        world.site.fetch_revision_hash = lambda *_a, **_kw: NEW
+    elif evidence != "none":
+        current = NEW if evidence == "magnet" else "C" * 40
+        world.site.fetch_magnet = lambda *_a, **_kw: (f"magnet:?xt=urn:btih:{current}", current)
+
+    row = _check(how="retry")
+
+    assert row["ok"]
+    assert world.site.fetches - before == (0 if evidence in {"magnet", "probe"} else 1)
+    assert _topic()["hash"] == NEW
+    assert world.client.stopped == []
+    assert "replacement_pending_hash" not in _topic()
+
+
+def test_automatic_replacement_recovery_never_bypasses_the_sites_download_quota(world):
+    _seeding_old(world)
+    assert _check()["error_record"]["code"] == "check.previous_revision_active"
+    world.cfg["replace_previous_revision"] = True
+    state = load_state()
+    state["daily_limit"] = {"fake": check_run._today()}
+    save_state(state)
+    fetched = world.site.fetches
+
+    row = _check(how="retry")
+
+    assert row["error_record"]["code"] == "check.daily_limit"
+    assert world.site.fetches == fetched
+    assert world.client.stopped == []
+    assert NEW not in world.client.torrents

@@ -104,6 +104,7 @@ class QbitApi:
         self.app = SimpleNamespace(version="5.1.2" if api == "5" else "4.6.7", web_api_version="2.11.4")
         torrent.setdefault("state", "stoppedDL" if api == "5" else "pausedDL")
         self.torrent = _torrent_json(**torrent) if present else None
+        self.stopped = str(torrent["state"]).startswith(("stopped", "paused"))
         self.priorities = {0: 1, 1: 1}
         self.with_index = True
         self.calls: list[tuple] = []
@@ -123,15 +124,21 @@ class QbitApi:
 
     def _pause(self, *, torrent_hashes):
         self.calls.append(("stop", torrent_hashes))
+        self.stopped = True
         self.torrent["state"] = self._state(True)
 
     def _resume(self, *, torrent_hashes):
         self.calls.append(("start", torrent_hashes))
+        self.stopped = False
         self.torrent["state"] = self._state(False)
 
-    def torrents_info(self, *, torrent_hashes=None):
+    def torrents_info(self, *, torrent_hashes=None, status_filter=None):
         rows = []
-        if self.torrent is not None and (torrent_hashes is None or torrent_hashes == self.torrent["hash"]):
+        if (
+            self.torrent is not None
+            and (torrent_hashes is None or torrent_hashes == self.torrent["hash"])
+            and (status_filter not in {"stopped", "paused"} or self.stopped)
+        ):
             rows.append(copy.deepcopy(self.torrent))
         return TorrentInfoList(rows, client=None)
 
@@ -297,6 +304,17 @@ def test_missing_files_while_stopping_is_an_unsafe_state(monkeypatch):
     api.torrents_stop = stop
     with raises_code("client.managed.error_state", RuntimeError):
         _adapter(monkeypatch, api).stop_owned_torrent(H)
+    assert api.stopped is False  # a health error alone is no independent confirmation
+
+
+@pytest.mark.parametrize("api_version", ["4", "5"])
+def test_native_stopped_evidence_survives_missing_files_in_real_api_shapes(monkeypatch, api_version):
+    api = QbitApi(api=api_version, tags="tow", state="missingFiles")
+    api.stopped = True  # qBittorrent's native administrative flag, separate from displayed state
+    info = _adapter(monkeypatch, api).stop_owned_torrent(H)
+    assert info["state"] == "missingFiles"
+    assert info["stopped"] is True
+    assert api.calls == []
 
 
 @pytest.mark.parametrize("state", ["stalledUP", "uploading", "forcedDL", "queuedDL"])

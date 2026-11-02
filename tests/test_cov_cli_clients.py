@@ -105,12 +105,13 @@ class FakeQbit:
         return {row["index"]: row["priority"] for row in self.torrents[hash_]["files"] if row["index"] is not None}
 
     # --- Web API surface used by the adapter
-    def torrents_info(self, torrent_hashes=None):
+    def torrents_info(self, torrent_hashes=None, status_filter=None):
         self.info_queries.append(torrent_hashes)
         rows = [
             row
             for row in self.torrents.values()
-            if torrent_hashes is None or row["hash"].lower() == str(torrent_hashes).lower()
+            if (torrent_hashes is None or row["hash"].lower() == str(torrent_hashes).lower())
+            and (status_filter is None or row["state"].startswith(("stopped", "paused")))
         ]
         return [SimpleNamespace(**{key: value for key, value in row.items() if key != "files"}) for row in rows]
 

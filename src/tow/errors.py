@@ -61,6 +61,7 @@ CLASSES: dict[str, str] = {
     "check.client_cannot_select": "qbit",
     "check.client_cannot_update": "qbit",
     "check.previous_revision_active": "qbit",
+    "check.previous_revision_unconfirmed": "qbit",
     "check.once_unconfirmed": "qbit",
     "check.not_owned_partial": "qbit",
     "check.not_owned_priorities": "qbit",

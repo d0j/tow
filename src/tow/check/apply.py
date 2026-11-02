@@ -24,6 +24,7 @@ from tow.check.space import FREE_SPACE_MARGIN, Shortfall
 from tow.check_steps import client_identities, is_owned_add_recovery, store_revision
 from tow.clients.managed import ClientVerificationPending
 from tow.clients.spec import TorrentClientAdapter
+from tow.clients.state import is_stopped
 from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.i18n import t
@@ -272,7 +273,7 @@ def _update_client_selection(
     waiting = space.waiting_for(topic, h)
     # A waiting torrent, and an unfinished add left stopped (an earlier add whose files did not
     # fit and whose read-back failed): measured before anything starts it.
-    measured = waiting is not None or ((completed_pending_add or recovering_verification) and space.is_stopped(info))
+    measured = waiting is not None or ((completed_pending_add or recovering_verification) and is_stopped(info))
     shortfall = _shortfall(run, client_id, dest, metadata, plan, topic) if measured else None
     if waiting is not None and shortfall is None:
         revisions = [str(value) for value in topic.get("previous_hashes") or []]

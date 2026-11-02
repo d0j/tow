@@ -27,6 +27,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 from tow.clients import files
+from tow.clients.state import is_stopped, matches_hash
 from tow.errors import TowError
 from tow.folders import paths_equal
 from tow.torrent import TorrentFile, TorrentMetadata, parse_torrent_metadata
@@ -35,7 +36,6 @@ _LOG = logging.getLogger("tow.clients")
 
 OWNER = "tow"
 PENDING = "tow-pending"
-STOPPED_PREFIXES = ("stopped", "paused")
 UNSAFE_STATES = frozenset({"error", "missingfiles", "unknown"})
 # Preparation a client does on its own before a torrent runs, besides checking its files:
 # qBittorrent reserves the files' disk space first ("allocating").
@@ -174,7 +174,7 @@ class ManagedClient:
 
     @staticmethod
     def _stopped(info: dict[str, Any] | None) -> bool:
-        return str((info or {}).get("state") or "").casefold().startswith(STOPPED_PREFIXES)
+        return is_stopped(info)
 
     def _owner_tags(self, infohash: str) -> list[str] | None:
         """The torrent's tags, None when it is gone. A client overrides this with a query that
@@ -209,6 +209,7 @@ class ManagedClient:
         polls: int | None = None,
         timeout: float | None = None,
         read: Callable[[str], dict[str, Any] | None] | None = None,
+        stopping: bool = False,
     ) -> dict[str, Any]:
         """Poll until ``done(info)``; ``error`` (a catalog key) is the reason when it never comes."""
         last: dict[str, Any] | None = None
@@ -221,6 +222,11 @@ class ManagedClient:
             if deadline is not None and time.monotonic() >= deadline:
                 break
             if last is not None:
+                # Stopping is a containment operation: an independently confirmed stop
+                # succeeds even while the client still reports a file error. Add, start
+                # and selection waits keep their health check before any success.
+                if stopping and done(last):
+                    return last
                 self._check_state(last)
                 if done(last):
                     return last
@@ -254,8 +260,20 @@ class ManagedClient:
                 raise self._fail("client.managed.not_visible") from None
             raise self._fail("client.managed.no_owner_mark") from None
 
-    def _wait_stopped(self, infohash: str) -> dict[str, Any]:
-        return self._wait(infohash, self._stopped, "client.managed.stop_unconfirmed")
+    def _wait_stopped(self, infohash: str, *, before: dict[str, Any] | None = None) -> dict[str, Any]:
+        def read(h: str) -> dict[str, Any] | None:
+            current = self.inspect_torrent(h)
+            if current is not None:
+                if not matches_hash(current, h):
+                    raise self._fail("client.managed.stop_unconfirmed")
+                if OWNER not in self._tags(current):
+                    raise self._fail("client.managed.not_owned_stop")
+                folder = str((before or {}).get("save_path") or "")
+                if folder and not paths_equal(str(current.get("save_path") or ""), folder):
+                    raise self._fail("client.managed.wrong_folder")
+            return current
+
+        return self._wait(infohash, self._stopped, "client.managed.stop_unconfirmed", read=read, stopping=True)
 
     def _wait_started(self, infohash: str, *, repeats: int | None = None) -> dict[str, Any]:
         """The start, confirmed. A torrent the client prepares (checks the files it found,
@@ -367,9 +385,7 @@ class ManagedClient:
         info = self.inspect_torrent(infohash)
         if info is None:
             raise self._fail("client.managed.missing")
-        identities = {str(info.get(key) or "").upper() for key in ("hash", "infohash_v1", "infohash_v2")}
-        identities.update(value[:40] for value in list(identities) if len(value) == 64)
-        if infohash.upper() not in identities or str(receipt.get("hash") or "").upper() != infohash.upper():
+        if not matches_hash(info, infohash) or str(receipt.get("hash") or "").upper() != infohash.upper():
             raise self._fail("client.managed.hash_changed_selection")
         if OWNER not in self._tags(info) or (require_pending and PENDING not in self._tags(info)):
             raise self._fail("client.managed.not_owned")
@@ -619,6 +635,7 @@ class ManagedClient:
         self, infohash: str, source_files: tuple[TorrentFile, ...], selected: set[int], root_name: str
     ) -> dict[str, Any]:
         inspected = self._inspect_with_files(infohash)
+        self._check_state(inspected)
         rows = list(inspected.get("files") or [])
         files.priorities(rows, fail=lambda: self._fail("client.managed.wrong_selection"))
         mapping = self._map_files(source_files, rows, root_name)
@@ -630,6 +647,7 @@ class ManagedClient:
         self._require_owned(infohash)
         self._set_wanted(infohash, wanted, all_ids)
         verified = self._inspect_with_files(infohash)
+        self._check_state(verified)
         files.verify_selection(
             rows,
             list(verified.get("files") or []),
@@ -876,6 +894,7 @@ class ManagedClient:
         before = self._inspect_with_files(infohash)
         if OWNER not in self._tags(before):
             raise self._fail("client.managed.not_owned")
+        self._check_state(before)
         pending = PENDING in self._tags(before)
         selected = {int(index) for index in selected_indices}
         if pending and self._defers_initial_check(before):
@@ -973,13 +992,15 @@ class ManagedClient:
         info = self.inspect_torrent(infohash)
         if info is None:
             raise self._fail("client.managed.missing")
+        if not matches_hash(info, infohash):
+            raise self._fail("client.managed.stop_unconfirmed")
         if OWNER not in self._tags(info):
             raise self._fail("client.managed.not_owned_stop")
         if self._stopped(info):
             return info
         self._require_owned(infohash)
         self._stop(infohash)
-        return self._wait_stopped(infohash)
+        return self._wait_stopped(infohash, before=info)
 
     def start_owned_torrent(self, infohash: str) -> dict[str, Any]:
         """Start TOW's own stopped torrent (one added stopped while its files did not fit); the
@@ -989,6 +1010,7 @@ class ManagedClient:
             raise self._fail("client.managed.missing")
         if OWNER not in self._tags(info):
             raise self._fail("client.managed.not_owned")
+        self._check_state(info)
         if not self._stopped(info):
             return info
         self._require_owned(infohash)

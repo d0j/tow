@@ -114,15 +114,25 @@ def stamp_result(topic: Topic, row: dict[str, Any]) -> None:
     """The check's result on the topic: ``last_error`` keeps the text (older TOW versions read
     it), ``last_error_code``/``_params`` the typed error Home and History render in the reader's
     language, ``last_error_class`` its status class."""
+    previous = topic.get("last_error_params") or {}
+    pending = str(topic.get("replacement_pending_hash") or "")
+    if topic.get("last_error_code") == "check.previous_revision_active":
+        pending = str(previous.get("hash") or pending)
     topic["last_ok"] = bool(row.get("ok"))
     topic["last_error"] = row.get("error")
     record = row.get("error_record") if row.get("error") else None
     if isinstance(record, dict):
         topic["last_error_code"] = record["code"]
         topic["last_error_params"] = record.get("params") or {}
+        if record["code"] == "check.previous_revision_active":
+            pending = str(topic["last_error_params"].get("hash") or pending)
     else:
         topic.pop("last_error_code", None)
         topic.pop("last_error_params", None)
+    if pending and not row.get("ok") and pending.upper() != str(topic.get("hash") or "").upper():
+        topic["replacement_pending_hash"] = pending.upper()
+    else:
+        topic.pop("replacement_pending_hash", None)
     topic["last_error_class"] = (
         str(row.get("error_class") or error_class(str(row.get("error") or ""))) if row.get("error") else ""
     )

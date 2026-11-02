@@ -141,6 +141,7 @@ _CHECK_CLEARABLE_FIELDS = (
     "content_hash",
     "waiting_space",
     "verification_pending",
+    "replacement_pending_hash",
     "client_removed_at",
 )
 
