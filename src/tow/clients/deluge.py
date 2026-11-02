@@ -56,6 +56,10 @@ _STATES = {
     "checking": "checkingDL",
     "allocating": "checkingDL",
     "moving": "moving",
+    # Deluge 2.2's RPC exposes native ``paused`` but its ``auto_managed`` keys are
+    # configured options, not native flags. Error can also mask maintenance. Unlike
+    # Transmission's status=0 or qBittorrent's stopped filter, these fields cannot
+    # independently confirm administrative containment: never infer stopped here.
     "error": "error",
 }
 

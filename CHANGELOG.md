@@ -7,6 +7,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ### Fixed
 
+- Transmission also keeps administrative stop separate from local file errors. Missing or malformed RPC status
+  cannot be mistaken for a stop; Deluge errors remain unconfirmed when its API cannot provide reliable evidence.
 - Automatic replacement recognizes qBittorrent's independently confirmed stopped flag even when the old torrent
   displays a missing-files error. Stop confirmation remains separate from the safety checks for adding, starting
   or changing selection. Blocked replacements keep their precise cause and get bounded early retries without resetting their
