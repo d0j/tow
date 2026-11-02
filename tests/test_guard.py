@@ -85,10 +85,13 @@ def test_inner():
     result.stdout.fnmatch_lines([f"*test guard violations*{library} request*"])
 
 
-def test_loopback_fixture_retries_service_ports_without_weakening_guard(nested):
+@pytest.mark.parametrize("host", ["127.0.0.1", "127.0.0.2"])
+def test_loopback_fixture_retries_service_ports_without_weakening_guard(nested, monkeypatch, host):
+    monkeypatch.setenv("TOW_TEST_LOOPBACK_HOST", host)
     result = nested(
         """
 import http.server
+import os
 import pytest
 
 def test_retries(monkeypatch, loopback_http_server):
@@ -101,7 +104,7 @@ def test_retries(monkeypatch, loopback_http_server):
             closed.append(self.server_address[1])
     monkeypatch.setattr(http.server, 'ThreadingHTTPServer', Server)
     server = loopback_http_server(object())
-    assert server.server_address == ('127.0.0.1', 19000)
+    assert server.server_address == (os.environ['TOW_TEST_LOOPBACK_HOST'], 19000)
     assert closed == [8788, 9091]
     server.server_close()
 
@@ -109,16 +112,41 @@ def test_bounded(monkeypatch, loopback_http_server):
     closed = []
     class Server:
         def __init__(self, address, handler):
-            self.server_address = ('127.0.0.1', 8788)
+            self.server_address = (address[0], 8788)
         def server_close(self):
             closed.append(True)
     monkeypatch.setattr(http.server, 'ThreadingHTTPServer', Server)
     with pytest.raises(RuntimeError, match='no guarded loopback test port'):
         loopback_http_server(object())
     assert len(closed) == 32
+
+def test_default_host(monkeypatch, loopback_http_server):
+    monkeypatch.delenv('TOW_TEST_LOOPBACK_HOST', raising=False)
+    class Server:
+        def __init__(self, address, handler):
+            self.server_address = (address[0], 19000)
+    monkeypatch.setattr(http.server, 'ThreadingHTTPServer', Server)
+    assert loopback_http_server(object()).server_address == ('127.0.0.1', 19000)
 """,
     )
-    result.assert_outcomes(passed=2)
+    result.assert_outcomes(passed=3)
+
+
+def test_loopback_fixture_refuses_any_other_host_before_binding(nested):
+    result = nested(
+        """
+import http.server
+import pytest
+
+@pytest.mark.parametrize('host', ['', '::1', 'localhost', '0.0.0.0', '192.0.2.1', '127.0.0.3', '127.0.0.1.example'])
+def test_refused(monkeypatch, loopback_http_server, host):
+    monkeypatch.setenv('TOW_TEST_LOOPBACK_HOST', host)
+    monkeypatch.setattr(http.server, 'ThreadingHTTPServer', lambda *_a: pytest.fail('bound an unsafe host'))
+    with pytest.raises(ValueError, match='TOW_TEST_LOOPBACK_HOST must be exactly'):
+        loopback_http_server(object())
+""",
+    )
+    result.assert_outcomes(passed=7)
 
 
 def test_swallowed_system_command_still_fails_the_test(nested):
@@ -380,6 +408,12 @@ def test_connect_ex_to_deluge_web_on_loopback():
         swallow(lambda: sock.connect_ex(("127.0.0.1", 8112)))
 
 
+def test_connect_to_tow_on_alternate_test_loopback():
+    with socket.socket() as sock:
+        sock.settimeout(0.5)
+        swallow(lambda: sock.connect(("127.0.0.2", 8787)))
+
+
 def test_asyncio_open_connection_to_remote():
     async def go():
         await asyncio.wait_for(asyncio.open_connection(TEST_NET, 443), 1)
@@ -413,10 +447,11 @@ def test_winapi_create_process_that_is_not_a_multiprocessing_child():
 """,
     )
     windows = sys.platform == "win32"
-    result.assert_outcomes(passed=7 if windows else 6, errors=7 if windows else 6, skipped=0 if windows else 1)
+    result.assert_outcomes(passed=8 if windows else 7, errors=8 if windows else 7, skipped=0 if windows else 1)
     for violation in (
         "socket connect_ex 192.0.2.1:80",
         "socket connect_ex 127.0.0.1:8112",
+        "socket 127.0.0.2:8787",
         "asyncio connection 192.0.2.1:443",
         "asyncio socket 127.0.0.1:9091",
         "os.spawnv",

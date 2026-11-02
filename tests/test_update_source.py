@@ -147,7 +147,7 @@ def test_tow_never_imports_the_test_source():
 @pytest.mark.parametrize(
     "origin",
     [
-        "http://127.0.0.2:8000",
+        "http://127.0.0.3:8000",
         "http://localhost:8000",
         "https://127.0.0.1:8000",
         "http://127.0.0.1",
@@ -167,6 +167,7 @@ def test_the_adapter_takes_one_exact_loopback_origin(origin):
     with pytest.raises(ValueError, match="not a loopback origin"):
         adapter.loopback_origin(origin)
     assert adapter.loopback_origin("http://127.0.0.1:18999") == "http://127.0.0.1:18999"
+    assert adapter.loopback_origin("http://127.0.0.2:18999") == "http://127.0.0.2:18999"
 
 
 def test_the_adapted_updater_downloads_from_the_origin_only(tmp_path, monkeypatch):
@@ -241,6 +242,14 @@ def test_install_writes_only_into_the_given_environment(tmp_path):
 
 
 @pytest.mark.allow_system  # a loopback server in this test, asked by the adapted updater's own download
+@pytest.mark.parametrize("host", ["", "localhost", "::1", "0.0.0.0", "192.0.2.1", "127.0.0.3"])
+def test_test_release_server_refuses_an_unsafe_host_before_binding(tmp_path, monkeypatch, host):
+    monkeypatch.setenv("TOW_TEST_LOOPBACK_HOST", host)
+    monkeypatch.setattr(adapter, "ThreadingHTTPServer", lambda *_args: pytest.fail("bound an unsafe host"))
+    with pytest.raises(ValueError, match="TOW_TEST_LOOPBACK_HOST must be exactly"):
+        adapter.serve(tmp_path, "v1.99.0")
+
+
 def test_the_release_is_served_as_github_serves_it(tmp_path):
     archive = io.BytesIO()
     with tarfile.open(fileobj=archive, mode="w:gz") as tar:

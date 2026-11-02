@@ -6,7 +6,8 @@ updater's downloads (``scripts/update.py``: GitHub and its download hosts over H
 and tests/test_update_source.py keeps them so. A smoke test (scripts/web-update-smoke.py) uses this
 module on a throwaway install only:
 
-1. ``serve(folder, tag)`` answers on 127.0.0.1 as GitHub answers a release: ``/releases/latest``, the
+1. ``serve(folder, tag)`` answers on the selected test loopback (127.0.0.1 by default) as GitHub:
+   ``/releases/latest``, the
    tag's archive, the release's ``tow-source.tar.gz`` and ``SHA256SUMS`` (files of ``folder``).
 2. ``install(site_packages, origin, tag)`` puts a ``.pth`` file and a module into the throwaway
    install's environment. In every TOW process of that environment they replace, at the two
@@ -24,6 +25,7 @@ its own updater (that is the update smoke of a previous release, scripts/update-
 from __future__ import annotations
 
 import json
+import os
 import threading
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -47,12 +49,12 @@ class System(_HarnessSystem):  # noqa: F811
         super().__init__(app, uv, github=github, repo=repo)
 
     def _opener(self, *handlers):
-        return build_opener(ProxyHandler({{}}), *handlers)  # nothing between the worker and 127.0.0.1
+        return build_opener(ProxyHandler({{}}), *handlers)  # directly to the synthetic loopback source
 """
 
 
 def loopback_origin(origin: str) -> str:
-    """``origin`` when it is exactly http://127.0.0.1:<port> (no user, path, query or fragment)."""
+    """An exact test-loopback origin, with no user, path, query or fragment."""
     parts = urlsplit(origin)
     try:
         port = parts.port
@@ -60,8 +62,8 @@ def loopback_origin(origin: str) -> str:
         raise ValueError(f"not a loopback origin: {origin!r}") from exc
     if (
         parts.scheme != "http"
-        or parts.hostname != "127.0.0.1"
-        or parts.netloc != f"127.0.0.1:{port}"
+        or parts.hostname not in {"127.0.0.1", "127.0.0.2"}
+        or parts.netloc != f"{parts.hostname}:{port}"
         or not port
         or parts.path
         or parts.query
@@ -181,10 +183,13 @@ def routes(folder: Path, tag: str) -> dict[str, tuple[int, bytes, dict[str, str]
 
 def serve(folder: Path, tag: str) -> tuple[str, ThreadingHTTPServer, list[str]]:
     """A loopback server of the release (origin, server, the paths asked); ``server.shutdown()``."""
+    host = os.environ.get("TOW_TEST_LOOPBACK_HOST", "127.0.0.1")
+    if host not in {"127.0.0.1", "127.0.0.2"}:
+        raise ValueError("TOW_TEST_LOOPBACK_HOST must be exactly 127.0.0.1 or 127.0.0.2")
     handler = type("Release", (_Release,), {"routes": routes(folder, tag), "asked": []})
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    server = ThreadingHTTPServer((host, 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    return f"http://127.0.0.1:{server.server_address[1]}", server, handler.asked
+    return f"http://{server.server_address[0]}:{server.server_address[1]}", server, handler.asked
 
 
 if __name__ == "__main__":
