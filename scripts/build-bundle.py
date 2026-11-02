@@ -22,12 +22,15 @@ github.com (uv, the Python build) and pypi.org (the wheels). The finished zip is
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import importlib.util
 import io
 import os
 import re
 import shutil
+import socket
+import ssl
 import stat
 import subprocess
 import sys
@@ -36,14 +39,24 @@ import tempfile
 import time
 import tomllib
 import zipfile
+from email.utils import parsedate_to_datetime
+from http.client import IncompleteRead
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 REPO = Path(__file__).resolve().parents[1]
 # uv inside the bundle (and install.sh downloads the same one: tests/test_bundle.py keeps them in step).
 UV_VERSION = "0.12.23"
 UV_TARGET = "x86_64-pc-windows-msvc"
 UV_URL = f"https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/uv-{UV_TARGET}.zip"
+DOWNLOAD_HOSTS = frozenset({"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"})
+DOWNLOAD_ATTEMPTS = 4
+DOWNLOAD_BUDGET = 300.0
+DOWNLOAD_TIMEOUT = 60.0
+MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
+TRANSIENT_HTTP = frozenset({408, 500, 502, 503, 504})
 ZIP_NAME = "TOW-windows-x64.zip"
 TOP = "TOW"
 # Not needed to run TOW: left out of app\ (the source archive of an update brings them again).
@@ -143,16 +156,121 @@ def write_root_files(top: Path) -> None:
 # --- uv, Python and the cache --------------------------------------------------------------------
 
 
-def download(url: str) -> bytes:
-    with urlopen(Request(url, headers={"User-Agent": "tow-build-bundle"}), timeout=300) as response:
-        return response.read()
+def _trusted_download_url(url: str) -> bool:
+    try:
+        parts = urlsplit(url)
+        return (
+            parts.scheme == "https"
+            and parts.hostname in DOWNLOAD_HOSTS
+            and parts.port in (None, 443)
+            and parts.username is None
+            and parts.password is None
+        )
+    except ValueError:
+        return False
+
+
+class _GitHubDownload(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _trusted_download_url(newurl):
+            raise ValueError("build-bundle: release redirect is outside GitHub HTTPS")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _retry_after(headers) -> float | None:
+    value = str((headers or {}).get("Retry-After") or "").strip()
+    if re.fullmatch(r"[0-9]+", value):
+        return float(value)  # an excessive delay exhausts the budget; never retry early
+    try:
+        when = parsedate_to_datetime(value)
+        if when.tzinfo is not None:
+            return max(0.0, when.timestamp() - time.time())
+    except TypeError, ValueError, OverflowError, OSError:
+        pass
+    return None
+
+
+def _transient_transport(error: OSError | IncompleteRead) -> bool:
+    reason = error.reason if isinstance(error, URLError) else error
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return False
+    if isinstance(reason, socket.gaierror):
+        return reason.errno == socket.EAI_AGAIN
+    return isinstance(reason, (ConnectionError, TimeoutError, IncompleteRead, ssl.SSLEOFError)) or (
+        isinstance(reason, OSError)
+        and reason.errno in {errno.EAGAIN, errno.EINTR, errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ETIMEDOUT}
+    )
+
+
+def _download_body(response, deadline: float, max_bytes: int) -> bytes:
+    if not _trusted_download_url(response.geturl()):
+        raise ValueError("build-bundle: release response is outside GitHub HTTPS")
+    length = response.headers.get("Content-Length")
+    expected = int(length) if length is not None else None
+    if expected is not None and not 0 <= expected <= max_bytes:
+        raise ValueError("build-bundle: release download exceeds its size limit")
+    data = bytearray()
+    while True:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("build-bundle: download time budget exhausted")
+        chunk = response.read1(min(64 * 1024, max_bytes + 1 - len(data)))
+        if not chunk:
+            break
+        if len(data) + len(chunk) > max_bytes:
+            raise ValueError("build-bundle: release download exceeds its size limit")
+        data.extend(chunk)
+    if time.monotonic() >= deadline:
+        raise TimeoutError("build-bundle: download time budget exhausted")
+    if expected is not None and len(data) != expected:
+        raise IncompleteRead(bytes(data), expected - len(data))
+    return bytes(data)
+
+
+def download(url: str, *, max_bytes: int = MAX_DOWNLOAD_BYTES) -> bytes:
+    """The pinned uv asset, restarted from byte zero on a bounded transient GET failure.
+
+    Read/retry checks share a deadline; a blocking I/O may still take up to its socket timeout.
+    Retry-After is a minimum: if it does not fit, the failure is returned immediately.
+    """
+    if url not in {UV_URL, UV_URL + ".sha256"}:
+        raise ValueError("build-bundle: only the pinned uv release may be downloaded")
+    opener = build_opener(_GitHubDownload())
+    deadline = time.monotonic() + DOWNLOAD_BUDGET
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("build-bundle: download time budget exhausted")
+        try:
+            request = Request(url, headers={"User-Agent": "tow-build-bundle"}, method="GET")
+            with opener.open(request, timeout=min(DOWNLOAD_TIMEOUT, remaining)) as response:
+                return _download_body(response, deadline, max_bytes)
+        except (OSError, IncompleteRead) as error:
+            if isinstance(error, HTTPError):
+                headers = error.headers
+                detail = f"HTTP {error.code}"
+                error.close()
+                after = _retry_after(headers)
+                delay = max(float(2 ** (attempt - 1)), after or 0.0)
+                retry = error.code in TRANSIENT_HTTP or (error.code == 429 and after is not None)
+            else:
+                delay = float(2 ** (attempt - 1))
+                detail = type(error).__name__
+                retry = _transient_transport(error)
+            if not retry or attempt == DOWNLOAD_ATTEMPTS or delay >= deadline - time.monotonic():
+                raise
+            say(f"download failed ({detail}); retry {attempt + 1}/{DOWNLOAD_ATTEMPTS} in {delay:g}s")
+            time.sleep(delay)
+    raise RuntimeError("build-bundle: download attempts exhausted")
 
 
 def fetch_uv(bin_dir: Path) -> Path:
     """uv.exe of UV_VERSION, checked against the checksum its release publishes."""
     say(f"uv {UV_VERSION}: {UV_URL}")
     data = download(UV_URL)
-    expected = download(UV_URL + ".sha256").decode("ascii").split()[0].lower()
+    checksum = download(UV_URL + ".sha256", max_bytes=4096).decode("ascii").split()
+    if not checksum or not re.fullmatch(r"[a-fA-F0-9]{64}", checksum[0]):
+        raise SystemExit(f"build-bundle: {UV_URL} has an invalid .sha256")
+    expected = checksum[0].lower()
     if hashlib.sha256(data).hexdigest() != expected:
         raise SystemExit(f"build-bundle: {UV_URL} does not match its .sha256")
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
