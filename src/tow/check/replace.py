@@ -21,17 +21,17 @@ from typing import TYPE_CHECKING, Any
 
 from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
-    blocked_revision,
     can_add_selected,
     claimed_by_other_topic,
     client_owned_by_tow,
     conflicting_topic_claim,
     live_previous_overlaps,
 )
-from tow.check.space import is_stopped
-from tow.errors import TowError
+from tow.clients.state import is_stopped
+from tow.errors import TowError, record_of
 from tow.log import error_fields
-from tow.records import Topic
+from tow.records import Topic, replaces_previous
+from tow.scrub import credentials_out
 
 if TYPE_CHECKING:
     from tow.check.topic import TopicCheck
@@ -39,11 +39,20 @@ if TYPE_CHECKING:
 REASON = "replace_revision_auto"
 
 
+def same_failure(topic: Topic, error: TowError) -> bool:
+    """The same waiting revision and cause were already recorded (not just its hash)."""
+    record = record_of(error)
+    return (
+        record is not None
+        and topic.get("last_error_code") == error.code
+        and topic.get("last_error_params") == credentials_out(record["params"])
+    )
+
+
 def by_itself(topic: Topic, default: bool) -> bool:
     """Whether a check stops this topic's previous revision itself: its own choice, else
     Settings' (``default``)."""
-    choice = str(topic.get("replace_previous") or "")
-    return choice == "on" if choice in {"on", "off"} else bool(default)
+    return replaces_previous(topic, default)
 
 
 def _revisions(work: TopicCheck, h: str) -> list[str]:
@@ -93,7 +102,8 @@ def stop_previous(work: TopicCheck, metadata: Any, *, h: str, dest: str, plan: A
                 raise TowError("check.stop_unconfirmed")
         except Exception as error:  # any failure to stop is the refusal it was without the opt-in
             start_again(work, stopped, h=h)
-            if blocked_revision(topic) != h.upper():  # the wait itself is logged once (topic._still_waiting)
+            refusal = TowError(PREVIOUS_REVISION_ACTIVE, file=file, hash=h.upper(), reason=error, stop_hash=revision)
+            if not same_failure(topic, refusal):
                 run.record(
                     "client_stop_failed",
                     component="client",
@@ -107,7 +117,7 @@ def stop_previous(work: TopicCheck, metadata: Any, *, h: str, dest: str, plan: A
                     **error_fields(error),
                     how=run.how,
                 )
-            raise TowError(PREVIOUS_REVISION_ACTIVE, file=file, hash=h.upper()) from error
+            raise refusal from error
         stopped.append(revision)
     run.record(
         "client_stopped",

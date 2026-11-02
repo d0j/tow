@@ -15,6 +15,7 @@ from tow.check.rows import client_marks, removal_seen_by, set_error, stamp_resul
 from tow.clients import files
 from tow.clients.managed import AWAITING_INITIAL_CHECK, ClientVerificationPending
 from tow.clients.spec import TorrentClientAdapter
+from tow.clients.state import is_stopped
 from tow.clock import machine_now, parse_timestamp
 from tow.errors import Msg, TowError
 from tow.events import new_operation_id
@@ -427,7 +428,7 @@ def _confirm(
         _start_given(waiting)  # an earlier pass gave the start and failed right after it
     # Retry a dropped start once, only for an unfinished TOW add; a later explicit check
     # may retry it again. Never resume an ordinary torrent paused in the client by its owner.
-    stopped = str((info or {}).get("state") or "").casefold().startswith(("stopped", "paused"))
+    stopped = is_stopped(info)
     pending_mark = "tow-pending" in {str(tag).casefold().strip() for tag in (info or {}).get("tags") or []}
     retry = stopped and (
         ((pending_mark or waiting.get("resume_after_check")) and not waiting.get("resume_attempted"))

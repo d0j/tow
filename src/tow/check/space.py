@@ -38,6 +38,7 @@ from tow.check.client_ops import (
     live_previous_overlap,
 )
 from tow.check.rows import client_marks, fail_row, note_removed, set_error, stamp_result, withdrawn_meanwhile
+from tow.clients import state as client_state
 from tow.clients.managed import ClientVerificationPending, completed_progress
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import iso_now
@@ -55,7 +56,6 @@ if TYPE_CHECKING:
 FREE_SPACE_MARGIN = 512 * 1024 * 1024
 WAITING_SPACE = "check.waiting_space"
 _GIB = 1024**3
-_STOPPED = ("stopped", "paused")
 # The states of a running torrent, in qBittorrent's words (every adapter reports these).
 _RUNNING = ("downloading", "uploading", "stalled", "queued", "forced", "metadl")
 
@@ -234,8 +234,8 @@ def selection_key(info: dict[str, Any] | None) -> str:
 
 
 def is_stopped(info: dict[str, Any] | None) -> bool:
-    """The client keeps the torrent stopped (or paused, as qBittorrent 4 says)."""
-    return str((info or {}).get("state") or "").casefold().startswith(_STOPPED)
+    """The shared administrative-state predicate (kept here for existing callers)."""
+    return client_state.is_stopped(info)
 
 
 def _running(info: dict[str, Any] | None) -> bool:

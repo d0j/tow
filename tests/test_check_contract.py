@@ -96,6 +96,7 @@ class FakeClient:
             return None
         return {
             "hash": infohash,
+            "state": "stoppedDL",
             "save_path": r"M:\\TV",
             "tags": ["tow"],
             "files": [{"index": 0, "name": "Show.mkv", "size": 1, "priority": 1}],

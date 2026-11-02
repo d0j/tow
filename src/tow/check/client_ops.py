@@ -14,6 +14,7 @@ from typing import Any
 
 from tow.clients import factory as client_factory
 from tow.clients.spec import TorrentClientAdapter
+from tow.clients.state import is_stopped, matches_hash
 from tow.errors import Msg, TowError
 from tow.events import new_operation_id
 from tow.folders import paths_equal
@@ -25,14 +26,7 @@ from tow.torrent import parse_magnet_hashes, windows_path_key
 
 
 def _client_info_matches_hash(info: dict[str, Any], infohash: str) -> bool:
-    wanted = str(infohash or "").strip().upper()
-    if not wanted:
-        return False
-    primary = str(info.get("hash") or "").strip().upper()
-    v1 = str(info.get("infohash_v1") or "").strip().upper()
-    v2 = str(info.get("infohash_v2") or "").strip().upper()
-    identities = {primary, v1, v2, v2[:40] if len(v2) == 64 else ""}
-    return wanted in identities
+    return matches_hash(info, infohash)
 
 
 def magnet_matches_saved_hash(magnet_url: str, saved_hash: str, client: TorrentClientAdapter | None) -> bool:
@@ -140,19 +134,28 @@ def _active_revision_overlap(client: TorrentClientAdapter, old_hash: str, new_fi
     if not old_hash:
         return ""
     info = client.inspect_torrent(old_hash)  # None when the client does not have it: one read
-    if not info or not _client_info_matches_hash(info, old_hash):
+    if info is None:
         return ""
-    state = str(info.get("state") or "").casefold()
-    if not state or state.startswith(("stopped", "paused")):
+    if not _client_info_matches_hash(info, old_hash):
+        raise TowError("check.previous_revision_unconfirmed", cls="qbit")
+    if is_stopped(info):
         return ""
+    rows = info.get("files")
+    if not isinstance(rows, list) or not rows:
+        raise TowError("check.previous_revision_unconfirmed", cls="qbit")
     wanted = [windows_path_key(str(file.path)) for file in new_files if not getattr(file, "is_pad", False)]
-    for row in info.get("files") or []:
+    for row in rows:
+        if not isinstance(row, dict):
+            raise TowError("check.previous_revision_unconfirmed", cls="qbit")
         try:
-            if row.get("priority") is not None and int(row.get("priority")) == 0:
+            priority = row.get("priority")
+            if priority is not None and int(priority) == 0:
                 continue
-        except TypeError, ValueError:
-            continue
+        except (TypeError, ValueError) as exc:
+            raise TowError("check.previous_revision_unconfirmed", cls="qbit") from exc
         raw_actual = str(row.get("name") or "")
+        if not raw_actual:
+            raise TowError("check.previous_revision_unconfirmed", cls="qbit")
         actual = windows_path_key(raw_actual)
         for path in wanted:
             if actual == path or actual.endswith("/" + path) or _lost_text_of(raw_actual, actual, path):

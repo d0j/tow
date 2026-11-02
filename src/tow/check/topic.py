@@ -842,33 +842,20 @@ def _blocked_revision(work: TopicCheck) -> bytes | None:
         return None  # the store holds another revision
     revisions = [work.old, *map(str, topic.get("previous_hashes") or [])]
     overlap = live_previous_overlap(client, revisions, metadata.files)
-    if not overlap:
+    if not overlap and not (run.how == "retry" and replace.by_itself(topic, run.replace_previous)):
         return None
     current = _page_names_revision(work, metadata)
-    if current is False or (current is None and not _download_limited(work.tracker)):
+    if current is False or (current is None and (not overlap or not _download_limited(work.tracker))):
         return None
     work.blocked_overlap = overlap
     return blob
 
 
 def _page_names_revision(work: TopicCheck, metadata: Any) -> bool | None:
-    """Whether the topic page's own magnet names this revision; None: the page has none. A
-    site that does not answer fails the check as a download would have."""
-    fetch_magnet = getattr(work.tracker, "fetch_magnet", None)
-    if not callable(fetch_magnet):
-        return None
-    run = work.run
-    try:
-        magnet, _hash = fetch_magnet(work.url, run.secrets, run.ua, ignore_cool=run.ignore_cool, persist=run.apply)
-    except TowError as exc:
-        if exc.code in {"tracker.no_magnet", "tracker.magnet_ambiguous"}:
-            return None
-        raise
-    identities = parse_magnet_hashes(str(magnet or ""))
-    if identities is None:
-        return None
-    btih, btmh = identities
-    return bool((btih and metadata.hash_v1 in btih) or (btmh and metadata.hash_v2 in btmh))
+    """The site's probe or own magnet confirms this cached revision; None: no evidence.
+    A site that does not answer fails the check as a download would have."""
+    revision = _site_revision(work)
+    return None if revision is None else bool(set(client_identities(metadata)) & revision.identities)
 
 
 def _fetch_by_magnet(work: TopicCheck, policy: dict[str, Any], torrent_error: Exception) -> Fetched | None:
@@ -1004,9 +991,7 @@ def _still_waiting(topic: Topic, error: Exception) -> bool:
     previous revision still runs on the same files."""
     if getattr(error, "code", None) != PREVIOUS_REVISION_ACTIVE:
         return False
-    params = getattr(error, "params", None) or {}
-    waiting = str(params.get("hash") or "").upper()
-    return bool(waiting) and blocked_revision(topic) == waiting
+    return isinstance(error, TowError) and replace.same_failure(topic, error)
 
 
 def _topic_failed(work: TopicCheck, error: Exception) -> None:

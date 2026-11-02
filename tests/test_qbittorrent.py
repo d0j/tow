@@ -22,7 +22,7 @@ class _FakeAPI:
     def __init__(self):
         self.app = SimpleNamespace(version="5.2.3", web_api_version="2.15.1")
 
-    def torrents_info(self, *, torrent_hashes):
+    def torrents_info(self, *, torrent_hashes, status_filter=None):
         return [
             SimpleNamespace(
                 hash=torrent_hashes.upper(),
@@ -67,8 +67,10 @@ class _SelectionAPI:
         self.calls.append("add-stopped")
         return "Ok."
 
-    def torrents_info(self, *, torrent_hashes):
+    def torrents_info(self, *, torrent_hashes, status_filter=None):
         if not self.present:
+            return []
+        if status_filter and not self.state.startswith(("stopped", "paused")):
             return []
         return [
             SimpleNamespace(

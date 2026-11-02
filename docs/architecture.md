@@ -16,7 +16,7 @@ flowchart TD
     RUN -->|child, when a personal timer is due| TIMER["tow check --apply --notify --timer-only"]
     RUN -->|child, every 30 min| PROG["tow check --apply --notify --progress-only"]
     RUN -->|child, every 5 min while a torrent waits for space or verification| SPACE["tow check --apply --notify --space-only"]
-    RUN -->|child, when a site outage retry is due| RETRY["tow check --apply --notify --site-retry-only"]
+    RUN -->|child, when a check recovery retry is due| RETRY["tow check --apply --notify --site-retry-only"]
     RUN -->|child, daily at backup_time| NIGHT["night copy (tow.snapshots)"]
     RUN -->|in-process, every 10 min| WD["watchdog duties<br/>lateness, alerts, heartbeat, outbox"]
     SERVE --> DATA[("data/ · config.yaml · keys/")]
@@ -95,7 +95,11 @@ flowchart TD
   and a monotonic browser clock. It stops polling while the page is hidden.
 - Site retries (`tow.site_retries`, the `site_retry` job) check a topic again after a check left it with a
   transport-class error (class `tracker` or `cloudflare`): not after a ban, the daily limit or an HTTP sign-in
-  refusal, and not for a paused or completed once topic or a paused site. `policies(state, cfg)` reads saved
+  refusal, and not for a paused or completed once topic or a paused site. The same finite budget also covers an
+  owner-authorized replacement blocked by its previous revision. `replacement_pending_hash` is only a retry-binding
+  hint, never permission for a client mutation or a successful add receipt; it preserves the budget through an
+  intervening site or client-unreachable error and is cleared on success. Turning replacement off cancels its
+  retry, and turning it on again does not renew spent attempts. `policies(state, cfg)` reads saved
   evidence only and binds each retry to a revision: a digest of the topic's link, hash, folder, client, selection,
   timer and last success plus the site's and the protection settings, so an edit starts a new budget. The first
   retry is due 300 s after the failed check (Cloudflare: `protection.min_interval_sec`, at least 1,800 s), each next
