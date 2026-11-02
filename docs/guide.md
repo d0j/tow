@@ -458,8 +458,10 @@ pointer or keyboard is on it, × folds it at once). The icon lists what TOW did 
 every signed-in browser and computer: up to 50 messages from the last seven days of the log (rotation of a busy
 log can shorten that), newest first. Read and cleared are shared too: opening the list marks what it shows
 read on every device; **Clear history** removes what you see, and a message that arrived meanwhile stays. The
-icon takes the colour of the worst unread message and shows how many are unread. Under **This tab** the list
-keeps this tab's own results until the page is closed; they never count as unread. The list a tab kept for itself
+icon takes the colour of the worst unread message and shows how many are unread. Final manual check results,
+refused forms, client connection checks and messenger tests are shared too. A result already in the shared list
+does not appear again under **This tab**. That section keeps temporary progress and previews until the page is
+closed; previews still write nothing and never count as unread. The list a tab kept for itself
 before 1.33 is removed once, with the note “Recent messages are now the same on every device. The earlier list of
 this tab is no longer kept.” What is in the list:
 
@@ -470,9 +472,9 @@ this tab is no longer kept.” What is in the list:
 | Your changes | a topic, site or setting saved, removed, paused; a restore, an import, **Undo** - only once it is saved |
 | TOW itself | watchdog alerts, failed and recovered nightly backups, cleanups that wait |
 | Updates | an update started, refused, installed, failed or rolled back (from the update's own record) |
-| Messengers | a message that could not be delivered, and delivery working again |
+| Messengers | a message that could not be delivered, delivery working again and a test result, each naming its messenger |
 
-Routine checks that found nothing, each successful delivery and other bookkeeping are in History only. The
+Routine scheduled checks that found nothing, each successful delivery and other bookkeeping are in History only. The
 list is not a complete history: an event the log could not write (a full disk) is missing there too.
 Problems that last (a topic error, a client that does not answer) stay in **Needs attention** until they are
 fixed. Folding or closing a message does not clear the topic's error or its History record.

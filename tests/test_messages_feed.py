@@ -363,7 +363,7 @@ def test_a_device_on_the_network_gets_the_scrubbed_projection(monkeypatch):
     for leak in ("TV", "/srv/", "secretpasskey", "user:pw", "AAAAAAAA", "tracker.example/topic", "e01.mkv", "pw@"):
         assert leak not in words, leak
     assert "host.example" in words  # a link keeps its host
-    assert set(item) == {"id", "cursor", "kind", "category", "subject", "text", "at", "href", "read"}
+    assert set(item) == {"id", "cursor", "kind", "category", "subject", "text", "at", "href", "read", "source_id"}
     assert item["href"] == "/#row-t1"
     assert item["subject"] == "Show A"
 
@@ -898,7 +898,8 @@ def test_no_message_is_a_bare_word(lang):
     "Undone" alone said nothing)."""
     bare = []
     for kind in sorted(messages_feed.RELEVANT - {"tracker_checked", "backup_created", "bot_delivery_succeeded"}):
-        _raw(kind, **_MESSAGE_FIELDS.get(kind, {}))
+        fields = {"feedback_kind": "ok", "feedback_text": "Action completed"} if kind == "action_feedback" else {}
+        _raw(kind, **(fields | _MESSAGE_FIELDS.get(kind, {})))
         items = messages_feed.render(messages_feed.feed().refresh().projection, lang=lang)["items"]
         assert items, kind
         label = items[0]["text"].split(" · ")[0]

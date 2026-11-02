@@ -11,7 +11,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   displays a missing-files error. Stop confirmation remains separate from the safety checks for adding, starting
   or changing selection. Blocked replacements keep their precise cause and get bounded early retries without resetting their
   budget on progress updates or alternating site/client failures.
-
+- Recent messages reject stale responses after read or clear, reconcile uncertain results without repeating a
+  possibly committed request, and stay consistent across browsers. Final manual check results, refused forms,
+  client connection checks and messenger tests are shared; duplicate tab feedback retains Undo. Delivery messages
+  name their messenger.
 - The Windows web server explicitly uses the supported selector loop, preventing the Proactor connection-cleanup
   failures seen after disconnects. Normal requests, keep-alive, aborted requests and shutdown are checked together.
 

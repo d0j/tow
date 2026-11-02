@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import logging
 import re
 import socket
 from collections.abc import Awaitable, Callable
@@ -26,7 +27,7 @@ from tow.bind import origin_matches_request
 from tow.bundle import MAX_BUNDLE_BYTES
 from tow.torrent import MAX_TORRENT_BYTES
 from tow.web import _context, services, site_store
-from tow.web.messages import flash_at
+from tow.web.messages import flash_at, identify_flash
 
 _PORTABLE_UPLOAD_REQUEST_LIMIT = MAX_BUNDLE_BYTES + 2 * 1024 * 1024
 _UPLOAD_LIMITS = {
@@ -353,6 +354,7 @@ async def _secure(request: Request, call_next: Callable[[Request], Awaitable[Res
     if signed_in and request.headers.get("accept-language") and is_browser_navigation(request):
         await run_in_threadpool(_remember_request_language, request, cfg)
     static = path.startswith("/static/")
+    observed: list[dict[str, Any]] = []
 
     async def dispatch() -> Response:
         if sync:  # read-only: a recovery it finds waiting is answered 503 and run apart (tow.web.sync)
@@ -369,11 +371,30 @@ async def _secure(request: Request, call_next: Callable[[Request], Awaitable[Res
                 return JSONResponse({"error": i18n.t("releases.job_unreadable")}, status_code=503)
             if update.get("active"):
                 return JSONResponse({"error": i18n.t("releases.busy")}, status_code=409)
-        return await call_next(request)
+        with services.observe_events() as operation:
+            response = await call_next(request)
+        observed.extend(operation)
+        return response
 
     if _serialized(request):
         async with _SITE_HTTP_LOCK:
             response = await dispatch()
     else:
         response = await dispatch()
+    if (
+        signed_in
+        and request.method in _WRITE_METHODS
+        and not path.startswith(("/content/", "/messages/"))
+        and path not in {"/login", "/logout"}
+        and not bool(getattr(_context.current(), "feedback_preview", False))
+        and (said := flash_at(response.headers.get("location", ""))) is not None
+    ):
+        try:
+            shared_id = await run_in_threadpool(services.record_message_feedback, said, observed)
+            if shared_id:
+                identify_flash(response.headers.get("location", ""), shared_id)
+        except Exception as exc:  # noqa: BLE001 - a shared message never changes a completed action's response
+            logging.getLogger("tow.web").warning(
+                "an action's shared message could not be saved: %s", type(exc).__name__
+            )
     return _response_headers(request, _redirect_for_fetch(request, response))

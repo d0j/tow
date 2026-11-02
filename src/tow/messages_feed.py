@@ -75,6 +75,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from tow import i18n, paths, status, store
 from tow import log as eventlog
@@ -188,6 +189,11 @@ MATRIX: dict[str, tuple[str, Severity]] = {
         (CHECKS, ERR),
     ),
     "check_site_skipped": (CHECKS, WARN),
+    "qbit_unreachable": (CHECKS, ERR),
+    "client_checked": (CHECKS, OK),
+    "notifier_test": (DELIVERY, lambda rec: "ok" if rec.get("ok") is True else "err"),
+    "settings_portable_check": (ACTIONS, OK),
+    "action_feedback": (ACTIONS, lambda rec: str(rec.get("feedback_kind") or "")),
     "check_recovered": (CHECKS, OK),
     **dict.fromkeys(
         (
@@ -294,9 +300,6 @@ HISTORY_ONLY = frozenset(
         "protection_replay_refused",
         "protection_restored",
         "content_cache_failed",
-        "qbit_unreachable",  # a client's Check button: its page says the answer
-        "notifier_test",  # a messenger's Test button: likewise
-        "settings_portable_check",  # a TOW file checked on Settings: likewise
         "download_history_rebuilt",  # bookkeeping
         "download_history_trimmed",
         "secret_undo_cleanup_retry",  # a cleanup that waited, done
@@ -346,6 +349,13 @@ _KEEP = (
     "topics",
     "copy_kind",
     "undo",
+    "ok",
+    "version",
+    "feedback_kind",
+    "feedback_text",
+    "feedback_subject",
+    "feedback_href",
+    "feedback_id",
 )
 _HEX32 = re.compile(r"[0-9a-f]{32}")
 _TOPIC_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -904,6 +914,10 @@ _FORMAT_FIELDS = (
 
 def _href(entry: Mapping[str, Any]) -> str:
     rec, category = entry["rec"], entry["category"]
+    if rec["_kind"] == "action_feedback":
+        return _feedback_href(rec.get("feedback_href"))
+    if rec["_kind"] in {"qbit_unreachable", "client_checked"}:
+        return "/settings?open=clients#acc-clients"
     topic = str(rec.get("topic") or rec.get("topic_id") or "")
     if entry["count"] == 1 and topic and _TOPIC_ID.fullmatch(topic) and category in (DOWNLOADS, CHECKS, ACTIONS):
         return f"/#row-{topic}"
@@ -922,6 +936,18 @@ def _subject(entry: Mapping[str, Any], title_index: Mapping[str, str], site_titl
     from tow.notify import short_series_title
 
     rec = entry["rec"]
+    if rec["_kind"] == "action_feedback":
+        return str(rec.get("feedback_subject") or "")
+    if rec.get("integration_id") and (
+        entry["category"] == DELIVERY or str(rec["_kind"]).startswith("settings_notifier")
+    ):
+        from tow.notifiers import kinds
+
+        name = str(rec["integration_id"])
+        module = kinds().get(name)
+        return str(getattr(module, "TITLE", "") or name)
+    if rec["_kind"] in {"qbit_unreachable", "client_checked"}:
+        return str(rec.get("title") or rec.get("client_id") or t("settings.clients.title"))
     if entry["count"] == 1 or entry["topics"] <= 1:
         title = eventlog.event_title(rec, title_index)
         if title:
@@ -948,6 +974,12 @@ def render_entry(
         fields["tracker"] = site  # a topic's message names its site too; a site's says it once
     row = eventlog.format_event(fields, site_titles=site_titles, paths=False)
     bits = [_feed_label(rec) or row["label"]]
+    if entry["kind"] == "action_feedback":
+        bits = [str(rec.get("feedback_text") or "")]
+    elif entry["kind"] == "notifier_test":
+        bits.append(t("log.feed.test_ok") if rec.get("ok") is True else t("log.feed.test_failed"))
+    elif entry["kind"] == "client_checked" and rec.get("version"):
+        bits.append(str(rec["version"]))
     if entry["kind"] == "settings_update_result":
         outcome = str(rec.get("status") or "")
         if outcome in _UPDATE_RESULTS:
@@ -956,7 +988,7 @@ def render_entry(
         bits.append(
             t("log.feed.topics", n=entry["topics"]) if entry["topics"] > 1 else t("log.feed.times", n=entry["count"])
         )
-    if row["detail"]:
+    if row["detail"] and entry["kind"] != "action_feedback":
         bits.append(row["detail"])
     return {
         "id": entry["id"],
@@ -968,7 +1000,56 @@ def render_entry(
         "at": int(entry["at"]),
         "href": _href(entry),
         "read": bool(entry["read"]),
+        "source_id": str(rec.get("feedback_id") or ""),
     }
+
+
+def _feedback_href(value: Any) -> str:
+    raw = str(value or "")
+    if not raw.startswith("/") or raw.startswith("//") or any(ord(c) <= 32 or c == "\\" for c in raw):
+        return "/history"
+    try:
+        parts = urlsplit(raw)
+        pairs = parse_qsl(parts.query, max_num_fields=16)
+    except ValueError:
+        return "/history"
+    if parts.path not in {"/", "/history", "/settings", "/sites"}:
+        return "/history"
+    query = [
+        (key, val)
+        for key, val in pairs
+        if key in {"open", "card", "check_result", "credential_topic", "f", "t"}
+        and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", val)
+    ]
+    fragment = parts.fragment if re.fullmatch(r"[A-Za-z0-9_-]{0,100}", parts.fragment) else ""
+    return urlunsplit(("", "", parts.path, urlencode(query), fragment))
+
+
+def record_feedback(message: Mapping[str, Any], observed: Iterable[Mapping[str, Any]] = ()) -> str | None:
+    """Share final feedback when no equal-or-worse result was already logged.
+
+    Only completed actions call this; rendering, polling and previews do not. The event keeps
+    scrubbed display words, never the submitted form or its private parameters. An unwritable
+    log leaves the original action's outcome intact.
+    """
+    kind = str(message.get("kind") or "")
+    text = scrub_display(str(message.get("text") or ""), 1000)
+    if kind not in SEVERITIES or not text:
+        return None
+    for rec in reversed(tuple(observed)):
+        severity = _severity({**rec, "_kind": rec.get("kind")})
+        if severity is not None and _RANK[severity] >= _RANK[kind]:
+            return str(rec["event_id"]) if rec.get("event_id") else None
+    source_id = str(message.get("id") or "")
+    return eventlog.append_event(
+        "action_feedback",
+        feedback_kind=kind,
+        feedback_text=text,
+        feedback_subject=scrub_display(str(message.get("subject") or ""), 200),
+        feedback_href=_feedback_href(message.get("href")),
+        feedback_id=source_id if re.fullmatch(r"[A-Za-z0-9_-]{1,100}", source_id) else "",
+        how="manual",
+    )
 
 
 def render(

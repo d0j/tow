@@ -70,6 +70,12 @@ class TokenStore:
         with self._lock:
             self._records.clear()
 
+    def identify(self, token: str, message_id: str) -> None:
+        """Tie unsent feedback to its shared event without extending its lifetime."""
+        with self._lock:
+            if (entry := self._records.get(token)) is not None:
+                entry[1]["id"] = message_id
+
 
 # A message shown once after an action (typed flash). It lives in the memory of the web process
 # only, on purpose: it matters for the next page, a few seconds after the action. A restart of the
@@ -170,6 +176,16 @@ def flash_at(location: str) -> dict[str, str] | None:
     except ValueError:
         return None
     return FLASHES.get(token) if token else None
+
+
+def identify_flash(location: str, message_id: str) -> None:
+    """The feedback returned by this action uses the same identity as its shared result."""
+    try:
+        token = (parse_qs(urlsplit(location).query).get("flash") or [""])[0]
+    except ValueError:
+        return
+    if token:
+        FLASHES.identify(token, message_id)
 
 
 def flash_text(message: Any, /, **params: Any) -> str:

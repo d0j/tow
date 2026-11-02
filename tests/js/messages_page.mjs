@@ -105,6 +105,27 @@ const page = ({ storage, served = null, undo = null, address = "http://127.0.0.1
   const $ = (selector) => document.root.querySelector(selector);
   return { document, timers, window, replaced, $, menu: $("[data-messages]"), server };
 };
+const syncing = (live, server) => {
+  const window = {};
+  const source = readFileSync(new URL("../../src/tow/static/sync.js", import.meta.url), "utf8");
+  vm.runInNewContext(source, { window, URLSearchParams, Promise, Math, JSON, Object, Number, String, Array, Map, Set, Boolean, Date });
+  const revision = () => String(server.revision).padStart(32, "0");
+  const answers = [];
+  const client = window.TowSync.createSyncClient({
+    now: live.timers.now, monotonic: live.timers.now,
+    setTimer: live.timers.setTimeout, clearTimer: live.timers.clearTimeout, random: () => 0,
+    request: async ({ url }) => {
+      const have = new URL(url, "http://local").searchParams.get("have") || "";
+      const status = have.includes(`messages:${revision()}`) ? 304 : 200;
+      answers.push(status);
+      return { status, body: { ok: true, now_ts: live.timers.now() / 1000, areas: { messages: { rev: revision() } } } };
+    },
+  });
+  client.on("messages", () => live.window.towMessages.refresh());
+  live.window.towSync = { client };
+  client.start();
+  return { client, answers, revision };
+};
 const verdict = {};
 const storage = memoryStorage();
 const served = { id: "m1", kind: "err", subject: "Show", text: "the check failed" };
@@ -289,6 +310,190 @@ verdict.signedOutDropsTheList = true;
 }
 verdict.refreshSaysWhetherTheListIsCurrent = true;
 
+// A GET whose body was built before a clear never restores cleared rows or their unread count.
+// The obsolete body is aborted without holding up the new list, even if its promise ignores abort.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "err", text: "Failure", at: 1800000100 }]);
+  const first = page({ storage: memoryStorage(), server });
+  const other = page({ storage: memoryStorage(), server });
+  await settle();
+  const plain = server.fetch;
+  let hold = true;
+  let release = null;
+  let signal = null;
+  server.fetch = async (url, options) => {
+    const response = await plain(url, options);
+    if (url !== "/messages.json" || !hold) return response;
+    hold = false;
+    signal = options.signal;
+    const data = await response.json();
+    return { ...response, json: () => new Promise((resolve) => { release = () => resolve(data); }) };
+  };
+  server.change(() => {}); // a 200 with the old unread list
+  const old = first.window.towMessages.refresh();
+  await settle();
+  first.document.dispatch(first.$("[data-messages-clear]"), "click");
+  await settle();
+  assert.equal(await old, false);
+  assert.equal(signal.aborted, true);
+  assert.deepEqual(first.window.towMessages.shared().items, []); // the new GET did not wait for release()
+  release();
+  await settle();
+  await other.window.towMessages.refresh();
+  assert.deepEqual(first.window.towMessages.shared().items, other.window.towMessages.shared().items);
+  assert.equal(first.window.towMessages.shared().unread, 0);
+  const last = server.requests.length;
+  assert.equal(await first.window.towMessages.refresh(), true); // the cleared representation is confirmed by 304
+  assert.equal(server.requests.length, last + 1);
+  assert.equal(server.requests.at(-1).headers["If-None-Match"], `"r${server.revision}"`);
+}
+verdict.oldGetCannotUndoClear = true;
+
+// Read and clear stay independent. A delayed read response cannot replace a list a later clear
+// and the sync client already confirmed. A topic arriving after the click stays unread on both
+// independent browser pages; unchanged sync answers (304) cannot strand an old list on either.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "err", text: "Failure", at: 1800000100 }]);
+  const first = page({ storage: memoryStorage(), server });
+  const other = page({ storage: memoryStorage(), server });
+  await settle();
+  const firstSync = syncing(first, server);
+  const otherSync = syncing(other, server);
+  first.timers.advance(0);
+  other.timers.advance(0);
+  await settle();
+  const plain = server.fetch;
+  let release = null;
+  server.fetch = async (url, options) => {
+    const response = await plain(url, options);
+    if (url !== "/messages/read") return response;
+    const data = await response.json();
+    return { ...response, json: () => new Promise((resolve) => { release = () => resolve(data); }) };
+  };
+  first.document.dispatch(first.$("[data-messages-read]"), "click");
+  await settle();
+  server.change((list) => list.unshift({ id: "e2", cursor: "c2", kind: "ok", text: "Arrived later", at: 1800000200, read: false }));
+  first.document.dispatch(first.$("[data-messages-clear]"), "click");
+  await settle();
+  assert.deepEqual(first.window.towMessages.shared().items.map((item) => [item.id, item.read]), [["e2", false]]);
+  other.timers.advance(5000);
+  await settle();
+  assert.equal(otherSync.client.applied("messages"), otherSync.revision());
+  // The clear revision may already have been acknowledged: its late sibling must still be harmless.
+  firstSync.client.ack("messages", firstSync.revision());
+  release();
+  await settle();
+  first.timers.advance(5000);
+  other.timers.advance(5000);
+  await settle();
+  assert.equal(firstSync.answers.at(-1), 304);
+  assert.equal(otherSync.answers.at(-1), 304);
+  assert.deepEqual(first.window.towMessages.shared().items, other.window.towMessages.shared().items);
+  assert.deepEqual(first.window.towMessages.shared().items.map((item) => [item.id, item.read]), [["e2", false]]);
+  assert.equal(server.requests.filter((request) => request.url === "/messages/read").length, 1);
+  assert.equal(server.requests.filter((request) => request.url === "/messages/clear").length, 1);
+}
+verdict.oldMarkCannotUndoSyncedClear = true;
+
+// A failed reconciliation must retry GET even if sync already knows the current revision. Hidden
+// pages defer it until shown, and an uncertain POST is never replayed to find out whether it saved.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", text: "Failure", at: 1800000100 }]);
+  const live = page({ storage: memoryStorage(), server, extra: { towSync: { client: { stopped: () => false } } } });
+  await settle();
+  const plain = server.fetch;
+  let unavailable = true;
+  let getAttempts = 0;
+  server.fetch = (url, options) => {
+    if (url === "/messages.json") getAttempts += 1;
+    if (url === "/messages.json" && unavailable) return Promise.resolve({ status: 503, ok: false });
+    return plain(url, options);
+  };
+  live.document.dispatch(live.$("[data-messages-clear]"), "click");
+  await settle();
+  assert.deepEqual(server.items, []);
+  assert.equal(live.window.towMessages.shared().items.length, 1);
+  assert.equal(getAttempts, 1);
+  live.timers.advance(5000);
+  await settle();
+  assert.equal(getAttempts, 2); // independent retry, without a new sync revision
+  live.document.hidden = true;
+  live.document.dispatch(live.document, "visibilitychange");
+  live.timers.advance(11000);
+  await settle();
+  assert.equal(getAttempts, 2);
+  unavailable = false;
+  live.document.hidden = false;
+  live.document.dispatch(live.document, "visibilitychange");
+  await settle();
+  assert.deepEqual(live.window.towMessages.shared().items, []);
+  assert.equal(getAttempts, 3);
+  assert.equal(server.requests.filter((request) => request.url === "/messages/clear").length, 1);
+}
+verdict.reconciliationSurvivesFailedGetAndHiddenTab = true;
+
+// A marker refused after session expiry ends every feed request, including an already scheduled
+// reconciliation. An old session's response cannot refill this page with another device's list.
+{
+  const server = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", text: "Failure", at: 1800000100 }]);
+  const live = page({ storage: memoryStorage(), server });
+  await settle();
+  server.fail = { status: 403, data: { error: "Session ended" } };
+  live.document.dispatch(live.$("[data-messages-read]"), "click");
+  await settle();
+  const sent = server.requests.length;
+  server.fail = null;
+  live.timers.advance(60000);
+  assert.equal(await live.window.towMessages.refresh(), false);
+  assert.equal(server.requests.length, sent);
+  assert.equal(live.window.towMessages.shared().items.length, 0);
+  assert.equal(live.window.towMessages.center.items().length, 0);
+}
+verdict.expiredMarkerEndsSession = true;
+
+// A shared action/result replaces only the matching local row, never another message with equal
+// words, a preview or a still-followed check. Its live Undo keeps the original stamp and countdown.
+{
+  const server = fakeServer([
+    { id: "saved-event", source_id: "saved", cursor: "c3", kind: "ok", text: "Saved", at: 1800000300 },
+    { id: "done-event", source_id: "check-J", cursor: "c2", kind: "ok", text: "Check complete", at: 1800000200 },
+    { id: "identical-id", cursor: "c1", kind: "ok", text: "Done", at: 1800000100 },
+  ]);
+  const followed = [{ job: "J", action: "A" }];
+  const live = page({ storage: memoryStorage(), server, extra: { towChecks: { scheduler: { entries: () => followed } } } });
+  await settle();
+  const messages = live.window.towMessages;
+  messages.showMessage({ id: "saved", kind: "ok", text: "Saved", undo: "stamp", undoUntil: live.timers.now() + 60000 });
+  messages.showMessage({ id: "check-J", kind: "info", text: "Running", cancel: "/check/J/cancel" });
+  messages.showMessage({ id: "preview", kind: "ok", text: "Saved" });
+  messages.showMessage({ id: "identical-id", kind: "ok", text: "Done" });
+  live.menu.open = true;
+  await settle();
+  const rows = () => live.$("[data-messages-list]").querySelectorAll("li[data-message-id]");
+  assert.deepEqual(rows().map((row) => row.dataset.messageId), ["saved-event", "done-event", "identical-id", "preview", "check-J"]);
+  const undo = rows()[0].querySelector("form[action='/undo']");
+  assert.equal(undo.querySelector("input").value, "stamp");
+  const left = undo.querySelector("[data-undo-left]");
+  assert.equal(left.dataset.undoLeft, "saved");
+  live.timers.advance(1000);
+  assert.equal(left.textContent, "0:59");
+  followed.length = 0;
+  messages.showMessage({ id: "check-J", kind: "ok", text: "Check complete" }, { replace: true });
+  assert.deepEqual(rows().map((row) => row.dataset.messageId), ["saved-event", "done-event", "identical-id", "preview"]);
+  assert.ok(messages.center.find("saved")); // only its duplicate row was folded into the shared one
+  assert.ok(messages.center.find("check-J"));
+  // Another browser clears the shared entries. Their old local copies stay folded away; a live
+  // Undo is still offered, and the preview whose words happen to match is still its own message.
+  server.change((list) => list.splice(0));
+  await messages.refresh();
+  assert.deepEqual(rows().map((row) => row.dataset.messageId), ["preview", "saved"]);
+  messages.center.setUndo({});
+  assert.deepEqual(rows().map((row) => row.dataset.messageId), ["preview"]);
+  messages.signOut();
+  assert.equal(messages.center.items().length, 0);
+}
+verdict.sharedIdentityDeduplicatesResultsAndKeepsUndo = true;
+
 // A request for the list that never answers, or whose body never ends: given up (aborted) after
 // 10 s, refresh() answers false (sync.js asks again later), and the next refresh is a request of
 // its own - nothing waits behind the lost one. A body that ends after that is not used.
@@ -410,12 +615,12 @@ verdict.rateLimitedWaitsForRetryAfter = true;
     server.fail = null;
     assert.equal(posts(url).at(-1).body.cursor, asked);
     arrives(`${url.slice(10)}-new`);
-    assert.equal(await live.window.towMessages.refresh(), true);
-    assert.notEqual(live.window.towMessages.shared().cursor, asked);
+    assert.equal(await live.window.towMessages.refresh(), false); // the marker's Retry-After covers this tab's GET too
     live.timers.advance(3100);
     await settle();
     assert.equal(posts(url).length, 2, url);
     assert.equal(posts(url).at(-1).body.cursor, asked, url);
+    assert.notEqual(live.window.towMessages.shared().cursor, asked);
   }
   // What arrived after the clear stays; what arrived after the read (not shown at its click) is unread.
   assert.deepEqual(live.window.towMessages.shared().items.map((item) => [item.id, item.read]), [["read-new", false], ["clear-new", true]]);
@@ -467,6 +672,10 @@ verdict.retriedMarkKeepsItsCursor = true;
     await settle();
     assert.equal(shown.length, 1, kind); // said once, never again by itself
     hang = "";
+    if (!live.window.towMessages.shared().cursor) {
+      server.change((list) => list.unshift({ id: "next", cursor: "next", kind: "ok", text: "New result", at: 1800000400, read: false }));
+      assert.equal(await live.window.towMessages.refresh(), true);
+    }
     const before = posts(url);
     live.document.dispatch(live.$(button), "click");
     await settle();
@@ -520,12 +729,12 @@ for (const withSync of [true, false]) {
   live.document.hidden = false;
   live.document.dispatch(live.document, "visibilitychange");
   await settle();
-  assert.equal(count("/messages.json"), gets + 1, `shown, sync ${withSync}`);
+  assert.equal(count("/messages.json"), gets + 2, `shown, sync ${withSync}`); // the POST invalidates the first GET
   assert.equal(count("/messages/read"), reads + 1, `shown, sync ${withSync}`);
   assert.equal(server.requests.filter((request) => request.url === "/messages/read").at(-1).body.cursor, "c1");
   live.timers.advance(60000);
   await settle();
-  assert.equal(count("/messages.json"), gets + 1); // nothing owed any more
+  assert.equal(count("/messages.json"), gets + 2); // nothing owed any more
   assert.equal(count("/messages/read"), reads + 1);
 }
 verdict.hiddenTabRetriesWhenShown = true;
@@ -541,7 +750,7 @@ verdict.hiddenTabRetriesWhenShown = true;
   await settle();
   live.document.dispatch(live.$("[data-messages-clear]"), "click");
   await settle();
-  assert.deepEqual(server.requests.map((request) => request.url), ["/messages.json", "/messages/read", "/messages/clear"]);
+  assert.deepEqual(server.requests.map((request) => request.url), ["/messages.json", "/messages/read", "/messages.json", "/messages/clear", "/messages.json"]);
   assert.ok(server.requests.every((request) => request.headers["X-TOW-Tab"] === TAB), JSON.stringify(server.requests));
   const alone = fakeServer([{ id: "e1", cursor: "c1", kind: "warn", subject: "Show A", text: "Check failed", at: 1800000100 }]);
   page({ storage: memoryStorage(), server: alone });

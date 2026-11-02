@@ -1434,6 +1434,8 @@
       "check_site_skipped": "site not asked",
       "content_cache_failed": "could not save or refresh torrent metadata",
       "qbit_unreachable": "client unreachable",
+      "client_checked": "client connection confirmed",
+      "action_feedback": "action result",
       "qbit_move": "move",
       "qbit_move_fail": "not moved",
       "add_check_fail": "add failed",
@@ -1607,6 +1609,8 @@
       "no_detail": "the reason was not recorded; the details are in the files of data/logs"
     },
     "feed": {
+      "test_ok": "test delivered",
+      "test_failed": "test failed",
       "topics": {
         "one": "{n} topic",
         "other": "{n} topics"

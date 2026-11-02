@@ -10,6 +10,7 @@ import sys
 import threading
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import closing, contextmanager, suppress
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -30,6 +31,7 @@ MAX_BYTES = 5 * 1024 * 1024
 BACKUPS = 4
 _TAIL_BYTES = 120_000
 _LOG_THREAD_LOCK = threading.RLock()
+_OBSERVED: ContextVar[list[dict[str, Any]] | None] = ContextVar("tow_observed_events", default=None)
 EXPORT_EVENT_KEYS = {
     "ts",
     "created_at",
@@ -423,6 +425,21 @@ def _rotate_if_needed(path: Path) -> None:
     rotate_files(path, BACKUPS)
 
 
+@contextmanager
+def observe_events() -> Iterator[list[dict[str, Any]]]:
+    """Successfully appended events of this operation, also in its worker threads.
+
+    The bounded observation is in memory only. Independent requests never share it; readers
+    and background work outside the block are unchanged.
+    """
+    records: list[dict[str, Any]] = []
+    token = _OBSERVED.set(records)
+    try:
+        yield records
+    finally:
+        _OBSERVED.reset(token)
+
+
 def append_event(kind: str, **fields: Any) -> str | None:
     """Append one event; its ``event_id`` once it is in the log, None when the append failed.
 
@@ -454,6 +471,9 @@ def append_event(kind: str, **fields: Any) -> str | None:
     except Exception as exc:  # noqa: BLE001 - an unwritable log must not abort the logged operation
         print(f"TOW log write failed ({kind}): {type(exc).__name__}", file=sys.stderr)
         return None
+    if (observed := _OBSERVED.get()) is not None:
+        observed.append(rec)
+        del observed[:-256]
     return event_id
 
 

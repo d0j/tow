@@ -236,6 +236,14 @@ plus ten regexes, never a Python dispatch per file and mask.
 
 ## Data layout
 
+Final feedback from authenticated web actions is shared through the same event projection. `log.observe_events`
+observes successfully appended route events in that request's context, after startup recovery; when an action
+already logged an equal-or-more-severe message, its strip uses that event's identity. Otherwise `action_feedback`
+keeps only scrubbed display words, severity, a safe local target and an opaque source identity. No submitted form
+or private error parameters are copied. Applying jobs publish once when they finish or are cancelled, never on
+GET polling; previews remain write-free. The browser deduplicates by identities, retains Undo and reconciles marker
+changes with a fresh GET, rejecting snapshots from before those changes.
+
 ```text
 <install>/
   app/                     the code: a git clone at a release tag, or a release archive
