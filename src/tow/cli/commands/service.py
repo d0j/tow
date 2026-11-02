@@ -187,6 +187,7 @@ def _add_serve(sub: Subcommands) -> None:
 def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    from tow import platform
     from tow.bind import validate_bind
     from tow.config import as_bool, load_config, port_of
     from tow.store import check_state_version
@@ -210,6 +211,9 @@ def _serve(args: argparse.Namespace) -> int:
         host=host,
         port=port,
         reload=False,
+        # The web process uses socket I/O and synchronous subprocess adapters. On Windows
+        # a selector avoids Proactor's failing shutdown callback during connection cleanup.
+        loop="asyncio:SelectorEventLoop" if platform.is_windows() else "auto",
         log_config=log_config,
         proxy_headers=False,
         forwarded_allow_ips="",
