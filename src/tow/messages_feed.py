@@ -917,6 +917,9 @@ def _href(entry: Mapping[str, Any]) -> str:
     if rec["_kind"] == "action_feedback":
         return _feedback_href(rec.get("feedback_href"))
     if rec["_kind"] in {"qbit_unreachable", "client_checked"}:
+        if _TOPIC_ID.fullmatch(str(rec.get("client_id") or "")):
+            client = str(rec["client_id"])
+            return f"/settings?open=clients&card={client}#client-{client}"
         return "/settings?open=clients#acc-clients"
     topic = str(rec.get("topic") or rec.get("topic_id") or "")
     if entry["count"] == 1 and topic and _TOPIC_ID.fullmatch(topic) and category in (DOWNLOADS, CHECKS, ACTIONS):
@@ -924,6 +927,9 @@ def _href(entry: Mapping[str, Any]) -> str:
     if category == UPDATES:
         return "/settings?open=updates#acc-updates"
     if category == DELIVERY:
+        if _TOPIC_ID.fullmatch(str(rec.get("integration_id") or "")):
+            name = str(rec["integration_id"])
+            return f"/settings?open=bots&card={name}#notifier-{name}"
         return "/settings?open=bots"
     if category == CHECKS:
         return "/history?group=errors"

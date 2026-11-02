@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
+import threading
 
 import pytest
 from fastapi.testclient import TestClient
@@ -87,7 +89,11 @@ def test_two_messengers_recover_independently_and_name_their_connection():
         ("Discord", "warn"),
         ("Telegram", "warn"),
     ]
-    assert all(entry["href"] == "/settings?open=bots" for entry in entries)
+    assert [entry["href"] for entry in entries] == [
+        "/settings?open=bots&card=telegram#notifier-telegram",
+        "/settings?open=bots&card=discord#notifier-discord",
+        "/settings?open=bots&card=telegram#notifier-telegram",
+    ]
 
 
 def test_a_client_integration_id_does_not_replace_the_topics_title():
@@ -216,3 +222,31 @@ def test_a_damaged_log_link_and_its_private_query_cannot_leak_to_a_browser():
         feedback_href="/settings?" + "a=b&" * 20,
     )
     assert _items()[0]["href"] == "/history"
+
+
+def test_a_queue_worker_never_inherits_a_request_or_its_event_observer(monkeypatch):
+    from tow.web import _context
+
+    original = threading.Thread
+
+    def inheriting_thread(*args, **kwargs):
+        kwargs.setdefault("context", contextvars.copy_context())
+        return original(*args, **kwargs)
+
+    # Python can be configured to inherit context in new threads. The queue must choose its
+    # own clean context regardless of that process-wide option.
+    monkeypatch.setattr(threading, "Thread", inheriting_thread)
+    received = []
+
+    def work():
+        received.append(_context.subject())
+        log.append_event("topic_add", topic="a")
+
+    with _context.seeded({}):
+        _context.use_subject("Another request")
+        with log.observe_events() as observed:
+            worker = check_jobs._start("isolated-check", work)
+            worker.join(timeout=5)
+            assert not worker.is_alive()
+    assert received == [""]
+    assert observed == []

@@ -284,7 +284,7 @@ def _register(action: str, job_id: str) -> None:
 
 def _start(name: str, target: Callable[..., None], *args: Any) -> threading.Thread:
     """Start a consumer thread: the seam tests replace to run the consumer in their own thread."""
-    worker = threading.Thread(target=target, args=args, name=name, daemon=True)
+    worker = threading.Thread(target=target, args=args, name=name, daemon=True, context=contextvars.Context())
     worker.start()
     return worker
 
