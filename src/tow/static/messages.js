@@ -389,6 +389,7 @@
   // The session of this page's messages: a new one once the owner signs out (or TOW signs the
   // owner out). An answer, a poll or an announcement of the old one does nothing any more.
   let session = 0;
+  let ended = false;
   // Every request of a session ends with it (aborted where the browser can).
   const newController = () => (typeof AbortController === "function" ? new AbortController() : null);
   let requests = newController();
@@ -410,6 +411,7 @@
   // Signed out: a new session; nothing of the old one is said, kept or shown.
   const signOut = () => {
     session += 1;
+    ended = true;
     try {
       requests?.abort();
     } catch {
@@ -420,6 +422,9 @@
     soon = null;
     blockedUntil = 0;
     window.clearTimeout(retryTimer);
+    window.clearTimeout(reconcileTimer);
+    reconcileTimer = 0;
+    reconcileNeeded = false;
     owed.clear();
     saying.forEach((timer) => window.clearTimeout(timer));
     saying.clear();
@@ -428,6 +433,7 @@
       if (region) region.textContent = "";
     });
     center.clearStorage();
+    sharedSources.clear();
     shared = emptyFeed();
     render();
   };
@@ -435,6 +441,7 @@
   // The install's list, as the server last said it (memory only: never stored in the tab).
   const emptyFeed = () => ({ items: [], unread: 0, worst: "", cursor: "", etag: "", loaded: false });
   let shared = emptyFeed();
+  const sharedSources = new Set(); // ids only: a cleared shared result never returns as this tab's duplicate
   let render = () => {};
   const center = createCenter({
     storage,
@@ -479,7 +486,7 @@
     button.title = t("js.messages.undo_title");
     const left = element("span", "undo-left", leftText(item));
     left.setAttribute("aria-hidden", "true");
-    left.dataset.undoLeft = item.id;
+    left.dataset.undoLeft = item.sourceId || item.id;
     button.append(`${t("js.messages.undo")} `, left);
     form.append(stamp, button);
     return form;
@@ -625,6 +632,12 @@
     const item = center.normalize(raw);
     item.read = raw?.read === true;
     item.shared = true;
+    const local = center.find(String(raw?.source_id || raw?.id || ""));
+    if (center.undoLive(local)) {
+      item.undo = local.undo;
+      item.undoUntil = local.undoUntil;
+      item.sourceId = local.id;
+    }
     return item;
   };
   let listShape = "";
@@ -636,15 +649,22 @@
   const drawList = () => {
     if (!list || !menu?.open) return;
     const sharedItems = shared.items.map(sharedItem);
-    const local = center.items();
+    const sharedIds = new Set(shared.items.flatMap((item) => [item.id, item.source_id]).filter(Boolean));
+    const following = new Set((window.towChecks?.scheduler?.entries?.() || []).flatMap((item) =>
+      [item.job, item.action, ...(item.aliases || [])].filter(Boolean).map((id) => `check-${id}`)));
+    // The same result has one row, matched only by identity. Keep this tab's records (and its
+    // strip/Undo), previews and checks still being followed; unrelated equal words are distinct.
+    const local = center.items().filter((item) => !sharedSources.has(item.id) || following.has(item.id)
+      || (center.undoLive(item) && !sharedIds.has(item.id)));
     const all = [...sharedItems, ...local];
     const shape = `${sharedItems.map((item) => item.id).join("|")}#${local.map((item) => item.id).join("|")}`;
     if (shape !== listShape) {
       const focusedId = list.contains(document.activeElement) ? document.activeElement.closest?.("[data-message-id]")?.dataset.messageId : "";
+      const focusId = shared.items.find((item) => item.source_id === focusedId)?.id || focusedId;
       listShape = shape;
       const rows = [...sharedItems.map(entry), ...(local.length ? [section()] : []), ...local.map(entry)];
       list.replaceChildren(...rows);
-      if (focusedId) (rows.find((row) => row.dataset.messageId === focusedId)?.querySelector("a, button") || toggle)?.focus();
+      if (focusId) (rows.find((row) => row.dataset.messageId === focusId)?.querySelector("a, button") || toggle)?.focus();
     } else {
       list.querySelectorAll("li[data-message-id]").forEach((row) => {
         const item = all.find((one) => one.id === row.dataset.messageId);
@@ -701,8 +721,9 @@
   };
 
   // The server: the list (conditional GET: unchanged costs a 304), read and clear (POST, for every
-  // device). One request at a time; a refresh asked meanwhile runs once it ends. An answer of an
-  // older session (signed out meanwhile) is dropped.
+  // device). One GET at a time; marker POSTs stay independent. Their response describes the list
+  // when that request ran, not when its body reaches this page: only a GET after its completion
+  // confirms the list. An older GET or a response of an ended session is dropped too.
   // ``refresh()`` answers whether the page has the install's list now: true once a list was taken or
   // a 304 confirmed it, false for a failure, a refused or damaged list, or a request of an ended
   // session. sync.js names the messages area as applied only on true and asks again otherwise.
@@ -715,7 +736,7 @@
     const tab = window.towSync?.tab;
     return typeof tab === "string" && tab ? { "X-TOW-Tab": tab } : {};
   };
-  const within = (url, init, read) => {
+  const within = (url, init, read, cancelled = null) => {
     const mine = session;
     const ending = requests; // this session's: a sign-out aborts it
     const controller = newController();
@@ -733,16 +754,44 @@
     });
     const asked = fetch(url, { ...init, signal: controller?.signal || ending?.signal })
       .then((response) => (current() ? read(response, current) : undefined));
-    return Promise.race([asked, late]).finally(() => {
+    const outcomes = [asked, late];
+    if (cancelled) outcomes.push(cancelled.then(() => { over = true; stop(); return { cancelled: true }; }));
+    return Promise.race(outcomes).finally(() => {
       over = true;
       window.clearTimeout(timer);
       ending?.signal?.removeEventListener?.("abort", stop);
     });
   };
   let inFlight = null;
+  let cancelGet = null;
   let next = null; // the one refresh asked for while a request is on its way: sent right after it
+  let observation = 0;
+  let marking = 0;
+  let reconcileNeeded = false;
+  let reconcileTimer = 0;
+  let reconcileDelay = 5000;
+  const invalidate = () => {
+    observation += 1;
+    reconcileNeeded = true;
+    shared.etag = "";
+    cancelGet?.(); // no marker action waits behind the body of an obsolete GET
+  };
+  const reconciled = () => {
+    reconcileNeeded = false;
+    reconcileDelay = 5000;
+    window.clearTimeout(reconcileTimer);
+    reconcileTimer = 0;
+  };
   const accept = (data, etag = "") => {
     if (!data || !Array.isArray(data.items)) return false;
+    data.items.slice(0, LIMIT).forEach((item) => {
+      [item.id, item.source_id].filter(Boolean).forEach((id) => sharedSources.add(clean(id, 80)));
+    });
+    // Keep the identities of this tab's live records; the rest is bounded metadata, never words.
+    for (const id of sharedSources) {
+      if (sharedSources.size <= ANNOUNCED_LIMIT) break;
+      if (!center.find(id)) sharedSources.delete(id);
+    }
     shared = {
       items: data.items.slice(0, LIMIT),
       unread: Math.max(0, Number(data.unread) || 0),
@@ -776,28 +825,56 @@
       whenShown(refresh);
     }, wait);
   };
+  // A marker may have saved even when its answer was lost. Keep asking only for the list until a
+  // fresh GET confirms it, also when sync.js already applied the unchanged messages revision.
+  const reconcileLater = () => {
+    if (ended || !reconcileNeeded || marking || reconcileTimer) return;
+    if (document.hidden) {
+      owed.add(refresh);
+      return;
+    }
+    const mine = session;
+    reconcileTimer = window.setTimeout(() => {
+      reconcileTimer = 0;
+      if (mine === session) whenShown(refresh);
+    }, Math.max(reconcileDelay, blockedUntil - Date.now()));
+    reconcileDelay = Math.min(reconcileDelay * 2, 60000);
+  };
   const ask = () => {
+    const observed = observation;
+    let cancel = null;
+    const cancelled = new Promise((resolve) => { cancel = resolve; });
+    cancelGet = cancel;
     const headers = { Accept: "application/json", ...tabHeader() };
     if (shared.etag) headers["If-None-Match"] = shared.etag;
     const read = async (response, current) => {
-      if (response.status === 304) return shared.loaded;
+      if (response.status === 304) {
+        if (observed !== observation || !shared.loaded || marking) return false;
+        reconciled();
+        return true;
+      }
       if (response.status === 429) {
         limited(response);
         return false;
       }
-      if (response.status === 401) {
-        shared = emptyFeed(); // signed out: nothing of the list stays on the page
-        render();
+      if (response.status === 401 || response.status === 403) {
+        signOut();
         return false;
       }
       if (!response.ok) return false;
       const data = await response.json();
-      if (!current()) return false; // signed out or given up while the body was read
-      return accept(data, response.headers?.get?.("ETag") || "");
+      if (!current() || observed !== observation) return false;
+      if (!accept(data, response.headers?.get?.("ETag") || "") || marking) return false;
+      reconciled();
+      return true;
     };
-    inFlight = within("/messages.json", { credentials: "same-origin", cache: "no-store", headers }, read)
-      .then((taken) => taken === true, () => false)
-      .finally(() => { inFlight = null; });
+    inFlight = within("/messages.json", { credentials: "same-origin", cache: "no-store", headers }, read, cancelled)
+      .then((taken) => taken === true && observed === observation && !marking, () => false)
+      .finally(() => {
+        if (cancelGet === cancel) cancelGet = null;
+        inFlight = null;
+        reconcileLater();
+      });
     return inFlight;
   };
   const start = () => {
@@ -815,7 +892,7 @@
   // panel opening while the tab is shown) are one request.
   let soon = null;
   const refresh = () => {
-    if (typeof fetch !== "function" || Date.now() < blockedUntil) return Promise.resolve(false);
+    if (ended || typeof fetch !== "function" || Date.now() < blockedUntil) return Promise.resolve(false);
     if (!soon) {
       const mine = session;
       soon = Promise.resolve().then(() => {
@@ -832,10 +909,13 @@
   // refresh showed meanwhile.
   // The POST and its body take 10 s at most, as the list's GET (``within``): a longer one is aborted
   // and said once as not saved. It is not sent again by itself (it may have been saved), and an
-  // answer arriving after that is not taken: the next refresh shows what the server kept.
+  // answer arriving after that is not taken. Every completion invalidates older observations and
+  // asks for the list, never by replaying a POST whose outcome is uncertain.
   const mark = (path, { cursor = shared.cursor, again = false } = {}) => {
-    if (typeof fetch !== "function" || !cursor) return Promise.resolve();
+    if (ended || typeof fetch !== "function" || !cursor) return Promise.resolve();
     const mine = session;
+    marking += 1;
+    invalidate();
     const body = new URLSearchParams({ cursor });
     const headers = { Accept: "application/json", ...tabHeader() };
     const read = async (response, current) => {
@@ -847,24 +927,35 @@
       }
       if (!current()) return; // signed out or given up while the body was read
       if (response.ok) {
-        accept(data);
+        if (!Array.isArray(data?.items)) failed("");
         return;
       }
-      if (response.status === 429 && !again) {
-        const retry = () => { if (mine === session) mark(path, { cursor, again: true }); };
-        window.setTimeout(() => { if (mine === session) whenShown(retry); }, retryAfterMs(response));
+      if (response.status === 401 || response.status === 403) {
+        signOut();
         return;
+      }
+      if (response.status === 429) {
+        limited(response);
+        if (!again) {
+          const retry = () => { if (mine === session) mark(path, { cursor, again: true }); };
+          window.setTimeout(() => { if (mine === session) whenShown(retry); }, retryAfterMs(response));
+          return;
+        }
       }
       if (response.status === 409) {
-        shared.etag = "";
-        refresh(); // another device changed the list meanwhile: shown anew
-        return;
+        return; // another device changed the list meanwhile: shown anew by the GET below
       }
       failed(data?.error);
     };
     return within(path, { method: "POST", credentials: "same-origin", headers, body }, read)
       .then((outcome) => { if (outcome?.timedOut && mine === session) failed(""); })
-      .catch(() => { if (mine === session) failed(""); }); // aborted by a sign-out: nothing to say
+      .catch(() => { if (mine === session) failed(""); })
+      .finally(() => {
+        if (mine !== session) return;
+        marking -= 1;
+        invalidate();
+        whenShown(refresh);
+      });
   };
   if (menu && toggle) {
     menu.addEventListener("toggle", () => {

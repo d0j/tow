@@ -18,7 +18,7 @@ from tow.clients.spec import DEFAULT_KIND
 from tow.clients.view import topics_using
 from tow.config import interval_sec_of, whole_number
 from tow.store_transaction import StoreTransaction
-from tow.web import edit_base, services, settings_merge
+from tow.web import _context, edit_base, services, settings_merge
 from tow.web.messages import flash_redirect, use_subject
 from tow.web.site_store import SIGN_IN_PASSWORD, is_sign_in_password, save_secrets_with_undo, save_together
 from tow.web.text import t
@@ -254,13 +254,23 @@ def settings_client_ping(client_id: str = Form("")) -> Response:
         reason = _ping_reason(e)
         msg = t("web.settings.ping_failed", error=reason) if reason else t("web.settings.ping_silent")
         kind = "err"
-        services.log_event("qbit_unreachable", client_id=client_id or None, error=reason, cls="qbit", how="manual")
+        services.log_event(
+            "qbit_unreachable",
+            client_id=client_id or None,
+            title=_context.subject(),
+            error=reason,
+            cls="qbit",
+            how="manual",
+        )
         _client_answered(client_id, answered=False)
     else:
         # Outside the client's "except": a save that fails (a data file held by another
         # program) is the app's "try again", never "no connection" for a client that answered.
         msg, kind = t("web.settings.ping_ok", version=version), "ok"
         _client_answered(client_id)
+        services.log_event(
+            "client_checked", client_id=client_id or None, title=_context.subject(), version=version, how="manual"
+        )
     return flash_redirect(_clients_target(client_id), msg, kind)
 
 

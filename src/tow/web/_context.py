@@ -27,7 +27,7 @@ class RequestContext:
     """Values read once per request, by name; and what the request's messages are about (its
     ``subject``: kept apart from the values, which a write during the request drops)."""
 
-    __slots__ = ("_frozen", "_generation", "_values", "subject")
+    __slots__ = ("_frozen", "_generation", "_values", "feedback_preview", "subject")
 
     def __init__(self, values: Mapping[str, tuple[bool, Any]] | None = None) -> None:
         self._generation = services.write_generation()
@@ -35,6 +35,7 @@ class RequestContext:
         # Seeded with one snapshot (``seeded``): a write elsewhere never mixes another one in.
         self._frozen = values is not None
         self.subject = ""
+        self.feedback_preview = False
 
     def get(self, name: str, load: Callable[[], Any], *, keep_errors: tuple[type[BaseException], ...] = ()) -> Any:
         generation = services.write_generation()

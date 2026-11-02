@@ -20,6 +20,7 @@ from typing import Any
 
 from tow import i18n
 from tow.store import CheckBusyError
+from tow.web import services
 
 LOCK = threading.RLock()
 JOBS: dict[str, dict[str, Any]] = {}
@@ -387,6 +388,34 @@ def _finish(job: dict[str, Any]) -> None:
         job.update(finished_at=time.monotonic(), ended_at=time.time())
         PENDING.remove(job["id"])
         _changed()
+        result = copy.deepcopy(job)
+    _publish_result(result)
+
+
+def _publish_result(job: dict[str, Any]) -> None:
+    """One shared final result of applying work, never a write made by a polling page."""
+    if not job.get("apply"):
+        return
+    from tow.web.views import check_job_message
+
+    def publish() -> None:
+        i18n.use(str(job.get("lang") or i18n.current()))
+        services.record_message_feedback(
+            {
+                "id": "check-" + str(job["id"]),
+                "kind": str(job.get("kind") or ("info" if job.get("cancelled") else "err")),
+                "text": check_job_message(job),
+                "subject": str(job.get("subject") or ""),
+                "href": "/?check_result=" + str(job["id"]) + "#check-result" if job.get("report") else "/history",
+            }
+        )
+
+    try:
+        contextvars.copy_context().run(publish)
+    except Exception as exc:  # noqa: BLE001 - feedback never strands the queue after the work completed
+        logging.getLogger("tow.web").warning(
+            "a completed check's shared message could not be saved: %s", type(exc).__name__
+        )
 
 
 def get(job_id: str) -> dict[str, Any] | None:
@@ -431,4 +460,6 @@ def cancel(job_id: str) -> bool:
     words = drop(follow_up, str(job.get("lang") or ""))
     with LOCK:
         _said(job, words)
+        result = copy.deepcopy(job)
+    _publish_result(result)
     return True

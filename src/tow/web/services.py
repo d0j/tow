@@ -56,10 +56,11 @@ from tow.issues import collect as collect_issues
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
-from tow.log import history_events, log_event, read_events, scrub_text
+from tow.log import history_events, log_event, observe_events, read_events, scrub_text
 from tow.messages_feed import MarkerRefused as MessageMarkerRefused
 from tow.messages_feed import feed as message_feed
 from tow.messages_feed import reconcile_update as reconcile_update_result
+from tow.messages_feed import record_feedback as record_message_feedback
 from tow.messages_feed import render as render_message_feed
 from tow.mirrors import mirror_observations
 from tow.mirrors import note_signed_in as _note_signed_in
@@ -211,6 +212,7 @@ __all__ = [
     "night_cleanup_status_unlocked",
     "note_signed_in",
     "notify_topic_error",
+    "observe_events",
     "persistence_lock",
     "prefer_host",
     "prepare_content",
@@ -222,6 +224,7 @@ __all__ = [
     "read_only_paths",
     "reconcile_update_result",
     "record_check_failure",
+    "record_message_feedback",
     "recover_store_transaction",
     "release_cached",
     "release_relocation",

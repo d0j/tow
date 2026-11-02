@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, Response
 from tow.check import blocked_by_previous_revision
 from tow.log import error_fields
 from tow.store import CheckBusyError, SecretStoreError
-from tow.web import check_jobs, services
+from tow.web import _context, check_jobs, services
 from tow.web.check_actions import accept_check, action_of, enqueue_check, topic_feedback
 from tow.web.messages import flash_redirect, record
 from tow.web.text import t
@@ -104,6 +104,8 @@ def _check_topic(tid: str, *, adopted: bool = False, action: str = "") -> Respon
 
 @router.post("/check")
 def check(mode: str = Form("dry"), action_id: str = Form("")) -> Response:
+    if mode != "apply" and (context := _context.current()) is not None:
+        context.feedback_preview = True
     if action := action_of(action_id):
         return accept_check(topic_id="", apply=mode == "apply", action=action)
     return enqueue_check(topic_id="", apply=mode == "apply")
@@ -141,6 +143,9 @@ def cancel_check(request: Request, job: str) -> Response:
     the answer stays where the page is, and a cancelled check says nothing of its own: its own
     message ("removed from the queue", info) is its one record. Without the script (a native
     POST, no followed check) the redirect says it."""
+    current = check_jobs.get(job)
+    if current is not None and not current.get("apply") and (context := _context.current()) is not None:
+        context.feedback_preview = True
     if request.headers.get("x-tow-fetch") == "1":
         cancelled = check_jobs.cancel(job)
         if cancelled:
@@ -149,6 +154,8 @@ def cancel_check(request: Request, job: str) -> Response:
             message = record(t("web.check_all.cancel_unknown"), "warn", subject="")
         else:
             message = record(t("web.check_all.cannot_cancel"), "warn", subject="")
+        if message is not None and not bool(getattr(_context.current(), "feedback_preview", False)):
+            services.record_message_feedback(message)
         return JSONResponse(
             {"cancelled": cancelled, "job": job, "message": message}, headers={"Cache-Control": "no-store"}
         )
@@ -157,7 +164,7 @@ def cancel_check(request: Request, job: str) -> Response:
         said = (check_jobs.get(job) or {}).get("feedback") or {}
         if said.get("text"):
             return flash_redirect("/", said["text"], str(said.get("kind") or "warn"))
-        return flash_redirect("/", "web.check_all.cancelled")
+        return flash_redirect("/", "web.check_all.cancelled", "info")
     if check_jobs.get(job) is None:  # never started here, or its record is gone: nothing to say it did
         return flash_redirect("/", "web.check_all.cancel_unknown", "warn")
     return flash_redirect("/", "web.check_all.cannot_cancel", "warn")
