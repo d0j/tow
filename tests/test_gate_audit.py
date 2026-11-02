@@ -69,6 +69,14 @@ function uvx {
     $script:rows.Add(@{expected=$expected; actual=[IO.File]::ReadAllText($target)})
     $global:LASTEXITCODE = if ($env:TOW_TEST_CASE -eq 'audit_failure') { 9 } else { 0 }
 }
+if ($env:TOW_TEST_LEAK -eq '1') {
+    # Negative control: leave only the requirements this invocation reserved, not arbitrary files.
+    function Remove-Item([string]$LiteralPath, [switch]$Force, [string]$ErrorAction) {
+        if (-not $script:exports.Contains([IO.Path]::GetFullPath($LiteralPath))) {
+            throw 'unexpected cleanup target'
+        }
+    }
+}
 $Audit = $true
 $failure = $null
 try { & $script:body }
@@ -78,14 +86,36 @@ catch { $failure = $_.Exception.Message }
 """
 
 
-@pytest.mark.allow_system
-@pytest.mark.parametrize("case", ["success", "overlap", "export_failure", "audit_failure"])
-def test_gate_audit_owns_its_requirements_and_cleans_up(tmp_path, case):
+def _borrowed_files(scratch: Path) -> dict[Path, bytes]:
+    # Unix .NET owns .dotnet runtime/IPC data, not the gate. Give it an existing directory:
+    # https://github.com/dotnet/runtime/blob/v10.0.13/src/coreclr/pal/src/include/pal/sharedmemory.h
+    # Its presence is no reason to ignore a new root entry or a gate-owned requirements file.
+    originals = {
+        scratch / ".dotnet" / "runtime-owned": b"runtime fixture",
+        scratch / "borrowed.txt": b"another operation's file",
+    }
+    for path, content in originals.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    return originals
+
+
+def _assert_cleanup(scratch: Path, exports: list[str], originals: dict[Path, bytes]) -> None:
+    remaining = [Path(value) for value in exports if Path(value).exists()]
+    assert not remaining, f"gate-owned requirements remain: {remaining}"
+    expected = {scratch / path.relative_to(scratch).parts[0] for path in originals}
+    assert set(scratch.iterdir()) == expected, "unexpected temporary entries remain"
+    for path, content in originals.items():
+        assert path.read_bytes() == content, f"borrowed file changed: {path}"
+
+
+def _run_audit(tmp_path: Path, case: str, *, leak: bool = False) -> tuple[dict, Path, dict[Path, bytes]]:
     shell = shutil.which("pwsh")
     if shell is None:
         pytest.skip("PowerShell is not installed")
     scratch = tmp_path / "audit temp"
     scratch.mkdir()
+    originals = _borrowed_files(scratch)
     environment = {
         **os.environ,
         "TEMP": str(scratch),
@@ -94,6 +124,7 @@ def test_gate_audit_owns_its_requirements_and_cleans_up(tmp_path, case):
         "TOW_TEST_TEMP": str(scratch),
         "TOW_TEST_GATE": str(GATE),
         "TOW_TEST_CASE": case,
+        "TOW_TEST_LEAK": "1" if leak else "0",
     }
     done = subprocess.run(
         [shell, "-NoProfile", "-NonInteractive", "-Command", HARNESS],
@@ -104,7 +135,13 @@ def test_gate_audit_owns_its_requirements_and_cleans_up(tmp_path, case):
         check=False,
     )
     assert done.returncode == 0, done.stdout + done.stderr
-    result = json.loads(done.stdout)
+    return json.loads(done.stdout), scratch, originals
+
+
+@pytest.mark.allow_system
+@pytest.mark.parametrize("case", ["success", "overlap", "export_failure", "audit_failure"])
+def test_gate_audit_owns_its_requirements_and_cleans_up(tmp_path, case):
+    result, scratch, originals = _run_audit(tmp_path, case)
     assert result["failure"] == {
         "export_failure": "fixture failure: export locked requirements",
         "audit_failure": "fixture failure: pip-audit",
@@ -114,4 +151,25 @@ def test_gate_audit_owns_its_requirements_and_cleans_up(tmp_path, case):
     assert len(result["exports"]) == len(set(result["exports"])) == expected_exports
     expected_audits = 0 if case == "export_failure" else expected_exports
     assert len(result["rows"]) == expected_audits
-    assert list(scratch.iterdir()) == []
+    _assert_cleanup(scratch, result["exports"], originals)
+
+
+@pytest.mark.allow_system
+@pytest.mark.parametrize("case", ["success", "overlap", "export_failure", "audit_failure"])
+def test_a_gate_owned_requirements_leak_fails_the_cleanup_check(tmp_path, case):
+    result, scratch, originals = _run_audit(tmp_path, case, leak=True)
+    assert result["failure"] == {
+        "export_failure": "fixture failure: export locked requirements",
+        "audit_failure": "fixture failure: pip-audit",
+    }.get(case), result
+    assert len(result["exports"]) == (2 if case == "overlap" else 1)
+    assert all(Path(value).is_file() for value in result["exports"])
+    with pytest.raises(AssertionError, match="gate-owned requirements remain"):
+        _assert_cleanup(scratch, result["exports"], originals)
+
+
+def test_an_unrecorded_requirements_leak_fails_the_cleanup_check(tmp_path):
+    originals = _borrowed_files(tmp_path)
+    (tmp_path / "unexpected-requirements.txt").write_text("leaked", encoding="utf-8")
+    with pytest.raises(AssertionError, match="unexpected temporary entries remain"):
+        _assert_cleanup(tmp_path, [], originals)
