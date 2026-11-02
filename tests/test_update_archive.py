@@ -20,6 +20,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 from test_update import SCRIPT, Fake, updater
@@ -95,7 +96,7 @@ def github(monkeypatch, loopback_http_server):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     monkeypatch.setattr(urllib.request, "getproxies", dict)  # no proxy between the test and its server
-    site.url = f"http://127.0.0.1:{server.server_address[1]}"  # type: ignore[attr-defined]
+    site.url = f"http://{server.server_address[0]}:{server.server_address[1]}"  # type: ignore[attr-defined]
     try:
         yield site
     finally:
@@ -168,7 +169,7 @@ def test_the_latest_release_is_downloaded_checked_and_switched_to(install, githu
     assert (record["status"], record["target"], record["previous"]) == ("ok", "v1.23.0", "v1.22.0")
     assert lines[0] == f"downloading SHA256SUMS ({github.url}/{REPO}/releases/download/v1.23.0/SHA256SUMS)"
     # The web log keeps only the host of a URL: the file is still named there.
-    assert scrub_text(lines[0]).startswith("downloading SHA256SUMS (http://127.0.0.1:")
+    assert scrub_text(lines[0]).startswith(f"downloading SHA256SUMS (http://{urlsplit(github.url).hostname}:")
     assert "TOW update: v1.22.0 → v1.23.0 (latest) in" in lines[2]
     assert lines[-1] == "TOW 1.23.0 is running and answers on 127.0.0.1:18999"
     assert f"/{REPO}/archive/refs/tags/v1.23.0.tar.gz" in github.asked  # GitHub's archive of the tag
@@ -346,7 +347,7 @@ def test_a_download_is_not_redirected_to_another_host(install, github):
     over HTTPS; urllib followed one to any host, http and ftp included."""
     archive = tarball("1.23.0")
     github.release("v1.23.0", archive)
-    elsewhere = github.url.replace("127.0.0.1", "localhost") + "/elsewhere/SHA256SUMS"
+    elsewhere = github.url.replace(str(urlsplit(github.url).hostname), "localhost") + "/elsewhere/SHA256SUMS"
     github.routes[f"/{REPO}/releases/download/v1.23.0/SHA256SUMS"] = (302, b"", {"Location": elsewhere})
     github.routes["/elsewhere/SHA256SUMS"] = (200, sums(**{"tow-source.tar.gz": archive}), {})
     machine = Machine(install["app"], github)

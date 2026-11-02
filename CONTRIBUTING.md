@@ -64,6 +64,10 @@ the `installers` workflow on 24.04). The legacy
   `.github/workflows/real.yml` and `autostart.yml` set on a CI runner: never run them on your machine.
 - Use fake clients, fake HTTP and injected platform backends (`tow.platform.use`); never a live client, site or
   messenger.
+- Synthetic HTTP fixture servers use `127.0.0.1` by default. If local network software resets that address's
+  connections, `TOW_TEST_LOOPBACK_HOST=127.0.0.2` selects a separate loopback address for those fixtures only.
+  The tests still perform the same transfers, integrity checks and failures; production trust guards and OS
+  network settings are unchanged. No other address is accepted.
 - Guard tests keep the structure while code moves: `test_layers.py` (which module may import which),
   `test_web_boundary.py` (the web reaches the rest through `tow.web.services`), `test_module_boundaries.py`
   (private names), `test_stdlib_only.py` (the updater and its worker), `test_updater_contract.py`,

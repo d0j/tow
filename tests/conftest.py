@@ -515,7 +515,7 @@ def _fresh_task_cache(monkeypatch):
 # Live local services a test must never reach, even on loopback: qBittorrent WebUI,
 # TOW itself, Transmission, Deluge daemon and Deluge Web.
 _SERVICE_PORTS = frozenset({8080, 8112, 8787, 8788, 9091, 58846})
-_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "127.0.0.2", "::1", "localhost"})
 
 
 def _refused_endpoint(host, port) -> bool:
@@ -533,8 +533,11 @@ def loopback_http_server():
     import http.server
 
     def create(handler):
+        host = os.environ.get("TOW_TEST_LOOPBACK_HOST", "127.0.0.1")
+        if host not in {"127.0.0.1", "127.0.0.2"}:
+            raise ValueError("TOW_TEST_LOOPBACK_HOST must be exactly 127.0.0.1 or 127.0.0.2")
         for _ in range(32):
-            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            server = http.server.ThreadingHTTPServer((host, 0), handler)
             if not _refused_endpoint(*server.server_address):
                 return server
             server.server_close()

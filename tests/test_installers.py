@@ -692,6 +692,36 @@ def test_install_ps1_refuses_a_zip_entry_outside_its_tow_folder(tmp_path):
     assert not folder.exists()  # a folder this run created goes again
 
 
+def _installer_at_test_host(text: str, host: str) -> str:
+    """Adapt the one test-origin guard in a throwaway copy; production stays unchanged."""
+    if host == "127.0.0.1":
+        return text
+    if host != "127.0.0.2":
+        raise ValueError("not an exact installer test-loopback host")
+    guard = r"^http://127\.0\.0\.1:\d+/"
+    if text.count(guard) != 1:
+        raise ValueError("the installer test-origin guard changed")
+    return text.replace(guard, r"^http://127\.0\.0\.2:\d+/", 1)
+
+
+@pytest.mark.parametrize("copies", [0, 2])
+def test_installer_origin_adaptation_refuses_a_missing_or_ambiguous_guard(copies):
+    text = PS1.read_text(encoding="utf-8")
+    guard = r"^http://127\.0\.0\.1:\d+/"
+    drifted = text.replace(guard, guard * copies)
+    with pytest.raises(ValueError, match="test-origin guard changed"):
+        _installer_at_test_host(drifted, "127.0.0.2")
+
+
+def test_installer_origin_adaptation_changes_only_the_exact_test_guard():
+    text = PS1.read_text(encoding="utf-8")
+    assert _installer_at_test_host(text, "127.0.0.1") == text
+    adapted = _installer_at_test_host(text, "127.0.0.2")
+    assert adapted.replace(r"^http://127\.0\.0\.2:\d+/", r"^http://127\.0\.0\.1:\d+/", 1) == text
+    with pytest.raises(ValueError, match="exact installer test-loopback"):
+        _installer_at_test_host(text, "192.0.2.1")
+
+
 @pytest.mark.allow_system  # install.ps1 downloading from a loopback test server into a temp folder
 @pytest.mark.skipif(os.name != "nt", reason="install.ps1 installs on Windows")
 @pytest.mark.parametrize("shell", ["powershell", "pwsh"])
@@ -735,12 +765,19 @@ def test_install_ps1_downloads_into_a_folder_with_brackets(tmp_path, shell, matc
         folder = parent / "TOW"
         env = {
             **os.environ,
-            "TOW_INSTALL_URL": f"http://127.0.0.1:{server.server_address[1]}/v9.9.9",
+            "TOW_INSTALL_URL": f"http://{server.server_address[0]}:{server.server_address[1]}/v9.9.9",
             "TOW_NO_BROWSER": "1",
         }
         for name in ("TOW_INSTALL_SOURCE", "TOW_INSTALL_SUMS", "TOW_VERSION", "TOW_INSTALL_DIR"):
             env.pop(name, None)
-        argv = [program, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(PS1)]
+        installer = PS1
+        if server.server_address[0] == "127.0.0.2":
+            # Only this throwaway copy downloads from the selected synthetic origin.
+            # The shipped installer's original origin guard is tested separately below.
+            text = PS1.read_text(encoding="utf-8")
+            installer = tmp_path / "install.ps1"
+            installer.write_text(_installer_at_test_host(text, server.server_address[0]), encoding="utf-8-sig")
+        argv = [program, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(installer)]
         done = subprocess.run(
             [*argv, "-Dir", str(folder), "-Yes"], capture_output=True, text=True, env=env, timeout=180, check=False
         )
@@ -766,12 +803,13 @@ def test_install_ps1_downloads_into_a_folder_with_brackets(tmp_path, shell, matc
 
 @pytest.mark.allow_system
 @pytest.mark.parametrize("shell", ["pwsh", "powershell"])
-def test_install_ps1_takes_test_downloads_only_from_this_computer(tmp_path, shell):
+@pytest.mark.parametrize("origin", ["http://example.com/v9.9.9", "http://127.0.0.2:18999/v9.9.9"])
+def test_install_ps1_takes_test_downloads_only_from_this_computer(tmp_path, shell, origin):
     program = shutil.which(shell)
     if program is None:
         pytest.skip(f"no {shell} here")
     folder = tmp_path / "TOW"
-    env = {**os.environ, "TOW_INSTALL_URL": "http://example.com/v9.9.9", "TOW_NO_BROWSER": "1"}
+    env = {**os.environ, "TOW_INSTALL_URL": origin, "TOW_NO_BROWSER": "1"}
     env.pop("TOW_INSTALL_SOURCE", None)
     done = subprocess.run(
         [program, "-NoProfile", "-NonInteractive", "-File", str(PS1), "-Dir", str(folder), "-Yes"],
