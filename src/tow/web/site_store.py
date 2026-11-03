@@ -93,12 +93,15 @@ def save_secrets_with_undo(
     secret_scope: list[str],
     *,
     client_observation_id: str | None = None,
+    client_access_contexts: tuple[dict[str, Any], dict[str, Any]] | None = None,
 ) -> RedirectResponse | None:
     """New secrets and the undo that puts the ``secret_scope`` part back, as one transaction."""
     state = services.load_state()
 
     def write(txn: StoreTransaction) -> None:
         settings_undo(txn, state, secrets_before, old_sec, secret_scope)
+        if client_access_contexts is not None:
+            services.client_access.credentials_changed(state, *client_access_contexts)
         if client_observation_id:
             services.invalidate_file_observations(state, services.load_config(), client_observation_id)
             state["undo"]["file_observation_client_id"] = client_observation_id

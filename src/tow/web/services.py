@@ -24,6 +24,7 @@ from functools import wraps
 from threading import BoundedSemaphore
 from typing import Any
 
+from tow import client_access
 from tow.access import credential as network_credential
 from tow.access import is_sign_in_secret, set_session_cookie, sign_out, sign_out_everywhere
 from tow.adopt import adopt_topic
@@ -182,6 +183,7 @@ __all__ = [
     "check_restore_point",
     "check_snapshot",
     "cleanup_secret_undo",
+    "client_access",
     "client_answers",
     "client_continuation_status",
     "client_from_secrets",

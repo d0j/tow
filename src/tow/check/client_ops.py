@@ -387,9 +387,18 @@ def remote_clients(cfg: dict[str, Any], secrets: dict[str, Any]) -> frozenset[st
         rows = client_factory.client_configurations(cfg)
     except TowError, RuntimeError, ValueError:
         return frozenset()
-    return frozenset(
-        str(row["id"]) for row in rows if not client_factory.on_this_computer(cfg, secrets, str(row["id"]))
-    )
+    remote = set()
+    for row in rows:
+        if not row.get("enabled", True):
+            continue
+        ident = str(row["id"])
+        try:
+            local = client_factory.on_this_computer(cfg, secrets, ident)
+        except AttributeError, ValueError, TypeError:
+            local = False  # invalid/unknown addresses must never use this computer's disks
+        if not local:
+            remote.add(ident)
+    return frozenset(remote)
 
 
 def _open_client(cfg: dict[str, Any], secrets: dict[str, Any], client_id: str, *, apply: bool) -> TorrentClientAdapter:
@@ -440,6 +449,7 @@ class ClientPool:
     asked: bool = True
     # A saved server refusal excludes ping/list on this connection as well.
     deferred: frozenset[str] = frozenset()
+    observe_failure: Callable[[str, Exception], Exception] | None = None
 
     def _answered(self, client_id: str, client: TorrentClientAdapter) -> str:
         """Ping the client; one that lists no torrent at all, although it had TOW's at the last
@@ -478,6 +488,8 @@ class ClientPool:
             self.ping = self._answered(client_id, client)
             self.clients[client_id] = client
         except Exception as e:  # noqa: BLE001 - any failure to reach the client is 'the client is down' (recorded)
+            if self.observe_failure is not None:
+                e = self.observe_failure(client_id, e)
             self.ping = str(e) if _still_starting(e) else f"down: {e}"
             self.errors[client_id] = e
             self.record(
@@ -512,6 +524,8 @@ class ClientPool:
             adapter = _open_client(self.cfg, secrets, wanted, apply=self.apply)
             self._answered(wanted, adapter)  # a second client that is down is reported like the main one
         except Exception as e:  # noqa: BLE001 - any failure to reach the client is 'the client is down' (recorded)
+            if self.observe_failure is not None:
+                e = self.observe_failure(wanted, e)
             self.errors[wanted] = e
             self.ok[wanted] = _still_starting(e)
             self.record(

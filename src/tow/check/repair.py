@@ -6,7 +6,7 @@ import shutil
 import time
 from typing import TYPE_CHECKING, Any
 
-from tow import file_repair
+from tow import client_access, file_repair
 from tow.check import client_waits
 from tow.check.client_ops import claimed_by_other_topic
 from tow.check.rows import set_error
@@ -110,6 +110,7 @@ def _record_repair(run: CheckRun, topic: Topic, receipt: dict[str, Any], kind: s
 
 
 def _block(topic: Topic, run: CheckRun, row: dict[str, Any], receipt: dict[str, Any], error: TowError) -> None:
+    observation_id = client_waits.note_failure(run, str(receipt.get("client") or ""), error)
     fields = error_fields(error)
     if _save(
         topic,
@@ -119,6 +120,7 @@ def _block(topic: Topic, run: CheckRun, row: dict[str, Any], receipt: dict[str, 
         blocked_params=fields.get("error_params") or {},
         next_at=0,
         owner_required=error.code == "repair.failed",
+        http_refusal_id=observation_id,
     ):
         _record_repair(run, topic, receipt, "files_repair_failed", **fields)
     _show(row, receipt)
@@ -133,6 +135,7 @@ def _wait(
     connection: bool = False,
     server_wait: float = 0,
 ) -> None:
+    client_waits.note_failure(run, str(receipt.get("client") or ""), error)
     code = "repair.waiting_client" if connection else _WAIT_ERRORS[error.code]
     waiting = TowError(code, **dict(error.params))
     previous = receipt.get("retry_error") or {}
@@ -349,7 +352,10 @@ def _step(topic: Topic, run: CheckRun, row: dict[str, Any], receipt: dict[str, A
     if receipt["attempts"] and not _save(topic, receipt, attempts=0):
         return False
     if receipt.get("blocked"):
-        _continue_blocked(topic, run, receipt, client, info)
+        if client_access.receipt_auth_pending(receipt, now=now):
+            _observe_auth_goal(topic, run, receipt, client, info)
+        else:
+            _continue_blocked(topic, run, receipt, client, info)
         return True
     if receipt["phase"] == "requested":
         if _checking(info):
@@ -360,6 +366,27 @@ def _step(topic: Topic, run: CheckRun, row: dict[str, Any], receipt: dict[str, A
     else:
         _follow(topic, run, receipt, client, info)
     return True
+
+
+def _observe_auth_goal(
+    topic: Topic, run: CheckRun, receipt: dict[str, Any], client: TorrentClientAdapter, info: dict[str, Any]
+) -> None:
+    evidence = _preconditions(topic, run, client, receipt, info)
+    if not any(evidence[key] for key in ("absent", "unknown", "incomplete")):
+        file_repair.persist(topic, None, expected_id=receipt["id"])
+    elif _running(info):
+        _save(
+            topic,
+            receipt,
+            phase="downloading",
+            running_existing=True,
+            running_seen=True,
+            blocked="",
+            blocked_params={},
+            next_at=0,
+        )
+    elif is_stopped(info):
+        raise TowError("repair.client_stopped")
 
 
 def _continue_blocked(
@@ -403,7 +430,17 @@ def recheck(topic: Topic, run: CheckRun, row: dict[str, Any]) -> bool:
         return False
     _show(row, receipt)
     observing_start = bool(receipt.get("blocked")) and file_repair.continuation_pending(topic)
-    if receipt.get("blocked") and not observing_start:
+    observing_auth = client_access.receipt_auth_pending(receipt, now=time.time())
+    if observing_auth and client_waits.deferred(
+        topic,
+        now=time.time(),
+        cfg=getattr(run, "client_config", None),
+        state=run.state,
+        secrets=getattr(run, "secrets", None),
+    ):
+        row["client_retry_deferred"] = True
+        return True
+    if receipt.get("blocked") and not observing_start and not observing_auth:
         return False  # a terminal repair never disables ordinary tracker observation
     if not run.apply:
         return not observing_start

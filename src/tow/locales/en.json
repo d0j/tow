@@ -2779,6 +2779,8 @@
       "notifier_saved": "{title}: saved — press “Check”",
       "notifier_off": "{title}: disconnected",
       "ping_ok": "connected: {version}",
+      "client_wait": "The client requested a pause. Testing is available after {at}.",
+      "client_changed": "The connection changed during the test. Its current state is shown; the old result was not applied.",
       "ping_failed": "no connection: {error}",
       "ping_silent": "the client does not answer",
       "clamped_interval": "interval {minutes} min (allowed {low}–{high})",

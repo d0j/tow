@@ -24,7 +24,7 @@ from tow.store import load_state, save_state
 
 def pin(monkeypatch):
     clock = {"now": datetime.now(UTC).timestamp()}
-    for module in (verification, space, reconcile, check_run):
+    for module in (verification, space, reconcile, check_run, client_waits):
         monkeypatch.setattr(module, "machine_now", lambda: datetime.fromtimestamp(clock["now"], UTC))
     return clock
 

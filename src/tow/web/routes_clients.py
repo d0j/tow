@@ -6,7 +6,9 @@ from __future__ import annotations
 import copy
 import ipaddress
 import re
+import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -16,6 +18,7 @@ from fastapi.responses import RedirectResponse, Response
 from tow import undo
 from tow.clients.spec import DEFAULT_KIND
 from tow.clients.view import topics_using
+from tow.clock import format_ui_timestamp
 from tow.config import interval_sec_of, whole_number
 from tow.store_transaction import StoreTransaction
 from tow.web import _context, edit_base, services, settings_merge
@@ -206,6 +209,10 @@ def settings_client(
         old_sec,
         secret_scope,
         client_observation_id=ident if endpoint_changed else None,
+        client_access_contexts=(
+            services.client_access.context(cfg, undo_secrets, ident),
+            services.client_access.context(cfg, s, ident),
+        ),
     ):
         return refused
     services.log_event("settings_client", client_id=configuration["id"], client_kind=selected_kind, how="manual")
@@ -251,13 +258,29 @@ def _name_client(client_id: str) -> None:
 @router.post("/settings/client/ping")
 def settings_client_ping(client_id: str = Form("")) -> Response:
     _name_client(client_id)
+    context = None
+    auth_id = ""
     try:
+        cfg = services.load_config()
+        secrets = services.load_secrets()
+        context = services.client_access.context(cfg, secrets, client_id or None)
+        state = services.load_state()
+        wait = services.client_access.server_wait(state, context, now=time.time())
+        if wait:
+            return _clients_redirect(
+                "web.settings.client_wait",
+                "info",
+                card=client_id,
+                at=format_ui_timestamp(datetime.fromtimestamp(wait["not_before"], UTC).isoformat()),
+            )
+        auth_id = services.client_access.capture(state, context)
         # One quick try first: nothing listening fails in seconds, not after the library's retries.
         if not services.client_answers(client_id or None):
             raise ConnectionError  # answered as the client library's own "no connection"
-        cfg = services.load_config()
-        version = services.client_from_secrets(cfg, services.load_secrets(), client_id or None).ping()
+        version = services.client_from_secrets(cfg, secrets, client_id or None).ping()
     except Exception as e:  # noqa: BLE001 - a client library fails in its own ways: "Check" names the class only
+        if not _client_answered(client_id, answered=False, context=context, auth_id=auth_id, error=e):
+            return _clients_redirect("web.settings.client_changed", "info", card=client_id)
         reason = _ping_reason(e)
         msg = t("web.settings.ping_failed", error=reason) if reason else t("web.settings.ping_silent")
         kind = "err"
@@ -269,26 +292,31 @@ def settings_client_ping(client_id: str = Form("")) -> Response:
             cls="qbit",
             how="manual",
         )
-        _client_answered(client_id, answered=False)
     else:
         # Outside the client's "except": a save that fails (a data file held by another
         # program) is the app's "try again", never "no connection" for a client that answered.
+        if not _client_answered(client_id, context=context, auth_id=auth_id):
+            return _clients_redirect("web.settings.client_changed", "info", card=client_id)
         msg, kind = t("web.settings.ping_ok", version=version), "ok"
-        _client_answered(client_id)
         services.log_event(
             "client_checked", client_id=client_id or None, title=_context.subject(), version=version, how="manual"
         )
     return flash_redirect(_clients_target(client_id), msg, kind)
 
 
-def _client_answered(client_id: str, *, answered: bool = True) -> None:
+def _client_answered(
+    client_id: str,
+    *,
+    answered: bool = True,
+    context: dict[str, Any] | None = None,
+    auth_id: str = "",
+    error: Exception | None = None,
+) -> bool:
     """The header and Settings show what "Check" found at once, not at the next check: a
     client set up (or repaired) and checked here stayed red or grey until then, and one that
     refused the password here stayed green. An answer is recorded as a check records it; a
     failure only as a mark (``ping_failed``) the next check drops - recorded as the check's
     own "not answering", it would swallow that check's message about the client."""
-    import time
-
     from tow.clients.factory import client_configurations, default_client_id
 
     with services.persistence_lock():
@@ -299,7 +327,24 @@ def _client_answered(client_id: str, *, answered: bool = True) -> None:
         default = default_client_id(cfg)
         wanted = client_id or default
         if wanted not in {str(client["id"]) for client in client_configurations(cfg)}:
-            return  # a form naming no configured client: nothing about it to record
+            return False  # a form naming no configured client: nothing about it to record
+        if context is not None:
+            fresh = services.client_access.context(cfg, services.load_secrets(), wanted)
+            temporary = bool(
+                error is not None
+                and fresh["endpoint"] == context["endpoint"]
+                and services.client_access.temporary_http(error)
+            )
+            if temporary and error is not None:
+                services.client_access.observe(state, fresh, error, now=time.time())
+            if fresh != context or services.client_access.capture(state, context) != auth_id:
+                if temporary:
+                    services.save_state(state)  # the same server's pause also applies to new credentials
+                return False  # an old test cannot replace the current connection's observation
+            if answered:
+                services.client_access.acknowledge(state, context, auth_id)
+            elif error is not None and not temporary:
+                services.client_access.observe(state, context, error, now=time.time())
         marks = health.get("ping_failed")
         failed = {k: v for k, v in (marks.items() if isinstance(marks, dict) else ()) if k != wanted}
         if answered:
@@ -315,6 +360,7 @@ def _client_answered(client_id: str, *, answered: bool = True) -> None:
             health.pop("ping_failed", None)
         state["health"] = health
         services.save_state(state)
+    return True
 
 
 def _ping_reason(exc: Exception) -> str:

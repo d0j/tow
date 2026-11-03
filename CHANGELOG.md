@@ -26,6 +26,9 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   while invalid credentials remain actionable. Watchdog alerts enter the durable queue before being acknowledged.
 - Backup health belongs to its current folder. Successful cleanup clears an update's obsolete warning;
   damaged retained copies cannot cause deletion of the last valid restore point.
+- Client server pauses persist independently of torrent tasks and also cover Settings tests. Corrected
+  credentials release stale read refusals without authorizing another start; late old test results cannot
+  replace the current connection's health.
 
 ## [1.35.1] — 2026-11-03
 
