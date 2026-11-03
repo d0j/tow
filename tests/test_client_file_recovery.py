@@ -304,10 +304,70 @@ def test_qbit_latest_stop_or_error_during_start_readback_is_never_stale_success(
     monkeypatch.setattr(server, "torrents_files", files_then_stopped)
     server.calls.clear()
 
-    with raises_code("client.managed.repair_start_unconfirmed"):
+    expected = (
+        "client.managed.repair_start_unconfirmed"
+        if latest == "stoppedDL"
+        else "client.managed.error_state"
+        if latest == "error"
+        else "client.managed.start_unconfirmed"
+    )
+    with raises_code(expected):
         perform(client, fingerprint, resume=True)
 
     assert writes(server) == ["torrents_start"]
+
+
+@pytest.mark.parametrize(
+    "state",
+    ["stoppedDL", "stoppedUP", "pausedDL", "pausedUP", "checkingDL", "checkingResumeData", "allocating"],
+)
+def test_all_clients_report_known_start_transitions_as_unconfirmed_without_repeating(adapter, monkeypatch, state):
+    client, server, _torrent, fingerprint, _command = adapter
+    inspect, start = client.inspect_torrent, client._start
+    dispatched = []
+
+    def start_once(h):
+        start(h)
+        dispatched.append(h)
+
+    def pending(h):
+        info = inspect(h)
+        return {**info, "state": state} if dispatched else info
+
+    monkeypatch.setattr(client, "_start", start_once)
+    monkeypatch.setattr(client, "inspect_torrent", pending)
+    # The common state contract is separate from qBit's extra control-state race test above.
+    monkeypatch.setattr(client, "_repair_options", lambda *_args, **_kwargs: None)
+    with raises_code("client.managed.repair_start_unconfirmed"):
+        perform(client, fingerprint, resume=True)
+    assert dispatched == [H]
+    assert len(writes(server)) == 1
+
+
+@pytest.mark.parametrize("state", ["error", "missingFiles", "unknown", "moving", "stoppedGarbage"])
+def test_all_clients_preserve_real_post_start_failures_as_terminal_errors(adapter, monkeypatch, state):
+    client, server, _torrent, fingerprint, _command = adapter
+    inspect, start = client.inspect_torrent, client._start
+    dispatched = []
+
+    def start_once(h):
+        start(h)
+        dispatched.append(h)
+
+    def failed(h):
+        info = inspect(h)
+        return {**info, "state": state} if dispatched else info
+
+    monkeypatch.setattr(client, "_start", start_once)
+    monkeypatch.setattr(client, "inspect_torrent", failed)
+    monkeypatch.setattr(client, "_repair_options", lambda *_args, **_kwargs: None)
+    expected = (
+        "client.managed.error_state" if state in {"error", "missingFiles"} else "client.managed.start_unconfirmed"
+    )
+    with raises_code(expected):
+        perform(client, fingerprint, resume=True)
+    assert dispatched == [H]
+    assert len(writes(server)) == 1
 
 
 def test_resume_never_accepts_stopped_plus_cached_one_hundred_percent(adapter, monkeypatch):

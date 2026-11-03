@@ -117,14 +117,33 @@ def active(topic: Mapping[str, Any], *, now: float | None = None) -> bool:
     )
 
 
+def start_confirmation_pending(topic: Mapping[str, Any], *, now: float | None = None) -> bool:
+    """A legacy false failure may observe its already dispatched start, never repeat it.
+
+    This schedules read-only evidence, not an active repair or fresh authorization. Its
+    original deadline and context remain authoritative, including cancellation and pause.
+    """
+    receipt = receipt_of(topic)
+    stamp = time.time() if now is None else now
+    return bool(
+        receipt
+        and receipt["phase"] == "blocked"
+        and receipt.get("blocked") == "client.managed.repair_start_unconfirmed"
+        and receipt.get("resume_dispatched") is True
+        and receipt.get("running_seen") is not True
+        and "resume_at" in receipt
+        and receipt["requested_at"] <= receipt["resume_at"] <= stamp < receipt["deadline"]
+        and current(topic, receipt)
+    )
+
+
 def waiting_topics(state: Mapping[str, Any]) -> list[Topic]:
     return [
         cast(Topic, topic)
         for topic in state.get("topics") or []
         if isinstance(topic, dict)
         and (receipt := receipt_of(topic))
-        and receipt["phase"] in ACTIVE_PHASES
-        and not receipt.get("blocked")
+        and ((receipt["phase"] in ACTIVE_PHASES and not receipt.get("blocked")) or start_confirmation_pending(topic))
         and not topic.get("paused")
         and not topic.get("selection_dirty")
     ]

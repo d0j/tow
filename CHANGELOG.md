@@ -5,6 +5,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- A delayed torrent-client response after a recovery start stays pending until a fresh read confirms running or
+  queued state; the command is never resent. Recovery requests from 1.35.0 blocked by this confirmation race can
+  reconcile a late successful start automatically, without starting a stopped task again.
+
 ## [1.35.0] — 2026-11-03
 
 ### Added

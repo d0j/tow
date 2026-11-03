@@ -180,9 +180,16 @@ def _resume(
     _command_guard(topic, run, client, receipt, info)
     if not _save(topic, receipt, phase="resuming", resume_dispatched=True, resume_at=time.time()):
         return
-    after = client.resume_repaired_torrent(
-        str(receipt["hash"]), expected_save_path=str(receipt["path"]), expected_files_fingerprint=str(receipt["files"])
-    )
+    try:
+        after = client.resume_repaired_torrent(
+            str(receipt["hash"]),
+            expected_save_path=str(receipt["path"]),
+            expected_files_fingerprint=str(receipt["files"]),
+        )
+    except TowError as error:
+        if error.code != "client.managed.repair_start_unconfirmed":
+            raise
+        return  # native start was sent; subsequent passes observe without ever resending
     file_repair.validate_info(topic, receipt, after)
     if _running(after) and _save(topic, receipt, phase="downloading", running_seen=True):
         _record_repair(run, topic, receipt, "files_repair_resumed")
@@ -214,14 +221,27 @@ def _checking_step(
 def _follow(
     topic: Topic, run: CheckRun, receipt: dict[str, Any], client: TorrentClientAdapter, info: dict[str, Any]
 ) -> None:
-    if _checking(info):
+    state = str(info.get("state") or "").casefold()
+    if _checking(info) or state == "allocating":
+        if receipt["phase"] == "resuming" and time.time() - receipt["resume_at"] >= CONFIRM_SEC:
+            raise TowError("repair.resume_unconfirmed")
         return
+    if state in {"error", "missingfiles"}:
+        raise TowError("client.managed.error_state", state=state)
+    if state == "moving":
+        raise TowError("repair.client_busy")
+    if not (_running(info) or is_stopped(info)):
+        raise TowError("client.managed.start_unconfirmed")
     evidence = _preconditions(topic, run, client, receipt, info)
+    if receipt["phase"] == "blocked" and not _running(info):
+        return  # migration lifts only this false failure with fresh positive start evidence
     if not any(evidence[key] for key in ("absent", "unknown", "incomplete")):
         file_repair.persist(topic, None, expected_id=receipt["id"])
         return
     if _running(info):
-        if receipt["phase"] == "resuming" and _save(topic, receipt, phase="downloading", running_seen=True):
+        if receipt["phase"] in {"resuming", "blocked"} and _save(
+            topic, receipt, phase="downloading", running_seen=True, blocked="", blocked_params={}, next_at=0
+        ):
             _record_repair(run, topic, receipt, "files_repair_resumed")
         return
     if is_stopped(info):
@@ -269,10 +289,11 @@ def recheck(topic: Topic, run: CheckRun, row: dict[str, Any]) -> bool:
             topic.pop("repair_pending", None)
         return False
     _show(row, receipt)
-    if receipt.get("blocked"):
+    observing_start = file_repair.start_confirmation_pending(topic)
+    if receipt.get("blocked") and not observing_start:
         return False  # a terminal repair never disables ordinary tracker observation
     if not run.apply:
-        return True
+        return not observing_start
     try:
         _step(topic, run, row, receipt)
     except TowError as error:
@@ -287,4 +308,4 @@ def recheck(topic: Topic, run: CheckRun, row: dict[str, Any]) -> bool:
         _show(row, receipt)
     else:
         row.update(ok=True, status="succeeded", repair_pending=False, repair_finished=True)
-    return True
+    return not (observing_start and receipt.get("blocked"))

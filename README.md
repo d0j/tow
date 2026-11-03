@@ -41,6 +41,8 @@ every new version to your torrent client.
   or red); it folds into Recent messages, one list for every signed-in device, and lasting problems stay in Needs
   attention. Open pages follow other tabs and devices by themselves; a field changed on two of them asks which to keep.
 - **History and undo.** Every file and version is recorded; a change can be undone from its own message.
+  Requested recovery of missing files continues through the selected client; a delayed start confirmation is
+  observed in the background without repeated starts or bypassing the client's queue.
 - **Backups and updates.** Signed nightly backups, restore points, encrypted TOW files (`.towx`); updates from the
   Settings page that put the previous version back by themselves if anything fails.
 - **One folder, two languages.** Code, settings, data, key, backups and its own Python: move it and it keeps
