@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.35.1] — 2026-11-03
+
 ### Fixed
 
 - A delayed torrent-client response after a recovery start stays pending until a fresh read confirms running or
