@@ -53,6 +53,10 @@ from tow.errors import render as _render_error
 from tow.errors import summary_record as _summary_record
 from tow.file_presence import count as missing_file_count
 from tow.file_presence import invalidate_client as invalidate_file_observations
+from tow.file_repair import active as file_repair_active
+from tow.file_repair import cancel as cancel_file_repair
+from tow.file_repair import current as current_file_repair
+from tow.file_repair import request as request_file_repair
 from tow.guess import guess_site
 from tow.issues import collect as collect_issues
 from tow.lifecycle import request_restart, service_status, set_autostart
@@ -156,12 +160,14 @@ __all__ = [
     "BUSY_VOLUME",
     "PATH_PARAMS",
     "REFUSED_VOLUME",
+    "CheckBusyError",
     "MessageMarkerRefused",
     "accept_volume",
     "adopt_topic",
     "apply_undo",
     "await_relocation",
     "browser_auth",
+    "cancel_file_repair",
     "check_outcome",
     "check_outcome_counts",
     "check_portable_bundle",
@@ -178,6 +184,7 @@ __all__ = [
     "content_metadata",
     "create_restore_point",
     "create_snapshot",
+    "current_file_repair",
     "data_lost",
     "delete_restore_point",
     "delete_snapshot",
@@ -186,6 +193,7 @@ __all__ = [
     "doctor_report",
     "download_history_from_bytes",
     "export_portable_bundle",
+    "file_repair_active",
     "finished_web_update",
     "folder_free",
     "folder_write_problem",
@@ -234,6 +242,7 @@ __all__ = [
     "release_relocation",
     "release_status",
     "render_message_feed",
+    "request_file_repair",
     "request_restart",
     "reserve_relocation",
     "reset_protection",

@@ -83,6 +83,8 @@ def _check_state(row: dict[str, Any], outcome: str, *, preview: bool) -> str:
         return t("web.check.changed")
     if outcome == "pending" and row.get("status") == "verification_pending":
         return t("web.check.verifying")
+    if outcome == "pending" and row.get("status") == "repair_pending":
+        return t("repair.accepted")
     if outcome == "fail":
         return t("web.check.not_confirmed")
     return ""  # unchanged, or skipped with its note on the next line

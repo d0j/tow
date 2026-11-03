@@ -189,6 +189,8 @@ def check_feedback(
         return _feedback(t("web.topics.not_found"), "err")
     if row.get("note"):  # its link or client changed meanwhile: nothing of this check was saved
         return _feedback(t("web.check.no_changes_reason", reason=row["note"]), "warn")
+    if row.get("status") == "repair_pending":
+        return _feedback(t("repair.accepted"), "info")
     failed = failed_check_feedback(row, topic_id=topic_id, tracker_name=tracker_name)
     if failed is not None:
         return failed
@@ -226,6 +228,8 @@ def failed_check_feedback(
         return None
     if row.get("status") == "verification_pending":
         return _feedback(t("web.check.verifying"), "info")  # deferred: TOW confirms it later
+    if row.get("status") == "repair_pending":
+        return _feedback(t("repair.accepted"), "info")
     error = humanize(_row_error(row))
     if row.get("status") == "waiting_space":
         # Not a failed check: the torrent is in the client, stopped, and TOW starts it once its
@@ -280,7 +284,13 @@ def check_report(out: dict[str, Any], *, apply: bool) -> dict[str, Any]:
         if outcome == "skipped":
             reason = str(row.get("note") or row.get("skipped") or t("web.common.no_changes"))
         elif outcome == "pending":
-            reason = t("web.check.verifying") if row["status"] == "verification_pending" else _row_error(row)
+            reason = (
+                t("repair.accepted")
+                if row["status"] == "repair_pending"
+                else t("web.check.verifying")
+                if row["status"] == "verification_pending"
+                else _row_error(row)
+            )
         elif outcome == "fail":
             record = row.get("error_record")
             reason = (
@@ -778,7 +788,7 @@ def global_interval_minutes(cfg: Mapping[str, Any]) -> int:
 
 # A row's words about its error, as a network device gets them: scrubbed as Recent messages are
 # (a link keeps its host, a folder or file path goes): what the PC running TOW keeps for itself.
-_ERROR_FIELDS = ("last_error", "last_error_human", "error_line", "last_error_details")
+_ERROR_FIELDS = ("last_error", "last_error_human", "error_line", "last_error_details", "file_repair_error")
 
 
 def _for_network(row: dict[str, Any]) -> dict[str, Any]:
@@ -851,6 +861,9 @@ def topic_rows(state: Mapping[str, Any], *, local: bool) -> list[dict[str, Any]]
                 "series": shown_title(topic).split(" / ")[0],
                 "download_summary": summary,
                 "missing_file_count": services.missing_file_count(topic, cfg),
+                "file_repair_phase": _repair_phase(topic),
+                "has_file_repair_request": bool(topic.get("repair_pending")),
+                "file_repair_error": _repair_error(topic),
                 "last_event_label": _event_display(event) if event else "",
                 "last_event_at": ui_time(event.get("at")) if event else "",
                 "last_event_iso": str(event.get("at") or "") if event else "",
@@ -895,6 +908,8 @@ def topic_rows(state: Mapping[str, Any], *, local: bool) -> list[dict[str, Any]]
 
 def topic_progress_summary(topic: Mapping[str, Any], history: Mapping[str, Any]) -> dict[str, Any]:
     summary = progress_summary(str(topic.get("id") or ""), history)
+    if _repair_phase(topic):
+        summary.update(is_complete=False, completion_known=False)
     pending = as_dict(topic.get("verification_pending"))
     if pending:
         summary.update(is_complete=False, completion_known=False)
@@ -915,6 +930,28 @@ def topic_progress_summary(topic: Mapping[str, Any], history: Mapping[str, Any])
         "completion_known": False,
         "is_complete": False,
     }
+
+
+def _repair_phase(topic: Mapping[str, Any]) -> str:
+    pending = as_dict(topic.get("repair_pending"))
+    if not pending:
+        return ""
+    if not services.current_file_repair(topic, pending, _context.config()):
+        return ""
+    if not services.file_repair_active(topic):
+        return "blocked"
+    phase = str(pending.get("phase") or "")
+    return phase if phase in {"requested", "checking", "resuming", "downloading"} else "checking"
+
+
+def _repair_error(topic: Mapping[str, Any]) -> str:
+    pending = as_dict(topic.get("repair_pending"))
+    reason = pending.get("blocked")
+    return (
+        render_stored(reason, as_dict(pending.get("blocked_params")), "")
+        if isinstance(reason, str) and reason.startswith("repair.")
+        else ""
+    )
 
 
 def service_view() -> dict[str, Any]:

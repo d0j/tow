@@ -164,6 +164,11 @@ MATRIX: dict[str, tuple[str, Severity]] = {
     "qbit_move_undo": (DOWNLOADS, _move),
     "client_removed": (DOWNLOADS, WARN),
     "files_missing": (DOWNLOADS, WARN),
+    "files_repair_requested": (DOWNLOADS, INFO),
+    "files_repair_started": (DOWNLOADS, INFO),
+    "files_repair_resumed": (DOWNLOADS, INFO),
+    "files_repair_failed": (DOWNLOADS, WARN),
+    "files_repair_cancelled": (DOWNLOADS, INFO),
     **dict.fromkeys(
         (
             "client_add_failed",
@@ -927,7 +932,15 @@ def _href(entry: Mapping[str, Any]) -> str:
         return "/settings?open=clients#acc-clients"
     topic = str(rec.get("topic") or rec.get("topic_id") or "")
     if entry["count"] == 1 and topic and _TOPIC_ID.fullmatch(topic) and category in (DOWNLOADS, CHECKS, ACTIONS):
-        if rec["_kind"] in {"files_missing", "files_restored"}:
+        if rec["_kind"] in {
+            "files_missing",
+            "files_restored",
+            "files_repair_requested",
+            "files_repair_started",
+            "files_repair_resumed",
+            "files_repair_failed",
+            "files_repair_cancelled",
+        }:
             return f"/?open={topic}#row-{topic}"
         return f"/#row-{topic}"
     if category == UPDATES:

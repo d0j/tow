@@ -349,6 +349,16 @@ def _earliest(*moments: float | None) -> float | None:
     return min(found) if found else None
 
 
+def _repair_deadline(state: Mapping[str, Any], now: float) -> float | None:
+    """An active repair can expire even when no writer changes its receipt."""
+    deadlines = [
+        float(topic["repair_pending"]["deadline"])
+        for topic in state.get("topics") or []
+        if isinstance(topic, dict) and services.file_repair_active(topic, now=now)
+    ]
+    return min(deadlines) if deadlines else None
+
+
 # Exactly what ``_topic_row.html`` reads of a row (``views.topic_rows``), besides its timer's
 # minutes, the site's title and the day its date labels are written for. ``manual_job`` is the
 # jobs area; the timer's moment and phase are the timers area: a row never changes by the clock.
@@ -366,6 +376,7 @@ ROW_FIELDS = (
     "download_summary",
     "error_line",
     "verification_pending",
+    "file_repair_phase",
     "last_event_label",
     "last_event_at",
     "last_event_iso",
@@ -576,7 +587,7 @@ def _topics(sample: Sample, who: Viewer, now: float) -> Computed:
         value = {"order": order, "rows": hashes}
         rev = revision("topics", value, {"lang": who.lang, "local": who.local})
         AREAS_MEMO.remember_rows((who.lang, who.local), rev, hashes)
-        return Computed(value, rev, _next_midnight(now))
+        return Computed(value, rev, _earliest(_next_midnight(now), _repair_deadline(sample.state, now)))
 
     return AREAS_MEMO.get("topics", (who.lang, who.local), key, now, build)
 
@@ -613,6 +624,7 @@ def _health(sample: Sample, who: Viewer, now: float) -> Computed:
         if health.get("next_at_ts"):
             stale_at = float(health["next_at_ts"]) + float(health.get("interval_sec") or 0) + STALE_SLACK_SEC + 1
             deadline = stale_at if stale_at > now else None
+        deadline = _earliest(deadline, _repair_deadline(sample.state, now))
         return Computed({"header": health, "attention": attention}, header_rev, deadline, extra=attention_rev)
 
     return AREAS_MEMO.get("health", (who.lang, who.local), key, now, build)

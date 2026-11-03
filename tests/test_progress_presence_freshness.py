@@ -56,6 +56,37 @@ def world(tmp_path, monkeypatch, *, names=None):
     return client, topic, history, current
 
 
+def test_native_recheck_cannot_turn_missing_media_into_a_recovery_notification(tmp_path, monkeypatch):
+    from tow import file_presence
+
+    client, topic, history, _current = world(tmp_path, monkeypatch)
+    target = tmp_path / "Show/S01E01.mkv"
+    target.unlink()
+    missing = reconcile_topic(topic, client, history, SECOND)
+    assert file_presence.observe(topic, missing, client_id=client.client_id, at=SECOND) == "missing"
+
+    client.info["progress"] = 0.0
+    client.info["state"] = "stoppedDL"
+    client.info["files"][0]["progress"] = 0.0
+    incomplete = reconcile_topic(topic, client, history, THIRD)
+    assert incomplete["missing_files"] == 0  # The client no longer claims the absent file complete.
+    assert incomplete["absent_files"] == incomplete["incomplete_files"] == 1
+    assert incomplete["selected_file_count"] == 1
+    assert file_presence.observe(topic, incomplete, client_id=client.client_id, at=THIRD) == ""
+    assert topic["files_missing"]["count"] == 1
+
+    target.write_bytes(b"0123456789")  # Full-size preallocation still is not confirmed content.
+    allocated = reconcile_topic(topic, client, history, THIRD)
+    assert allocated["absent_files"] == 0
+    assert allocated["incomplete_files"] == 1
+    assert file_presence.observe(topic, allocated, client_id=client.client_id, at=THIRD) == ""
+
+    client.info["files"][0]["progress"] = client.info["progress"] = 1.0
+    restored = reconcile_topic(topic, client, history, THIRD)
+    assert file_presence.observe(topic, restored, client_id=client.client_id, at=THIRD) == "restored"
+    assert restored["events"] == []
+
+
 def live_items(history):
     return [item for item in history["topics"]["show"]["items"].values() if not item.get("superseded")]
 

@@ -7,10 +7,91 @@ never by position: a client that reorders its list must not get the wrong file s
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import hashlib
+import json
+import ntpath
+import posixpath
+from collections.abc import Callable, Mapping
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
 
+from tow.folders import is_windows_device_path, windows_shaped
 from tow.torrent import TorrentFile, windows_path_key
+
+
+def recovery_fingerprint(rows: list[Any]) -> str:
+    """Exact native identities and priorities for a repair; cached progress grants no permission.
+
+    Reordering is harmless, but a missing or ambiguous index, name, size or priority cannot
+    authorize a client change. Includes skipped files, padding and every native priority level.
+    """
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("invalid client file snapshot")
+    values: list[tuple[int, str, int, int]] = []
+    indices = set()
+    for row in rows:
+        if not isinstance(row, Mapping) or not row:
+            raise ValueError("invalid client file snapshot")
+        index, name, size, priority = (row.get(key) for key in ("index", "name", "size", "priority"))
+        if (
+            type(index) is not int
+            or index < 0
+            or index in indices
+            or not isinstance(name, str)
+            or not name
+            or "\0" in name
+            or type(size) is not int
+            or size < 0
+            or type(priority) is not int
+            or priority < 0
+        ):
+            raise ValueError("invalid client file snapshot")
+        indices.add(index)
+        values.append((index, name, size, priority))
+    canonical = json.dumps(sorted(values), ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _recovery_base(folder: str) -> PureWindowsPath | PurePosixPath:
+    if not isinstance(folder, str) or not folder.strip() or is_windows_device_path(folder):
+        raise ValueError("invalid client save folder")
+    base = (
+        PureWindowsPath(ntpath.normpath(folder))
+        if windows_shaped(folder)
+        else PurePosixPath(posixpath.normpath(folder))
+    )
+    if not base.is_absolute():
+        raise ValueError("invalid client save folder")
+    return base
+
+
+def recovery_folders_overlap(first: str, second: str) -> bool:
+    """Whether two absolute client folders can contain one shared file, without disk I/O."""
+    a, b = _recovery_base(first), _recovery_base(second)
+    return a.is_relative_to(b) or b.is_relative_to(a)
+
+
+def recovery_paths(folder: str, rows: list[Any]) -> set[str]:
+    """Absolute client paths of selected files; different root layouts compare correctly."""
+    base = _recovery_base(folder)
+    recovery_fingerprint(rows)
+    wanted = set()
+    for row in rows:
+        if row["priority"] == 0:
+            continue
+        raw = row["name"].replace("\\", "/")
+        parts = [part for part in raw.split("/") if part not in {"", "."}]
+        if (
+            not parts
+            or raw.startswith("/")
+            or PureWindowsPath(raw).drive
+            or ".." in parts
+            or (isinstance(base, PureWindowsPath) and any(":" in part for part in parts))
+        ):
+            raise ValueError("invalid client file path")
+        absolute = str(base.joinpath(*parts))
+        wanted.add(ntpath.normcase(absolute) if isinstance(base, PureWindowsPath) else absolute)
+    return wanted
 
 
 def normalize_path(value: object) -> str:

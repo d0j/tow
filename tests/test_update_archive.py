@@ -529,6 +529,137 @@ def test_going_back_while_a_topic_waits_for_its_first_add_is_refused_before_tow_
     assert leftovers(install) == []
 
 
+def _pending_file_repair(install, *, where, blocked=False, age=0):
+    from datetime import UTC, datetime, timedelta
+
+    topic = {
+        "id": "repair-topic",
+        "title": "Harbour Repair",
+        "repair_pending": {"phase": "checking", "blocked": blocked},
+    }
+    state = {"schema_version": 2, "topics": [{"id": "quiet", "title": "Quiet Topic"}]}
+    if where == "topics":
+        state["topics"].append(topic)
+    else:
+        state["undo"] = {"kind": "topic", "ts": (datetime.now(UTC) - timedelta(seconds=age)).isoformat(), "item": topic}
+    (install["root"] / "data/state.json").write_text(json.dumps(state), encoding="utf-8")
+
+
+@pytest.mark.parametrize("where", ["topics", "undo"])
+@pytest.mark.parametrize("blocked", [False, True])
+@pytest.mark.parametrize(("version", "refused"), [("1.34.2", True), ("1.35.0", False), ("1.35.1", False)])
+def test_a_pending_file_repair_only_refuses_a_target_that_cannot_read_it(install, where, blocked, version, refused):
+    _pending_file_repair(install, where=where, blocked=blocked)
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", version)
+
+    if refused:
+        with pytest.raises(updater.UpdateError, match="Harbour Repair") as caught:
+            work.refuse_pending_repairs(f"v{version}")
+        assert "v1.35.0" in str(caught.value)
+        assert "Quiet Topic" not in str(caught.value)
+    else:
+        work.refuse_pending_repairs(f"v{version}")
+
+
+def test_expired_repair_undo_does_not_ratchet_standalone_update_minimum(install):
+    _pending_file_repair(install, where="undo", blocked=True, age=120)
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", "1.34.2")
+
+    work.refuse_pending_repairs("v1.34.2")
+    (install["root"] / "config.yaml").write_text("flash_ttl_sec: 600\n", encoding="utf-8")
+    with pytest.raises(updater.UpdateError, match="Harbour Repair"):
+        work.refuse_pending_repairs("v1.34.2")
+
+
+@pytest.mark.parametrize("where", ["topics", "undo"])
+def test_standalone_repair_downgrade_refusal_happens_before_tow_is_stopped(install, github, where):
+    _pending_file_repair(install, where=where, blocked=True)
+    github.release("v1.34.2", tarball("1.34.2", extra={"src/tow/store.py": b"STATE_SCHEMA_VERSION = 2\n"}))
+    machine = Machine(install["app"], github)
+
+    code, lines = run(machine, "v1.34.2")
+
+    assert code == 2
+    assert machine.calls == []
+    assert "Harbour Repair" in lines[-1]
+    assert "v1.35.0" in lines[-1]
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert leftovers(install) == []
+
+
+def test_web_and_standalone_file_repair_minimum_versions_match():
+    from tow import web_update
+
+    assert updater.REPAIR_SINCE == web_update.REPAIR_SINCE == (1, 35, 0)
+
+
+def _repair_restore_transaction(install, record):
+    folder = install["root"] / "data" / "import-checkpoints" / "synthetic-checkpoint"
+    folder.mkdir(parents=True)
+    path = folder / "TRANSACTION.json"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    ("status", "forget", "version", "refused"),
+    [
+        ("prepared", True, "1.34.2", True),
+        ("prepared", True, "1.35.0", False),
+        ("prepared", False, "1.34.2", False),
+        ("prepared", None, "1.34.2", False),
+        ("committed", True, "1.34.2", False),
+        ("rolled_back", True, "1.34.2", False),
+    ],
+)
+def test_only_interrupted_requested_repair_sanitization_refuses_an_old_recovery_reader(
+    install, status, forget, version, refused
+):
+    path = _repair_restore_transaction(install, {"status": status, "forget_repairs": forget})
+    before = path.read_bytes()
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", version)
+
+    if refused:
+        with pytest.raises(updater.UpdateError, match="interrupted data restore safely") as caught:
+            work.refuse_pending_repairs(f"v{version}")
+        assert "Start TOW v1.35.0 or newer" in str(caught.value)
+    else:
+        work.refuse_pending_repairs(f"v{version}")
+
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "content", [b"not-json", b"[]", b"x" * (64 * 1024 + 1)], ids=["syntax", "container", "oversized"]
+)
+def test_unverifiable_repair_restore_journal_refuses_downgrade_without_writes(install, content):
+    path = _repair_restore_transaction(install, {})
+    path.write_bytes(content)
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", "1.34.2")
+
+    with pytest.raises(updater.UpdateError, match="cannot be read"):
+        work.refuse_pending_repairs("v1.34.2")
+
+    assert path.read_bytes() == content
+
+
+def test_interrupted_repair_restore_downgrade_refusal_happens_before_tow_is_stopped(install, github):
+    path = _repair_restore_transaction(install, {"status": "prepared", "forget_repairs": True})
+    before = path.read_bytes()
+    github.release("v1.34.2", tarball("1.34.2", extra={"src/tow/store.py": b"STATE_SCHEMA_VERSION = 2\n"}))
+    machine = Machine(install["app"], github)
+
+    code, lines = run(machine, "v1.34.2")
+
+    assert code == 2
+    assert machine.calls == []
+    assert "interrupted data restore safely" in lines[-1]
+    assert "Start TOW v1.35.0 or newer" in lines[-1]
+    assert path.read_bytes() == before
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert leftovers(install) == []
+
+
 def test_every_state_format_names_the_first_version_that_reads_it():
     from tow.store import STATE_SCHEMA_VERSION
 

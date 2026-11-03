@@ -406,7 +406,7 @@ def test_missing_files_open_the_topic_and_its_file_status_link(client, tmp_path)
     _home_state(topic)
     entry = _entries(client)["files_missing"]
 
-    page, _ = _land(client, entry, anchor="row-a", fix="", label="")
+    page, _ = _land(client, entry, anchor="row-a", fix="repair_files:a", label=t("repair.action"))
 
     assert t("home.topic.files_missing", count=3) in page
     assert 'class="download-details" href="/topics/a/downloads.json"' in page

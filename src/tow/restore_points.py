@@ -442,7 +442,7 @@ def _restore_bundle(
         checkpoint_value = locals().get("checkpoint")
         if isinstance(checkpoint_value, Path) and str(checkpoint_value):
             try:
-                rollback_import(checkpoint_value, apply=True)
+                rollback_import(checkpoint_value, apply=True, preserve_repair_authorization=True)
             except ExportImportError as rollback_exc:
                 raise RestorePointError(
                     t("backup.restore_point.rollback_failed", owner_language()), kind=ROLLBACK_FAILED

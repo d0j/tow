@@ -29,6 +29,7 @@ CAPABILITIES = (
     "file_selection",  # files can be chosen before it starts
     "priority_readback",  # the chosen files can be read back
     "start_stop",
+    "recheck_files",  # an owned stopped torrent can be natively checked and safely resumed
     "magnet_metadata",  # materialize_magnet works (else it refuses)
     "metadata_preview",  # preview_magnet never adds or changes a normal torrent task
 )
@@ -99,6 +100,18 @@ class TorrentClientAdapter(Protocol):
     def stop_owned_torrent(self, infohash: str) -> dict[str, Any]: ...
 
     def start_owned_torrent(self, infohash: str) -> dict[str, Any]: ...
+
+    def recheck_owned_torrent(
+        self, infohash: str, *, expected_save_path: str, expected_files_fingerprint: str
+    ) -> None: ...
+
+    def resume_repaired_torrent(
+        self, infohash: str, *, expected_save_path: str, expected_files_fingerprint: str
+    ) -> dict[str, Any]: ...
+
+    def has_active_file_overlap(
+        self, infohash: str, *, expected_save_path: str, expected_files_fingerprint: str
+    ) -> bool: ...
 
     def set_location(self, infohash: str, save_path: str) -> str: ...
 

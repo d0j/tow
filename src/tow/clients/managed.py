@@ -22,6 +22,7 @@ from __future__ import annotations
 import copy
 import logging
 import math
+import re
 import time
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
@@ -104,6 +105,7 @@ class ManagedClient:
         "file_selection": True,
         "priority_readback": True,
         "start_stop": True,
+        "recheck_files": False,
         "magnet_metadata": False,
         "metadata_preview": False,
     }
@@ -144,6 +146,9 @@ class ManagedClient:
 
     def _start(self, infohash: str) -> None:
         raise NotImplementedError
+
+    def _recheck(self, infohash: str) -> None:
+        raise self._fail("client.managed.recheck_unavailable")
 
     def _set_labels(self, infohash: str, labels: list[str]) -> None:
         raise NotImplementedError
@@ -1016,6 +1021,188 @@ class ManagedClient:
         self._require_owned(infohash)
         self._start(infohash)
         return self._wait_started(infohash)
+
+    def _repair_options(self, infohash: str, info: dict[str, Any], *, stopped: bool) -> None:
+        """Client-specific options which a native check or ordinary start must preserve."""
+
+    def _repair_evidence(
+        self,
+        infohash: str,
+        expected_save_path: str,
+        expected_files_fingerprint: str,
+        *,
+        stopped: bool,
+    ) -> dict[str, Any]:
+        if self.read_only or self.capabilities.get("recheck_files") is not True:
+            raise self._fail("client.managed.recheck_unavailable")
+        if not isinstance(infohash, str) or re.fullmatch(r"(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})", infohash) is None:
+            raise self._fail("client.managed.repair_changed")
+        info = self.inspect_torrent(infohash)
+        if info is None:
+            raise self._fail("client.managed.missing")
+        if not matches_hash(info, infohash):
+            raise self._fail("client.managed.repair_changed")
+        if OWNER not in self._tags(info):
+            raise self._fail("client.managed.not_owned")
+        if PENDING in self._tags(info):
+            raise self._fail("client.managed.repair_changed")
+        if not expected_save_path.strip() or not paths_equal(str(info.get("save_path") or ""), expected_save_path):
+            raise self._fail("client.managed.wrong_folder")
+        rows = info.get("files")
+        if not isinstance(rows, list):
+            raise self._fail("client.managed.repair_changed")
+        try:
+            fingerprint = files.recovery_fingerprint(rows)
+        except ValueError as error:
+            raise self._fail("client.managed.repair_changed") from error
+        if fingerprint != expected_files_fingerprint:
+            raise self._fail("client.managed.repair_changed")
+        if stopped and str(info.get("state") or "").casefold() not in {
+            "stoppeddl",
+            "stoppedup",
+            "pauseddl",
+            "pausedup",
+        }:
+            raise self._fail("client.managed.recheck_requires_stopped")
+        self._repair_options(infohash, info, stopped=stopped)
+        return info
+
+    def _repair_candidate(self, info: dict[str, Any], current_hash: str, expected_save_path: str) -> bool:
+        """An unrelated active torrent may write the same paths, whatever its owner label."""
+        identity = info.get("hash")
+        if not isinstance(identity, str) or re.fullmatch(r"(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})", identity) is None:
+            raise self._fail("client.managed.repair_changed")
+        if identity.casefold() == current_hash.casefold() or is_stopped(info):
+            return False
+        if str(info.get("state") or "").casefold() == "moving":
+            return True  # The reported destination does not identify its still-active source.
+        folder = info.get("save_path")
+        if not isinstance(folder, str):
+            raise self._fail("client.managed.repair_changed")
+        try:
+            return files.recovery_folders_overlap(expected_save_path, folder)
+        except (ValueError, TypeError) as error:
+            raise self._fail("client.managed.repair_changed") from error
+
+    def _repair_candidates(
+        self, listing: list[dict[str, Any]], current_hash: str, expected_save_path: str
+    ) -> list[dict[str, Any]]:
+        found = []
+        seen = set()
+        for info in listing:
+            if not isinstance(info, dict):
+                raise self._fail("client.managed.repair_changed")
+            candidate = self._repair_candidate(info, current_hash, expected_save_path)
+            identity = str(info.get("hash") or "").casefold()
+            if identity in seen:
+                raise self._fail("client.managed.repair_changed")
+            seen.add(identity)
+            if candidate:
+                found.append(info)
+        if current_hash.casefold() not in seen:
+            raise self._fail("client.managed.repair_changed")
+        return found
+
+    def _other_torrents(self, current_hash: str, expected_save_path: str) -> list[dict[str, Any]]:
+        raise self._fail("client.managed.recheck_unavailable")
+
+    def _repair_other_readback(self, candidate: dict[str, Any], info: dict[str, Any] | None) -> dict[str, Any]:
+        if (
+            info is None
+            or str(info.get("hash") or "").casefold() != str(candidate.get("hash") or "").casefold()
+            or not paths_equal(str(info.get("save_path") or ""), str(candidate.get("save_path") or ""))
+        ):
+            raise self._fail("client.managed.repair_changed")
+        return info
+
+    def has_active_file_overlap(
+        self, infohash: str, *, expected_save_path: str, expected_files_fingerprint: str
+    ) -> bool:
+        """A read-only check of every client task which could use the selected paths.
+
+        Native listings narrow candidates by absolute save folder first; file lists are
+        read only for potentially overlapping active tasks. Uncertain evidence refuses.
+        """
+        own = self._repair_evidence(infohash, expected_save_path, expected_files_fingerprint, stopped=True)
+        try:
+            wanted = files.recovery_paths(expected_save_path, own["files"])
+            for other in self._other_torrents(str(own["hash"]), expected_save_path):
+                if is_stopped(other):
+                    continue
+                if str(other.get("state") or "").casefold() == "moving":
+                    raise self._fail("client.managed.repair_changed")
+                if str(other.get("state") or "").casefold() not in {
+                    "downloading",
+                    "forceddl",
+                    "stalleddl",
+                    "queueddl",
+                    "uploading",
+                    "forcedup",
+                    "stalledup",
+                    "queuedup",
+                    "checkingdl",
+                    "checkingup",
+                    "checkingresumedata",
+                    "moving",
+                    "allocating",
+                }:
+                    raise self._fail("client.managed.repair_changed")
+                other_rows = other.get("files")
+                if not isinstance(other_rows, list):
+                    raise self._fail("client.managed.repair_changed")
+                if wanted.intersection(files.recovery_paths(str(other.get("save_path") or ""), other_rows)):
+                    return True
+        except (ValueError, TypeError) as error:
+            raise self._fail("client.managed.repair_changed") from error
+        self._repair_evidence(infohash, expected_save_path, expected_files_fingerprint, stopped=True)
+        return False
+
+    def recheck_owned_torrent(self, infohash: str, *, expected_save_path: str, expected_files_fingerprint: str) -> None:
+        """One native file-check request, never a start or selection change.
+
+        Native clients temporarily run their checker and restore the stopped state. The
+        caller durably records dispatch first and observes completion without resending.
+        """
+        self._repair_evidence(infohash, expected_save_path, expected_files_fingerprint, stopped=True)
+        self._require_owned(infohash)
+        self._recheck(infohash)
+
+    def resume_repaired_torrent(
+        self, infohash: str, *, expected_save_path: str, expected_files_fingerprint: str
+    ) -> dict[str, Any]:
+        """One ordinary resume of the exact checked selection, with explicit state read-back.
+
+        A stopped torrent's cached 100% cannot confirm this start. Queue states do count:
+        no force-start, repeated command or priority change is used to bypass the queue.
+        """
+        before = self._repair_evidence(infohash, expected_save_path, expected_files_fingerprint, stopped=True)
+        progress = before.get("progress")
+        if isinstance(progress, bool) or not isinstance(progress, (int, float)) or not 0 <= progress < 1:
+            raise self._fail("client.managed.repair_changed")
+        wanted = [row for row in before["files"] if row["priority"] > 0]
+        portions = [row.get("progress") for row in wanted]
+        if (
+            not portions
+            or any(
+                isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1
+                for value in portions
+            )
+            or not any(value < 1 for value in portions)
+        ):
+            raise self._fail("client.managed.repair_changed")
+        self._require_owned(infohash)
+        self._start(infohash)
+        after = self._repair_evidence(infohash, expected_save_path, expected_files_fingerprint, stopped=False)
+        if str(after.get("state") or "").casefold() not in {
+            "downloading",
+            "stalleddl",
+            "queueddl",
+            "uploading",
+            "stalledup",
+            "queuedup",
+        }:
+            raise self._fail("client.managed.repair_start_unconfirmed")
+        return after
 
     def set_location(self, infohash: str, save_path: str) -> str:
         destination = (save_path or "").strip()

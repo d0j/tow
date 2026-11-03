@@ -133,6 +133,11 @@ def _facts() -> dict[str, Any]:
                     and topic.get("verification_pending")
                     and not topic["verification_pending"].get("blocked")
                 )
+                or (
+                    isinstance(topic.get("repair_pending"), dict)
+                    and topic.get("repair_pending")
+                    and not topic["repair_pending"].get("blocked")
+                )
             )
             and not topic.get("paused")
             and not topic.get("selection_dirty")

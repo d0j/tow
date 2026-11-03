@@ -570,7 +570,8 @@ def _drift_then_fail_rollback(monkeypatch) -> None:
             save_config(drifted)
         return result
 
-    def rollback_fails(_checkpoint, *, apply):
+    def rollback_fails(_checkpoint, *, apply, preserve_repair_authorization):
+        assert apply is preserve_repair_authorization is True
         raise ExportImportError("cannot roll back import checkpoint safely")
 
     monkeypatch.setattr(restore_points, "import_bundle", import_then_drift)

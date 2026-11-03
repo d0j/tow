@@ -111,8 +111,21 @@ it clears after a fresh successful observation. Previous versions in the list ar
 
 Different versions of a torrent may share the same paths. Removing an older torrent **with its content** in the
 client can therefore remove files the current version uses too, while the client still reports 100% until it
-checks them again. To keep shared files, remove only the torrent task. TOW never requests deletion of media and
-does not automatically re-download missing files or change a torrent you stopped.
+checks them again. To keep shared files, remove only the torrent task. TOW never requests deletion of media.
+
+**Restore files** in the affected topic asks its selected client to check the current torrent and download the
+missing selected files. One request covers that recovery only: TOW does not perpetually re-download files you
+delete later. It confirms ownership, folder, original disk, selection, space and conflicting active torrents
+before sending commands. Existing files, priorities and the client's queue limits are kept. An unrelated
+stopped torrent is never resumed. Checking and recovery run in the background, with client-only follow-ups every
+five minutes and a finite time limit; the row shows the phase. **Do not continue automatically** prevents further
+commands; an operation already accepted by the client can finish there. Pausing observation also cancels further
+recovery commands. Only fresh disk evidence and the client's completed file progress confirm restoration. A
+failed or interrupted recovery stays visible with its reason and can be requested again.
+
+While the native file check runs, cancel through TOW or pause the TOW topic. qBittorrent's API cannot reliably
+distinguish its automatic stop after checking from a stop in the client during that check. Once recovery is
+downloading, TOW respects a newly observed client stop and never repeatedly resumes it.
 
 Specials (`Season 00`, `S00`, OVA and bonus folders) stay separate files, not ordinary season episodes.
 They can be downloaded with **All files of the torrent** or **Files by pattern**, without inflating the episode counter.

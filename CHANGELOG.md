@@ -5,6 +5,18 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Added
+
+- Missing selected files can be restored through the selected torrent client's native file check and download,
+  with a durable, bounded recovery request, background follow-up and cancellation. Ownership, revision, selection,
+  original disk and overlapping active torrents are checked before commands; ordinary stopped tasks stay stopped.
+
+### Fixed
+
+- Invalidating stale client progress during a file check cannot clear a missing-file warning or announce recovery;
+  restoration requires fresh filesystem confirmation and completed selected files. Active recovery shows its
+  phase instead of asking for intervention; its failures and results are shared across browsers.
+
 ## [1.34.2] — 2026-11-03
 
 ### Fixed

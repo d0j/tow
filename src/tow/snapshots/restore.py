@@ -25,6 +25,7 @@ from tow.config import interval_sec_of, load_config
 from tow.i18n import t
 from tow.log import locked_log_path, log_event, owner_language
 from tow.paths import config_path, data_dir
+from tow.repair_authorization import without_authorizations
 from tow.snapshots.create import remove_copy
 from tow.snapshots.errors import SnapshotError, reason
 from tow.snapshots.manifest import MAX_RESTORE_JOURNAL_BYTES
@@ -131,6 +132,8 @@ def _restore_plan(contents: dict[str, bytes], points_dir: str) -> list[tuple[str
             content = _keep_local_access(content)
         elif name == "secrets.enc":
             content = _keep_local_password(content)
+        elif name == "state.json":
+            content = without_authorizations(content)
         plan.append((name, member_target(name, points_dir=points_dir), content))
     if "secrets.enc" not in contents and encrypted_secrets_path().is_file():
         plan.append(("secrets.enc", encrypted_secrets_path(), _keep_local_password(None)))

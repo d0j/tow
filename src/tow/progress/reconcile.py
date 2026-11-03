@@ -173,6 +173,8 @@ class _ReconcilePass:
     _seen: bool | None = field(default=None, init=False)
     # The recorded volume the folder was compared with (None: none was, or not asked).
     _expected: str | None = field(default=None, init=False)
+    absent_files: int = 0
+    incomplete_files: int = 0
 
     def seen_from_here(self) -> bool:
         """Whether this PC sees the save folder, asked once per pass and only when a file is
@@ -407,6 +409,8 @@ def _update_item_status(
         or carried_completion is not None
     )
     confirmed = _file_confirmed(work, item, rel, size)
+    work.absent_files += confirmed is False
+    work.incomplete_files += progress < 1.0
     item.pop("verification_unavailable", None)
     if progress >= 1.0 and confirmed is True:
         item["status"] = "completed"
@@ -560,5 +564,11 @@ def reconcile_topic(
     }
     if work.seen_identities:
         statuses = [items[identity].get("status") for identity in work.seen_identities]
-        result.update(missing_files=statuses.count("missing"), unverified_files=statuses.count("unverified"))
+        result.update(
+            missing_files=statuses.count("missing"),
+            unverified_files=statuses.count("unverified"),
+            absent_files=work.absent_files,
+            incomplete_files=work.incomplete_files,
+            selected_file_count=len(work.seen_identities),
+        )
     return result
