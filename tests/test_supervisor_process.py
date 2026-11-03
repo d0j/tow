@@ -442,10 +442,15 @@ def test_children_get_the_runtime_layout(tmp_path, monkeypatch):
 # --- the default dependencies -----------------------------------------------------------------
 
 
-def test_facts_come_from_the_state_and_the_night_copies():
+def test_facts_come_from_the_state_and_the_night_copies(tmp_path):
+    from tow.config import load_config, save_config
     from tow.snapshots.record import record_status
     from tow.store import save_state
     from tow.supervisor import _facts
+
+    cfg = load_config()
+    cfg["backup_dir"] = str(tmp_path.parent / (tmp_path.name + "-night"))
+    save_config(cfg)
 
     save_state({"topics": [], "health": {"auto_at_ts": 1234}})
     assert _facts() == {
@@ -457,7 +462,9 @@ def test_facts_come_from_the_state_and_the_night_copies():
         "topic_ids": set(),
         "space_waiting": False,
     }
-    record_status(last_ok_at=99.5)
+    from tow.snapshots import backup_root
+
+    record_status(last_ok_at=99.5, location=str(backup_root().resolve()))
     assert _facts()["last_backup_ok"] == 99.5
 
 

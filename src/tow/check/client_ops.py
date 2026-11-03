@@ -6,11 +6,16 @@ ownership and relocation checks too."""
 from __future__ import annotations
 
 import re
+import socket
+import ssl
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+
+import httpx
+import requests
 
 from tow.clients import factory as client_factory
 from tow.clients.spec import TorrentClientAdapter
@@ -242,11 +247,50 @@ def blocked_revision(topic: Topic) -> str:
     return str((params if isinstance(params, dict) else {}).get("hash") or "").upper()
 
 
+def _transport_reason(error: Exception) -> str | None:
+    """Retry only typed transport failures, never a certificate, login or config error."""
+    causes: list[BaseException] = []
+    cause: BaseException | None = error
+    while cause is not None and len(causes) < 8 and cause not in causes:
+        causes.append(cause)
+        cause = cause.__cause__ or cause.__context__
+    if any(
+        isinstance(
+            item,
+            (
+                ssl.SSLError,
+                requests.exceptions.SSLError,
+                requests.exceptions.ProxyError,
+                httpx.ProxyError,
+                requests.exceptions.HTTPError,
+                httpx.HTTPStatusError,
+            ),
+        )
+        for item in causes
+    ):
+        return None
+    for item in reversed(causes):
+        if isinstance(item, (TimeoutError, requests.exceptions.Timeout, httpx.TimeoutException)):
+            return "doctor.reason.timeout"
+        if isinstance(item, ConnectionRefusedError):
+            return "doctor.reason.refused"
+        if isinstance(item, socket.gaierror):
+            return "doctor.reason.no_address"
+        if isinstance(item, (ConnectionResetError, ConnectionAbortedError)):
+            return "doctor.reason.reset"
+        if isinstance(item, (ConnectionError, requests.exceptions.ConnectionError, httpx.NetworkError)):
+            return "doctor.reason.network"
+    return None
+
+
 def client_unreachable(run: Any, client_id: str) -> TowError:
     """The topic's client did not answer this run: its own error (or "no connection") as the reason."""
     cause = run.client_errors.get(client_id)
-    if isinstance(cause, TowError):
-        reason: Any = cause
+    transport = _transport_reason(cause) if isinstance(cause, Exception) else None
+    if transport:
+        reason: Any = Msg(transport)
+    elif isinstance(cause, TowError):
+        reason = cause
     elif cause is not None:
         reason = str(cause) or type(cause).__name__
     else:
@@ -394,6 +438,8 @@ class ClientPool:
     pinged: set[str] = field(default_factory=set)
     # False when the run had no topic to check and asked no client: its health is not this run's.
     asked: bool = True
+    # A saved server refusal excludes ping/list on this connection as well.
+    deferred: frozenset[str] = frozenset()
 
     def _answered(self, client_id: str, client: TorrentClientAdapter) -> str:
         """Ping the client; one that lists no torrent at all, although it had TOW's at the last
@@ -432,7 +478,7 @@ class ClientPool:
             self.ping = self._answered(client_id, client)
             self.clients[client_id] = client
         except Exception as e:  # noqa: BLE001 - any failure to reach the client is 'the client is down' (recorded)
-            self.ping = f"down: {e}"
+            self.ping = str(e) if _still_starting(e) else f"down: {e}"
             self.errors[client_id] = e
             self.record(
                 "client_unreachable",
@@ -444,6 +490,13 @@ class ClientPool:
             )
             if self.notify and self.previous_qbit_ok is not False and not _still_starting(e):
                 self._client_event(client_id, "qbit_down")
+            elif (
+                self.notify
+                and self.previous_qbit_ok is False
+                and _still_starting(e)
+                and not self._was_starting(client_id)
+            ):
+                self._client_event(client_id, "qbit_up")  # transport answered; readiness still fences its topics
         else:
             if self.notify and self.previous_qbit_ok is False and not self._was_starting(client_id):
                 self._client_event(client_id, "qbit_up")
@@ -460,7 +513,7 @@ class ClientPool:
             self._answered(wanted, adapter)  # a second client that is down is reported like the main one
         except Exception as e:  # noqa: BLE001 - any failure to reach the client is 'the client is down' (recorded)
             self.errors[wanted] = e
-            self.ok[wanted] = False
+            self.ok[wanted] = _still_starting(e)
             self.record(
                 "client_unreachable", component="client", integration_id=wanted, **error_fields(e), how=self.how
             )
@@ -498,4 +551,5 @@ class ClientPool:
         then what this run saw (a removed client's last word is not kept for ever)."""
         configured = {str(row["id"]) for row in client_factory.client_configurations(self.cfg)}
         earlier = {key: value for key, value in self.previous_clients_ok.items() if key in configured}
-        return {**earlier, self.default_id: self.default_ok, **self.ok}
+        default = {} if self.default_id in self.deferred else {self.default_id: self.default_ok}
+        return {**earlier, **default, **self.ok}

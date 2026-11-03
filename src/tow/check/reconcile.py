@@ -7,19 +7,22 @@ import copy
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
-from tow import check_transaction, download_history, file_presence
-from tow.check.client_ops import client_unreachable
+from tow import check_transaction, download_history, file_presence, site_retries
+from tow.check.client_ops import client_unreachable, info_confirms
 from tow.check.notices import queue_recoveries
 from tow.check.rows import fail_row, note_removed, row_error, stamp_result
 from tow.check.topic import CheckRun
 from tow.check_steps import mark_reconcile_failure, reconcile_notification
-from tow.clock import iso_now
+from tow.clients import files
+from tow.clients.spec import TorrentClientAdapter
+from tow.clock import iso_now, machine_now
 from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.jsonish import as_dict
 from tow.log import error_fields
 from tow.paths import download_history_path
 from tow.progress import reconcile_topic
+from tow.progress.expected import selected_native_indices
 from tow.records import DownloadHistory, HistoryRecord, Topic, topics_of
 from tow.store import (
     StoreCorruptionError,
@@ -198,6 +201,15 @@ def _reconcile_one(
     pending_records: list[tuple[str, dict[str, Any]]],
 ) -> None:
     """Reconcile one topic with its client: progress events, client presence (B4)."""
+    from tow.check import client_waits
+
+    if row.get("client_retry_deferred") or client_waits.deferred(
+        topic,
+        now=machine_now().timestamp(),
+        manual=getattr(run, "readd_removed", False),
+        cfg=getattr(run, "client_config", None) or None,
+    ):
+        return
     client_id, topic_client = run.get_client_for(topic)
     checked_ok = bool(row.get("ok")) and row.get("status") != "skipped"
     if topic_client is None:
@@ -321,6 +333,57 @@ def _reconcile_one(
         # A reconcile failure that a progress pass (or a check that skipped the topic) set is
         # over once a reconcile works again: no real check may come for hours to clear it.
         stamp_result(topic, row)
+    elif not checked_ok and row.get("ok") and present and _client_error_resolved(topic, topic_client):
+        # A fresh client-only proof resolves connectivity, not a tracker check or a new add.
+        # Keep its original site/check timestamps and success state instead of inventing green.
+        topic["last_error"] = None
+        topic.pop("last_error_code", None)
+        topic.pop("last_error_params", None)
+        topic["last_error_class"] = ""
+
+
+def _client_error_resolved(topic: Topic, client: TorrentClientAdapter) -> bool:
+    if not site_retries.client_recovery(topic) or topic.get("selection_verified") is not True:
+        return False
+    infohash = str(topic.get("hash") or "")
+    if not infohash or str(topic.get("selection_hash") or "").casefold() != infohash.casefold():
+        return False
+    try:
+        info = client.inspect_torrent(infohash)  # ownership/read-back never reuses the progress listing
+        path = str(topic.get("save_path") or "")
+        if not info_confirms(info, infohash, path, require_tow_ownership=True) or info is None:
+            return False
+        if "tow-pending" in {str(tag).casefold() for tag in info.get("tags") or []}:
+            return False
+        state = str(info.get("state") or "").casefold()
+        if state not in {
+            "downloading",
+            "uploading",
+            "seeding",
+            "stalleddl",
+            "stalledup",
+            "queueddl",
+            "queuedup",
+            "forceddl",
+            "forcedup",
+            "stoppeddl",
+            "stoppedup",
+            "pauseddl",
+            "pausedup",
+            "checkingdl",
+            "checkingup",
+            "checkingresumedata",
+        }:
+            return False
+        rows = list(info.get("files") or [])
+        files.recovery_fingerprint(rows)  # reject malformed identities, paths, sizes or priorities
+        expected = selected_native_indices(
+            topic, rows, content_path=str(info.get("content_path") or ""), save_path=path
+        )
+        wanted = {row["index"] for row in rows if row["priority"] > 0 and not files.padding_like(row["name"])}
+        return bool(wanted) and wanted == expected
+    except Exception:  # noqa: BLE001 - a failed secondary read cannot resolve the earlier outage
+        return False
 
 
 def _note_season_complete(

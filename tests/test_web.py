@@ -1128,11 +1128,15 @@ def test_browser_auth_callback_persists_session_and_rechecks_one_topic(monkeypat
     monkeypatch.setattr("tow.web.services.save_secrets", lambda value: saved.append(json.loads(json.dumps(value))))
     monkeypatch.setattr("tow.web.services.log_event", lambda *args, **kwargs: None)
     noted: list[str] = []
-    monkeypatch.setattr("tow.web.services.note_signed_in", noted.append)
+    monkeypatch.setattr("tow.web.services.note_signed_in", lambda name, **_kw: noted.append(name))
 
     def check(**kwargs):
         seen.update(kwargs)
-        return {"qbit": "ok", "results": [{"id": "browser-topic", "ok": True, "added": True}]}
+        return {
+            "qbit": "ok",
+            "results": [{"id": "browser-topic", "ok": True, "added": True}],
+            "auth_refusals": {"nnmclub": {"site_revision": "synthetic", "topics": {}}},
+        }
 
     monkeypatch.setattr("tow.web.services.run_check", check)
     result = _browser_auth_callback("browser-topic", "nnmclub", "https://nnmclub.to/forum/viewtopic.php?t=2345680")(

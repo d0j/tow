@@ -14,15 +14,20 @@
   {% set error_words = topic.last_error_human or topic.last_error %}
   {#- D6: the row says it short, the open panel in full - one note in the row's colour (AGENTS.md). -#}
   {% set error_at = topic.last_check_raw|short_time %}
-  {% if topic.last_error %}{{ note(tm('home.topic.last_error_at', at=error_at, error=error_words) if topic.last_check else t('home.topic.last_error', error=error_words), 'warn' if topic.torrent_tone == 'warn' else 'bad') }}
+  {% if topic.automatic_recovery_label %}<p class="sub">{{ topic.automatic_recovery_label }}. {{ t('recovery.continuing') }}</p>{% endif %}
+  {% if topic.last_error %}{% if topic.automatic_recovery_label %}<p class="sub">{{ t('recovery.previous', error=error_words) }}</p>{% else %}{{ note(tm('home.topic.last_error_at', at=error_at, error=error_words) if topic.last_check else t('home.topic.last_error', error=error_words), 'warn' if topic.torrent_tone == 'warn' else 'bad') }}{% endif %}
   {%- if topic.last_error_details or error_words != topic.last_error %}<details class="technical-details raw-error"><summary>{{ t('common.details') }}</summary><code>{{ topic.last_error_details or topic.last_error }}</code></details>{% endif %}
   {#- The next step of a failure that has one elsewhere: the site's row (all mirrors paused), the
       torrent client's settings. -#}
   {%- if topic.last_error_class == 'frozen' and topic.tracker %}<p class="sub link-row"><a href="/sites?open={{ topic.tracker|urlencode }}#site-row-{{ topic.tracker|urlencode }}">{{ t('home.topic.open_site', site=site_title(topic.tracker)) }}</a></p>
-  {%- elif topic.last_error_class == 'qbit' %}<p class="sub link-row"><a href="/settings?open=clients">{{ t('home.topic.client_settings') }}</a></p>{% endif %}{% endif %}
+  {%- elif topic.last_error_class == 'qbit' and not topic.automatic_recovery_label %}<p class="sub link-row"><a href="/settings?open=clients">{{ t('home.topic.client_settings') }}</a></p>{% endif %}{% endif %}
   {% if topic.site_retry_at %}<p class="sub">{{ tm('site_access.retry_at', at=topic.site_retry_raw|short_time) }}</p>{% endif %}
-  {% if topic.file_repair_phase and topic.file_repair_phase != 'blocked' %}
-  <p class="sub">{{ t('repair.phase.' ~ topic.file_repair_phase) }}</p>
+  {% if topic.restored_confirmation %}
+  {{ note(t('check.restored_confirmation'), 'warn') }}
+  <form method="post" action="/topics/{{ topic.id|urlencode }}/check" data-confirm="{{ t('check.restored_confirm') }}" data-confirm-label="{{ t('check.confirm_restored') }}"><button class="ghost" type="submit"{{ fix_attrs('check_topic', topic.id) }}>{{ t('check.confirm_restored') }}</button></form>
+  {% endif %}
+  {% if topic.file_repair_phase and (topic.file_repair_phase != 'blocked' or topic.native_recovery_label) %}
+  <p class="sub">{{ topic.file_repair_waiting or topic.native_recovery_label or t('repair.phase.' ~ topic.file_repair_phase) }}</p>
   {% elif topic.missing_file_count %}
   {{ note(t('home.topic.files_missing', count=topic.missing_file_count), 'warn') }}
   {% if topic.file_repair_phase == 'blocked' %}<p class="sub">{{ topic.file_repair_error or t('repair.stopped') }}</p>{% endif %}
@@ -32,8 +37,9 @@
   </div>
   {% endif %}
   {% if topic.has_file_repair_request %}<form method="post" action="/topics/{{ topic.id|urlencode }}/cancel-repair"><button class="ghost" type="submit" title="{{ t('repair.cancel_help') }}">{{ t('repair.dismiss') if not topic.file_repair_phase or topic.file_repair_phase == 'blocked' else t('repair.cancel') }}</button></form>{% endif %}
-  {% if topic.torrent_tone == 'warn' and topic.last_error and topic.last_error_class != 'frozen' %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" class="ghost" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
-  {% if topic.sign_in_href %}<div class="actions"><a class="btn ghost" href="{{ topic.sign_in_href }}"{{ fix_attrs('sign_in', topic.id) }}>{{ t('home.topic.sign_in') }}</a></div>{% endif %}
+  {% if topic.file_repair_continuable and not topic.native_recovery_label %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" class="ghost" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
+  {% if topic.torrent_tone == 'warn' and topic.last_error and topic.last_error_class != 'frozen' and not topic.automatic_recovery_label and not topic.restored_confirmation and not topic.file_repair_continuable %}<form method="post" action="/topics/{{ topic.id|urlencode }}/check"><button type="submit" class="ghost" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('check_topic', topic.id) }}>{{ t('site_access.retry_check') }}</button></form>{% endif %}
+  {% if topic.sign_in_href and not topic.automatic_recovery_label %}<div class="actions"><a class="btn ghost" href="{{ topic.sign_in_href }}"{{ fix_attrs('sign_in', topic.id) }}>{{ t('home.topic.sign_in') }}</a></div>{% endif %}
   {% if topic.replaces_revision %}
   <form method="post" action="/topics/{{ topic.id|urlencode }}/replace-revision" data-confirm="{{ t('home.topic.replace_confirm') }}">
     <button type="submit" class="ghost" data-busy-label="{{ t('common.busy.checking') }}"{{ fix_attrs('replace_revision', topic.id) }}>{{ t('home.topic.replace') }}</button>

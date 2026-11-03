@@ -563,7 +563,7 @@ def test_a_rollback_checkout_waits_for_a_file_held_for_a_moment(install, held_fo
         assert head(install) == before
         assert fake.calls[-1] == "spawn tow run 1.20.0"
     else:
-        assert record["status"] == "failed"
+        assert record["status"] == "failed", (record, lines)
         assert any(line.startswith("TOW was not started") for line in lines)
 
 

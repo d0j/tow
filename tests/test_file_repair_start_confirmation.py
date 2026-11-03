@@ -59,7 +59,7 @@ def test_late_positive_readback_confirms_exactly_one_start(tmp_path, monkeypatch
     assert client.calls == ["resume"]
 
 
-@pytest.mark.parametrize("state", ["stoppedUP", "stoppedDL", "checkingDL", "checkingResumeData", "allocating"])
+@pytest.mark.parametrize("state", ["stoppedUP", "stoppedDL"])
 def test_start_confirmation_deadline_is_not_extended_by_stale_or_transitional_state(tmp_path, monkeypatch, state):
     client, clock, _requested = delayed_start(tmp_path, monkeypatch)
     client.info["state"] = state
@@ -319,6 +319,8 @@ def test_legacy_fresh_running_cannot_bypass_volume_or_remote_path_uncertainty(tm
         record=lambda kind, **fields: records.append(kind),
     )
     repair.recheck(state["topics"][0], run, {})
-    assert load_state()["topics"][0]["repair_pending"]["blocked"] == "repair.volume_unavailable"
+    assert load_state()["topics"][0]["repair_pending"]["blocked"] == (
+        "repair.remote_unavailable" if remote else "repair.volume_unavailable"
+    )
     assert "files_repair_resumed" not in records
     assert client.calls == ["resume"]

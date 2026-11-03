@@ -9,7 +9,7 @@ from tow.errors import render_stored
 from tow.i18n import t
 from tow.log import scrub_text
 from tow.notifiers.base import text, ui_language
-from tow.notifiers.registry import connected, kinds, settings_of, targets, title
+from tow.notifiers.registry import connected, fingerprint, kinds, settings_of, targets, title
 from tow.scrub import PATH_PARAMS, scrub_display
 
 _NESTED_MAX = 32  # messages inside messages: as deep as tow.errors renders them
@@ -51,8 +51,13 @@ def _kind_status(secrets: dict[str, Any], state: dict[str, Any], kind: str, *, l
     """One status per messenger from its recipients' statuses (any failing one -> not ok)."""
     status = state.get("notify_status") or {}
     outbox = state.get("notify_outbox") or {}
-    keys = [key for key, target_kind, _m, _s in targets(secrets) if target_kind == kind] or [kind]
-    rows = [status.get(key) or {} for key in keys]
+    selected = [(key, settings) for key, target_kind, _m, settings in targets(secrets) if target_kind == kind]
+    keys = [key for key, _settings in selected] or [kind]
+    rows = []
+    for key, settings in selected:
+        row = status.get(key) or {}
+        if row.get("settings_revision") is None or row["settings_revision"] == fingerprint(settings):
+            rows.append(row)
     failing = [row for row in rows if row.get("ok") is False]
     seen = [row for row in rows if "ok" in row]
     queued = 0

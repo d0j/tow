@@ -242,7 +242,12 @@ def test_settings_and_watchdog_do_not_crash_or_claim_backup_success(value):
     assert _watchdog()["backup_ok"] is False
 
 
-def test_unreadable_backup_notifies_once_and_recovers_after_real_record():
+def test_unreadable_backup_notifies_once_and_recovers_after_real_record(tmp_path):
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["backup_dir"] = str(tmp_path.parent / (tmp_path.name + "-night"))
+    save_config(cfg)
     raw = b'{"last_ok_at":NaN}'
     path = _write("backup", raw)
     first, second = _watchdog(), _watchdog()
@@ -251,7 +256,7 @@ def test_unreadable_backup_notifies_once_and_recovers_after_real_record():
     assert "последний результат неизвестен" in first["alerts"][0]
     assert second["alerts"] == []
     assert path.read_bytes() == raw
-    night_record.record_status(last_ok_at=1800000000, last_error="")
+    night_record.record_status(last_ok_at=1800000000, last_error="", location=str(snapshots.backup_root().resolve()))
     assert "read_error" not in snapshots.status()
     assert _watchdog()["alerts"] == ["TOW: ночные копии снова делаются"]
     assert _watchdog()["alerts"] == []
@@ -290,7 +295,12 @@ def test_settings_displays_unreadable_watchdog_without_fabricated_date():
 
 
 @pytest.mark.parametrize("failed_at", [1800000000, 1799999000])
-def test_latest_error_wins_with_equal_or_backward_clock(failed_at):
+def test_latest_error_wins_with_equal_or_backward_clock(failed_at, tmp_path):
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["backup_dir"] = str(tmp_path.parent / (tmp_path.name + "-night"))
+    save_config(cfg)
     _write(
         "backup",
         json.dumps({"last_ok_at": 1800000000, "last_error_at": failed_at, "last_error": "synthetic failure"}).encode(),
@@ -299,8 +309,23 @@ def test_latest_error_wins_with_equal_or_backward_clock(failed_at):
     assert _watchdog()["backup_ok"] is False
 
 
-def test_success_clears_previous_error_even_when_old_error_date_is_in_future():
-    _write("backup", json.dumps({"last_ok_at": 1800000000, "last_error_at": 1800001000, "last_error": ""}).encode())
+def test_success_clears_previous_error_even_when_old_error_date_is_in_future(tmp_path):
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["backup_dir"] = str(tmp_path.parent / (tmp_path.name + "-night"))
+    save_config(cfg)
+    _write(
+        "backup",
+        json.dumps(
+            {
+                "last_ok_at": 1800000000,
+                "last_error_at": 1800001000,
+                "last_error": "",
+                "location": str(snapshots.backup_root().resolve()),
+            }
+        ).encode(),
+    )
     assert snapshots.status_failed(snapshots.status()) is False
     assert _watchdog()["backup_ok"] is True
 
@@ -368,7 +393,12 @@ def test_bad_persisted_cadence_does_not_escape_to_schedule(value):
     from tow.supervisor.core import Supervisor
 
     supervisor = object.__new__(Supervisor)
-    supervisor._persisted = {"check_started_at": value, "backup_attempt_at": value}
+    supervisor._backup_location = "synthetic-destination"
+    supervisor._persisted = {
+        "check_started_at": value,
+        "backup_attempt_at": value,
+        "backup_location": supervisor._backup_location,
+    }
     supervisor._facts = {"last_scheduled_check": value, "last_backup_ok": value}
     assert supervisor._facts_now() == {"last_scheduled_check": 0, "last_backup_ok": 0, "last_backup_attempt": 0}
 

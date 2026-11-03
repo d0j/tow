@@ -62,6 +62,7 @@ class Client:
     def __init__(self) -> None:
         self.torrents: dict[str, dict[str, Any]] = {}
         self.adds: list[str] = []
+        self.starts: list[str] = []
         self.starts_confirmed = True
         self.down = False
         self.stop_error: Exception | None = None  # stop_owned_torrent fails with it
@@ -106,9 +107,24 @@ class Client:
         return self.inspect_torrent(h)
 
     def start_owned_torrent(self, h):
+        self.starts.append(h)
         if self.starts_confirmed:
             self.torrents[h]["state"] = "downloading"
         return self.inspect_torrent(h)
+
+    def finish_verification(self, h, destination, receipt, *, start_stopped=False, on_start=None):
+        info = self.inspect_torrent(h)
+        assert info
+        assert info["save_path"] == destination
+        assert "tow" in info["tags"]
+        assert receipt["wanted"] == [row["index"] for row in info["files"] if row["priority"] > 0]
+        if info["state"].startswith("stopped") and start_stopped:
+            assert on_start is not None
+            on_start()  # the real contract persists reservation before the one start
+            info = self.start_owned_torrent(h)
+        if info["state"].startswith("stopped"):
+            raise TowError("client.managed.start_unconfirmed")
+        return {**info, "start_confirmed": True}
 
     def adopt_torrent(self, h, *, replace_label=False):
         self.torrents[h]["tags"].append("tow")
@@ -346,7 +362,7 @@ def _space_pass() -> dict[str, Any]:
     return check.run_check(apply=True, notify=True, how="progress", space_only=True)["results"][0]
 
 
-def test_a_start_the_space_pass_cannot_confirm_is_in_history_once(world, full_disk):
+def test_a_space_start_with_no_ack_waits_without_retry_or_false_started_event(world, full_disk):
     row = _check(how="manual", ids=["t1"])
     assert row["status"] == "waiting_space"
     assert _home() == ("bad", "ok")
@@ -359,11 +375,17 @@ def test_a_start_the_space_pass_cannot_confirm_is_in_history_once(world, full_di
         assert row["ok"] is False
 
     topic = _topic()
-    assert topic["last_error_code"] == "check.start_unconfirmed"
-    assert "waiting_space" in topic  # it still waits to be started
-    assert _home()[0] == "bad"
-    assert _history("errors").count("check_fail") == 1  # said where the messenger says it, once
-    assert len(world.sent) == said + 1
+    assert "last_error_code" not in topic
+    assert topic["verification_pending"]["resume_attempted"] is True
+    assert "waiting_space" not in topic
+    assert row["status"] == "verification_pending"
+    assert _history("downloads").count("client_started") == 0
+    assert world.client.starts == [OLD]
+    assert len(world.sent) == said
+    world.client.torrents[OLD]["state"] = "downloading"  # delayed native confirmation
+    assert _space_pass()["ok"]
+    assert world.client.starts == [OLD]
+    assert _history("downloads").count("client_started") == 1
 
 
 def test_a_waiting_start_held_back_by_the_previous_version_is_logged_once(world, full_disk):

@@ -210,7 +210,7 @@ def candidates(
         _LOG.debug("clearance recovery unavailable")
         return
     yield from _run_candidates(
-        pending, site, origin, probe_path, enabled, available, deadline, verification_margin, call_budget
+        pending, site, origin, probe_path, enabled, available, deadline, verification_margin, call_budget, settings
     )
 
 
@@ -224,6 +224,7 @@ def _run_candidates(
     deadline: float,
     verification_margin: float,
     call_budget: RecoveryBudget,
+    settings: dict[str, Any],
 ) -> Iterator[Clearance]:
     attempt = pending.proof
     # The last provider whose call may have asked the site. While there is none, the origin's
@@ -282,6 +283,13 @@ def _run_candidates(
                 yield validated
             except Exception as error:  # noqa: BLE001 - one optional provider must never disable the next
                 _failed_service(provider, error, attempt)
+                if _no_site_request(error):
+                    try:
+                        from tow.protection.warmup import note
+
+                        note(site, origin, provider, settings, error)
+                    except Exception:  # noqa: BLE001 - optional continuation cannot stop provider fallback
+                        _LOG.debug("local warmup continuation unavailable")
                 if called and _no_site_request(error):
                     last_called = before
                 reason, phase = failure_details(error)

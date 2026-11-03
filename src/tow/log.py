@@ -521,6 +521,7 @@ HISTORY_GROUPS = {
             "files_repair_requested",
             "files_repair_started",
             "files_repair_resumed",
+            "files_repair_waiting",
             "files_repair_failed",
             "files_repair_cancelled",
             "episode_completed",

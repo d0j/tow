@@ -450,6 +450,10 @@
     "unexpected_identity": "torrent client: the client added a torrent with a different hash",
     "save_path_unconfirmed": "torrent client: the folder of the torrent already there was not confirmed by reading it back",
     "selection_unconfirmed": "torrent client: the new file selection was not confirmed by reading it back",
+    "restored_confirmation": "Confirm continuation of this download after restoring the backup.",
+    "restored_confirmation_short": "Confirmation required",
+    "confirm_restored": "Continue download",
+    "restored_confirm": "Allow TOW to continue this download with the current file selection?",
     "no_save_path": "no folder is given for this topic",
     "magnet_mismatch": "the torrent data from the magnet link do not match its hash",
     "reconcile_failed": "comparing with the torrent client failed: {error}",
@@ -737,6 +741,7 @@
       "checks_failing": "Scheduled checks start but fail (failed runs in a row: {n}).",
       "backup_ok": "Nightly backups are made.",
       "backup_bad": "Nightly backups are not made: look at Settings → Backups.",
+      "backup_pending": "Waiting for the first nightly backup.",
       "backup_off": "Nightly backups are turned off."
     },
     "autostart": {
@@ -1592,6 +1597,7 @@
       "files_repair_requested": "file recovery requested",
       "files_repair_started": "checking files for recovery",
       "files_repair_resumed": "file recovery download started",
+      "files_repair_waiting": "file recovery will continue automatically",
       "files_repair_failed": "file recovery stopped",
       "files_repair_cancelled": "file recovery cancelled"
     },
@@ -2878,6 +2884,15 @@
     "text": "The address may be old or mistyped.",
     "home": "Home"
   },
+  "recovery": {
+    "running": "Checking again",
+    "scheduled": "Automatic retry scheduled",
+    "signed_in": "Sign-in confirmed",
+    "client": "Waiting for the client",
+    "module": "Starting the access module",
+    "continuing": "TOW will continue automatically.",
+    "previous": "Previous check: {error}"
+  },
   "repair": {
     "action": "Restore files",
     "confirm": "Ask the selected torrent client to check this torrent and download its missing selected files? Existing files and file priorities are kept.",
@@ -2900,6 +2915,17 @@
     "paused": "The topic is paused. Resume observation before requesting file recovery.",
     "selection_changed": "The selected files changed. Apply the new selection before restoring files.",
     "volume_unavailable": "The original disk or folder is unavailable. File recovery will not write to another disk.",
+    "remote_unavailable": "This torrent client is on another computer. TOW cannot verify its files for automatic recovery.",
+    "waiting_client": "The torrent client is temporarily unavailable. TOW will continue automatically when it answers.",
+    "waiting_space": "Waiting for disk space. TOW will continue file recovery automatically when there is room.",
+    "waiting_volume": "File recovery is waiting for its original disk or folder. TOW will continue automatically when it returns.",
+    "waiting_confirm": "The command was requested. TOW is waiting for confirmation without sending it again.",
+    "waiting_label": {
+      "client": "Waiting for the client",
+      "space": "Waiting for disk space",
+      "volume": "Waiting for the disk",
+      "confirm": "Awaiting confirmation"
+    },
     "client_busy": "The torrent client is moving or checking this torrent. Wait for that operation to finish.",
     "no_missing": "No missing selected files were confirmed. No recovery command was sent.",
     "unsupported": "This torrent client does not support safe file recovery.",

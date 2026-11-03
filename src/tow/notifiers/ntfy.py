@@ -72,5 +72,5 @@ def send(settings: dict[str, Any], text: str) -> None:
     if response.status_code == 200:
         return
     if response.status_code in (401, 403):
-        raise DeliveryError(Msg("notifier.ntfy.login_required"), transient=False)
+        raise DeliveryError(Msg("notifier.ntfy.login_required"), transient=False, reprobe=response.status_code == 403)
     raise status_error(response.status_code, Msg("notifier.ntfy.error", code=response.status_code))

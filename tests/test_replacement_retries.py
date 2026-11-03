@@ -9,7 +9,7 @@ import test_site_retry_runs as retry_runs
 
 from tow import site_retries
 from tow.check.rows import set_error, stamp_result
-from tow.errors import TowError
+from tow.errors import Msg, TowError
 from tow.supervisor.schedule import Schedule
 
 T0 = retry_runs.T0
@@ -141,7 +141,7 @@ def test_alternating_site_and_stop_failures_keep_one_budget_and_recovery_clears_
     failures = [
         TowError("mirrors.all_failed", tracker="demo", error=TowError("mirrors.transport", error="synthetic")),
         TowError("check.previous_revision_active", file="Show/e01.mkv", hash="B" * 40),
-        TowError("check.client_unreachable", reason="synthetic unavailable"),
+        TowError("check.client_unreachable", reason=Msg("doctor.reason.refused")),
     ]
     for count, error in enumerate(failures, 1):
         assert service.dispatch()

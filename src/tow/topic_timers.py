@@ -33,7 +33,9 @@ def retry_deadline(item: Mapping[str, Any], attempt: Any, *, anchor: float) -> f
     if count >= MAX_SITE_RETRIES:
         return None
     limit = max(7200, item["delay"])
-    return float(max(anchor + min(limit, item["delay"] * 2**count) + item["jitter"], item["floor"]))
+    ordinary = max(anchor + min(limit, item["delay"] * 2**count) + item["jitter"], item["floor"])
+    warmup = epoch(item.get("warmup_at"))
+    return float(min(ordinary, max(warmup, item["floor"]))) if warmup is not None else float(ordinary)
 
 
 def parse_interval(raw: str) -> int | None:

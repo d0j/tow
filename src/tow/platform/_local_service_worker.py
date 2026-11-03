@@ -25,6 +25,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -273,6 +274,7 @@ class NativeService:
         self.next_stop = 0.0
         self.ready = False
         self.start_deadline = 0.0
+        self.start_nonce = ""
 
     def start(self, deadline: float) -> None:
         if time.monotonic() >= deadline:
@@ -286,27 +288,47 @@ class NativeService:
         while time.monotonic() < until:
             if self.child.poll() is not None:
                 raise OSError("local service exited during startup")
-            try:
-                with closing(
-                    http.client.HTTPConnection("127.0.0.1", self.port, timeout=min(0.5, until - time.monotonic()))
-                ) as connection:
-                    connection.request("GET", "/")
-                    response = connection.getresponse()
-                    body = response.read(8193)
-                    value = json.loads(body) if len(body) <= 8192 else None
-                    if (
-                        response.status == 200
-                        and isinstance(value, dict)
-                        and value.get("version") == self.manifest["version"]
-                    ):
-                        self.ready = True
-                        return
-            except (OSError, ValueError, http.client.HTTPException):
-                pass
+            if self.probe(until):
+                return
             time.sleep(min(0.1, max(0, until - time.monotonic())))
         if time.monotonic() < self.start_deadline:
             raise StartupPending("local module still warming within startup cap")
         raise TimeoutError("local service startup cap exhausted")
+
+    def probe(self, deadline: float) -> bool:
+        """Read only the already owned child's version; never launch or ask a site."""
+        if self.closing or self.child is None or self.child.poll() is not None or time.monotonic() >= deadline:
+            return False
+        try:
+            with closing(
+                http.client.HTTPConnection("127.0.0.1", self.port, timeout=min(0.5, deadline - time.monotonic()))
+            ) as connection:
+                connection.request("GET", "/")
+                response = connection.getresponse()
+                body = response.read(8193)
+                value = json.loads(body) if len(body) <= 8192 else None
+                if (
+                    response.status == 200
+                    and isinstance(value, dict)
+                    and value.get("version") == self.manifest["version"]
+                ):
+                    self.ready = True
+                    return True
+        except (OSError, ValueError, http.client.HTTPException):
+            pass
+        return False
+
+    def readiness(self, nonce: str) -> str:
+        if (
+            not nonce
+            or nonce != self.start_nonce
+            or self.closing
+            or self.child is None
+            or self.child.poll() is not None
+            or time.monotonic() >= self.start_deadline
+        ):
+            return "gone"
+        return "ready" if self.ready or self.probe(min(self.start_deadline, time.monotonic() + 0.5)) else "warming"
 
     def launch(self, deadline: float) -> None:
         read_manifest(self.folder)  # re-check the executable before every cold start
@@ -336,6 +358,7 @@ class NativeService:
         )
         self.ready = False
         self.start_deadline = time.monotonic() + 120
+        self.start_nonce = uuid.uuid4().hex
 
     def stop(self) -> bool:
         child = self.child
@@ -466,6 +489,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Retry-After", "5")
             if b'"local module warming"' in body:
                 self.send_header("X-TOW-Module-State", "warming")
+                native = self.server.native
+                nonce = getattr(native, "start_nonce", "")
+                remaining = min(120, int(max(0, getattr(native, "start_deadline", 0) - time.monotonic())))
+                if re.fullmatch(r"[a-f0-9]{32}", nonce) and remaining > 0:
+                    self.send_header("X-TOW-Module-Nonce", nonce)
+                    self.send_header("X-TOW-Module-Remaining", str(remaining))
         self.end_headers()
         self.wfile.write(body)
 
@@ -481,8 +510,21 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self) -> None:
-        if self.local():
-            self.reply(200 if self.path == "/" else 404, b'{"msg":"Local module ready on demand","version":"1"}')
+        if not self.local():
+            return
+        matched = re.fullmatch(r"/tow-ready/([a-f0-9]{32})", self.path)
+        if matched:
+            native = self.server.native
+            if not native.lock.acquire(blocking=False):
+                self.reply(200, json.dumps({"nonce": matched[1], "state": "busy"}).encode())
+                return
+            try:
+                state = native.readiness(matched[1])
+                self.reply(200, json.dumps({"nonce": matched[1], "state": state}).encode())
+            finally:
+                native.lock.release()
+            return
+        self.reply(200 if self.path == "/" else 404, b'{"msg":"Local module ready on demand","version":"1"}')
 
     def do_POST(self) -> None:
         if not self.local():

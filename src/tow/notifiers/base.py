@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from typing import Any, Protocol, get_protocol_members, runtime_checkable
 
 import httpx
@@ -49,12 +50,22 @@ class DeliveryError(Exception):
     of TOW's messages, ``.message`` the ``Msg`` (None for a plain text).
     """
 
-    def __init__(self, reason: str | Msg, *, transient: bool, drop: bool = False) -> None:
+    def __init__(
+        self,
+        reason: str | Msg,
+        *,
+        transient: bool,
+        drop: bool = False,
+        retry_at: float | None = None,
+        reprobe: bool = False,
+    ) -> None:
         self.message = reason if isinstance(reason, Msg) else None
         self.reason = reason.text(message_language()) if isinstance(reason, Msg) else reason
         super().__init__(self.reason)
         self.transient = transient
         self.drop = drop and not transient
+        self.retry_at = retry_at
+        self.reprobe = reprobe and not transient and not self.drop
 
     @property
     def detail(self) -> str | Msg:
@@ -70,7 +81,7 @@ def status_error(code: int, reason: str | Msg) -> DeliveryError:
     """The error for an HTTP answer that is not a success: 401/403/404 hold the queue until the
     settings change, 429/5xx are retried later, any other refusal drops just this message."""
     if code in PERMANENT_CODES:
-        return DeliveryError(reason, transient=False)
+        return DeliveryError(reason, transient=False, reprobe=code == 403)
     if code == 429 or code >= 500:
         return DeliveryError(reason, transient=True)
     return DeliveryError(reason, transient=False, drop=True)
@@ -155,7 +166,7 @@ def _seconds(value: object) -> float | None:
         seconds = float(value) if isinstance(value, (str, int, float)) and not isinstance(value, bool) else None
     except ValueError:
         return None
-    return None if seconds is None or math.isnan(seconds) else seconds
+    return None if seconds is None or not math.isfinite(seconds) else seconds
 
 
 def _retry_after(response: httpx.Response) -> float | None:
@@ -164,16 +175,22 @@ def _retry_after(response: httpx.Response) -> float | None:
     try:
         header = response.headers.get("retry-after")
         if header:
-            return _seconds(header)
+            seconds = _seconds(header)
+            if seconds is not None:
+                return seconds if seconds > 0 else None
+            moment = parsedate_to_datetime(header)
+            seconds = moment.timestamp() - time.time() if moment.tzinfo is not None else None
+            return seconds if seconds is not None and seconds > 0 and math.isfinite(seconds) else None
         body = response.json()
-    except TypeError, ValueError:
+    except OSError, OverflowError, TypeError, ValueError:
         return None
     if not isinstance(body, dict):
         return None
     value = body.get("retry_after")
     if value is None and isinstance(body.get("parameters"), dict):
         value = body["parameters"].get("retry_after")
-    return _seconds(value)
+    seconds = _seconds(value)
+    return seconds if seconds is not None and seconds > 0 else None
 
 
 # Failures that prove the request never reached the service: sending it again cannot repeat it.
@@ -225,6 +242,7 @@ def request(method: str, url: str, *, what: str, **kwargs: Any) -> httpx.Respons
     started = time.monotonic()
     network_error = ""
     busy_code: int | None = None
+    retry_at: float | None = None
     for attempt in range(len(RETRY_DELAYS) + 1):
         wait = RETRY_DELAYS[attempt] if attempt < len(RETRY_DELAYS) else 0.0
         try:
@@ -241,6 +259,7 @@ def request(method: str, url: str, *, what: str, **kwargs: Any) -> httpx.Respons
             network_error, busy_code = "", response.status_code
             asked = _retry_after(response)
             if asked is not None:
+                retry_at = time.time() + max(asked, 0.0)
                 if asked > MAX_RETRY_AFTER:
                     break  # a longer wait is the next delivery's: the message stays queued
                 wait = max(asked, 0.0)
@@ -248,13 +267,14 @@ def request(method: str, url: str, *, what: str, **kwargs: Any) -> httpx.Respons
             if time.monotonic() - started + wait > REQUEST_BUDGET_SEC:
                 break
             backoff_sleep(wait)
+            retry_at = None  # this requested wait was observed before the next attempt
     if busy_code is not None:
         reason = Msg("notifier.common.busy_service", what=what, code=busy_code)
     elif network_error:
         reason = Msg("notifier.common.network_down", what=what, error=network_error)
     else:
         reason = Msg("notifier.common.no_answer", what=what)
-    raise DeliveryError(reason, transient=True)
+    raise DeliveryError(reason, transient=True, retry_at=retry_at)
 
 
 def json_or_empty(response: httpx.Response) -> dict[str, Any]:

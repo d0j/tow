@@ -105,7 +105,27 @@ def _passphrase() -> str:
 
 def _point_names(location: Path) -> list[str]:
     """Archive names, without reading or trusting their contents."""
-    return cleanup_names(location, lambda name: name.endswith(".towx") and _ID_RE.fullmatch(name[:-5]) is not None)
+    return cleanup_names(location, is_restore_point_file)
+
+
+def is_restore_point_file(name: str) -> bool:
+    """The exact archive name this install's restore-point inventory recognizes."""
+    return name.endswith(".towx") and _ID_RE.fullmatch(name[:-5]) is not None
+
+
+def verify_restore_point_file(path: Path) -> None:
+    """Verify a current local point without exposing its derived encryption passphrase."""
+    expected = point_path(path.stem)
+    if path.resolve() != expected.resolve():
+        raise RestorePointError(t("backup.restore_point.unsafe", owner_language()), kind=UNKNOWN_POINT)
+    verify_bundle(expected, _passphrase())
+
+
+def record_cleanup_observation(pending: bool, location: Path) -> None:
+    """Persist a caller's confirmed cleanup result only for the currently selected folder."""
+    if location.resolve() != restore_points_dir().resolve():
+        raise RestorePointError(t("backup.restore_point.unsafe_dir", owner_language()), kind=CREATE_FAILED)
+    _record_cleanup(pending, location)
 
 
 def cleanup_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -475,9 +495,12 @@ __all__ = [
     "create_restore_point",
     "delete_restore_point",
     "export_portable_bundle",
+    "is_restore_point_file",
     "list_restore_points",
+    "record_cleanup_observation",
     "restore_from_point",
     "restore_point_delete_view",
     "restore_points_dir",
     "restore_portable_bundle",
+    "verify_restore_point_file",
 ]

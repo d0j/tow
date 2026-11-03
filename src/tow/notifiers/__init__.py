@@ -29,10 +29,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from tow.errors import Msg
 from tow.i18n import t
 from tow.notifiers.base import DeliveryError, Field, message_language, ui_language
-from tow.notifiers.outbox import OUTBOX_LIMIT, enqueue, flush, parts_for, prune, unblock
+from tow.notifiers.outbox import OUTBOX_LIMIT, enqueue, flush, prune, unblock
 from tow.notifiers.registry import (
     connected,
     get,
@@ -129,35 +128,22 @@ def deliver_queued(secrets: dict[str, Any]) -> dict[str, tuple[bool, str]]:
 
 def test(secrets: dict[str, Any], kind: str) -> tuple[bool, str]:
     """The settings "Проверить" button: one real message to every recipient, nothing queued."""
-    from tow.notifiers.outbox import set_status
-    from tow.store import load_state, persistence_lock, save_state
+    from tow.notifiers.outbox import test_message
 
     module = get(kind)
     lang = ui_language()
     if settings_of(secrets, kind) is None:
         return False, t("notifier.common.fill_first", lang, title=title(module, lang))
-    reasons: dict[str, DeliveryError | None] = {}
+    reasons: list[str] = []
     message = check_message()
     for key, target_kind, _module, settings in targets(secrets):
         if target_kind != kind:
             continue
-        try:
-            for part in parts_for(module, message):
-                module.send(settings, part)
-        except DeliveryError as exc:
-            reasons[key] = exc
-        else:
-            reasons[key] = None
-    with persistence_lock():
-        state = load_state()
-        for key, failure in reasons.items():
-            set_status(state, key, failure.detail if failure else None)
-        save_state(state)
-    failed = [failure for failure in reasons.values() if failure]
-    if failed:
-        detail = failed[0].detail
-        return False, detail.text(lang) if isinstance(detail, Msg) else str(detail)
-    unblock(kind)  # what waited for fixed settings may go now
+        ok, reason = test_message(key, module, settings, message)
+        if not ok:
+            reasons.append(reason)
+    if reasons:
+        return False, reasons[0]
     return True, t("notifier.common.test_sent", lang, title=title(module, lang))
 
 

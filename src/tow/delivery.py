@@ -163,6 +163,14 @@ def hold(text: str) -> None:
         save_state(state)
 
 
+def stage_text(state: dict[str, Any], text: str, *, cfg: dict[str, Any], operation_id: str) -> None:
+    """Stage a system transition with its caller's durable observation, without network I/O."""
+    if quiet_now(cfg):
+        _hold(state, [text])
+    else:
+        _pending(state, text, operation_id, None)
+
+
 def release_held(cfg: dict[str, Any], now: datetime | None = None) -> int:
     """After the quiet hours, what they held goes to the messengers (``dispatch`` sends it):
     also when no check runs to do it."""

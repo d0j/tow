@@ -163,6 +163,7 @@ KZ = "https://kinozal.guru/details.php?id="
 
 def _signed_in_check(monkeypatch, *, ok: bool) -> None:
     """The check a sign-in runs: it checks the one topic, which passes (``ok``) or is refused."""
+    from tow.auth_observations import capture
     from tow.store import load_state
 
     def check(*, ids, **_kw):
@@ -173,8 +174,12 @@ def _signed_in_check(monkeypatch, *, ok: bool) -> None:
                     topic.pop(key)
                 topic.update(last_ok=True, last_check="2099-01-01T00:00:00+00:00")
         save_state(state)
-        row = {"id": ids[0], "ok": ok} if ok else {"id": ids[0], "ok": False, "error": "tracker auth required"}
-        return {"results": [row]}
+        row = (
+            {"id": ids[0], "ok": True, "tracker": "kinozal", "site_answered": True}
+            if ok
+            else {"id": ids[0], "ok": False, "error": "tracker auth required"}
+        )
+        return {"results": [row], "auth_refusals": capture(state, services.load_config()) if ok else {}}
 
     monkeypatch.setattr(services, "run_check", check)
 

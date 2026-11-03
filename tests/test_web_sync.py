@@ -525,6 +525,33 @@ def test_a_row_projection_holds_everything_the_row_template_reads():
     assert same == later  # a check's stamp and the clock change no row
 
 
+def test_retry_expiry_refreshes_both_browsers_rows_and_attention_without_a_write(monkeypatch):
+    from test_automatic_attention import CFG, NOW, continuation, failed, snapshot
+
+    cfg = load_config()
+    cfg.update(CFG)
+    save_config(cfg)
+    topic = failed()
+    save_state({"topics": [topic], "health": {"qbit_ok": True}})
+    wall = [NOW]
+    monkeypatch.setattr(time, "time", lambda: wall[0])
+    entry = continuation(snapshot(topic), next_at=NOW + 10, deadline=NOW + 20)
+    monkeypatch.setattr(
+        services, "site_recovery_status", lambda *_args: {"a": entry} if wall[0] < entry["deadline"] else {}
+    )
+    clients = [TestClient(app), TestClient(app)]
+    before = [_poll(client).json() for client in clients]
+    assert all(page["areas"]["attention"]["count"] == 0 for page in before)
+    # No file write or new sampler cycle: the area cache itself must expire its pending proof.
+    wall[0] = NOW + 21
+    for client, previous in zip(clients, before, strict=True):
+        after = _poll(client, previous["rev"]).json()
+        assert after["rev"]["topics"] != previous["rev"]["topics"]
+        assert after["rev"]["attention"] != previous["rev"]["attention"]
+        assert after["areas"]["topics"]["changed"] == ["a"]
+        assert after["areas"]["attention"]["count"] == 1
+
+
 def test_a_new_day_rewrites_the_date_labels_without_a_write(clock):
     _seed(_topic("t1"), _topic("t2", "Show B"))
     save_download_history(

@@ -270,7 +270,8 @@ def test_watchdog_reports_point_cleanup_and_retry_once_without_failing_heartbeat
             pulse=lambda _url, ok: pings.append(ok) or True,
             flush=lambda: None,
         )
-        assert result["backup_ok"] is True
+        assert result["backup_ok"] is None  # manual points do not prove a nightly backup
+        assert result["backup_state"] == "pending"
         assert result["service_ok"] is True
         assert result["checks_ok"] is True
         return result

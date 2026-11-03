@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import functools
+import json
+import re
 import socket
 import sys
 import time
@@ -11,10 +13,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx
+
 from tow.paths import runtime_dir
 from tow.platform import current, plain_kind
 from tow.platform._local_service_worker import file_sha256, read_manifest, safe_environment
 from tow.protection.spec import service_url
+from tow.protection.transport import with_deadline
 from tow.store import atomic_write_bytes
 
 
@@ -96,3 +101,42 @@ def ensure(provider: dict[str, Any], deadline: float) -> bool:
             return True
         time.sleep(min(0.05, max(0, deadline - time.monotonic())))
     raise TimeoutError("local module did not become ready")
+
+
+def readiness(provider: dict[str, Any], nonce: str, *, timeout: float) -> str:
+    """Observe the exact existing cold start only; no ensure, launch, browser or site request."""
+    try:
+        installed = managed(provider)
+    except OSError, ValueError:
+        return "gone"
+    if not re.fullmatch(r"[a-f0-9]{32}", nonce) or not 0 < timeout <= 1 or not installed:
+        return "gone"
+    endpoint = urlsplit(service_url(provider["url"]))
+    if endpoint.hostname != "127.0.0.1" or endpoint.port is None:
+        return "gone"
+    deadline = time.monotonic() + timeout
+    try:
+        with (
+            httpx.Client(trust_env=False, follow_redirects=False, timeout=timeout) as client,
+            with_deadline(client, deadline),
+            client.stream(
+                "GET",
+                f"http://127.0.0.1:{endpoint.port}/tow-ready/{nonce}",
+                headers={"Accept": "application/json", "Accept-Encoding": "identity"},
+            ) as response,
+        ):
+            if response.status_code != 200 or response.headers.get("content-encoding", "identity") != "identity":
+                return "gone"
+            body = bytearray()
+            for chunk in response.iter_bytes(chunk_size=1024):
+                if time.monotonic() >= deadline or len(body) + len(chunk) > 1024:
+                    return "gone"
+                body.extend(chunk)
+            value = json.loads(body)
+        if time.monotonic() < deadline and isinstance(value, dict) and value.get("nonce") == nonce:
+            state = value.get("state")
+            if isinstance(state, str) and state in {"ready", "warming", "busy", "gone"}:
+                return str(state)
+    except OSError, ValueError, httpx.HTTPError:
+        pass
+    return "gone"

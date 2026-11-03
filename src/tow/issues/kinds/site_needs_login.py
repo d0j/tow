@@ -16,8 +16,9 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
-from tow import trackers
+from tow import auth_observations, site_retries, trackers
 from tow.issues.model import Fix, Issue, Message, Snapshot, Target
+from tow.issues.recovery import planned
 from tow.status import error_tone
 from tow.trackers import GenericHttpTracker
 
@@ -59,9 +60,7 @@ def _signed_in_at(state: Mapping[str, Any], name: str) -> float | None:
 
 
 def _checked_before(topic: Mapping[str, Any], at: float) -> bool:
-    """The topic's last check ran before ``at`` (a check time TOW 1.24 and older wrote as text
-    certainly did). Check times are kept to the second: one in the sign-in's second counts as
-    before, as the sign-in's own check is."""
+    """Legacy display only; automatic continuation additionally requires a captured UUID."""
     try:
         checked = datetime.fromisoformat(str(topic.get("last_check") or "")).timestamp()
     except ValueError:
@@ -69,7 +68,7 @@ def _checked_before(topic: Mapping[str, Any], at: float) -> bool:
     return checked <= at
 
 
-def _waits(config: Mapping[str, Any], topic_id: str, tracker: GenericHttpTracker) -> Issue:
+def _waits(config: Mapping[str, Any], topic_id: str, tracker: GenericHttpTracker, *, automatic: bool = False) -> Issue:
     """Signed in since this topic was refused: its next check tells; "Check all" asks now."""
     name = tracker.name
     row = f"row-{topic_id}"
@@ -81,17 +80,23 @@ def _waits(config: Mapping[str, Any], topic_id: str, tracker: GenericHttpTracker
         subjects=(topic_id,),
         target=Target("home", open=topic_id, anchor=row),
         target_many=Target("home", open=topic_id, filter=(("f", "problem"), ("t", name)), anchor=row),
-        fix=Fix("check_all", label="base.check_all.title"),
+        fix=None if automatic else Fix("check_all", label="base.check_all.title"),
+        requires_attention=not automatic,
     )
 
 
 def _issue(
-    config: Mapping[str, Any], topic_id: str, tracker: GenericHttpTracker | None, *, signed_in: bool = False
+    config: Mapping[str, Any],
+    topic_id: str,
+    tracker: GenericHttpTracker | None,
+    *,
+    signed_in: bool = False,
+    automatic: bool = False,
 ) -> Issue:
     if tracker is not None and not tracker.spec.get("login_path"):
         return _no_sign_in(config, topic_id, tracker)
     if tracker is not None and signed_in:
-        return _waits(config, topic_id, tracker)
+        return _waits(config, topic_id, tracker, automatic=automatic)
     name = tracker.name if tracker else ""
     message = (
         Message("issues.site_needs_login", {"site": _title(config, name), "count": 1})
@@ -126,7 +131,32 @@ def collect(snapshot: Snapshot) -> list[Issue]:
         tracker = trackers.match_tracker(sites, str(topic.get("url") or ""))
         order = (tracker is None, _title(snapshot.config, tracker.name).casefold() if tracker else "")
         at = _signed_in_at(snapshot.state, tracker.name) if tracker else None
-        signed_in = at is not None and _checked_before(topic, at)
-        found.append((order, _issue(snapshot.config, str(topic.get("id") or ""), tracker, signed_in=signed_in)))
+        mirrors = snapshot.state.get("mirrors")
+        bucket = mirrors.get(tracker.name) if isinstance(mirrors, Mapping) and tracker else None
+        # A modern proof never falls back to ambiguous second-precision timestamps.
+        signed_in = bool(
+            at is not None
+            and tracker is not None
+            and isinstance(bucket, Mapping)
+            and (
+                auth_observations.confirmed(topic, bucket, snapshot.config, tracker.name)
+                if "signed_in_refusals" in bucket
+                else _checked_before(topic, at)
+            )
+        )
+        identity = str(topic.get("id") or "")
+        entry = snapshot.site_retries.get(identity)
+        automatic = bool(
+            signed_in
+            and at is not None
+            and tracker is not None
+            and isinstance(entry, Mapping)
+            and entry.get("reason") == "auth_confirmation"
+            and entry.get("site") == tracker.name
+            and entry.get("signed_in_at") == at
+            and entry.get("revision") == site_retries.auth_revision(topic, snapshot.config, tracker.name, at)
+            and planned(entry, now=snapshot.now)
+        )
+        found.append((order, _issue(snapshot.config, identity, tracker, signed_in=signed_in, automatic=automatic)))
     # By the site's name, an unknown site last; collect() makes one issue of each site's topics.
     return [issue for _order, issue in sorted(found, key=lambda item: item[0])]

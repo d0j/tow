@@ -66,6 +66,48 @@ def test_start_reserves_job_and_copies_worker_outside_replaceable_app(install):
     assert argv[-1] == "1.22.21"
 
 
+def test_update_cleanup_warning_ends_on_confirmed_same_folder_cleanup_without_rewriting_history(
+    install,
+    monkeypatch,
+):
+    from tow import restore_points
+
+    monkeypatch.setattr(web_update, "create_restore_point", lambda: {"id": "synthetic-copy", "cleanup_warning": "held"})
+    location = str(restore_points.restore_points_dir().resolve())
+    observation = {"pending": True, "read_error": False, "location": location, "legacy": False}
+    monkeypatch.setattr(restore_points, "cleanup_status", lambda: dict(observation))
+    web_update.start("1.22.21")
+    path = install[0] / "runtime" / "web-update" / "job.json"
+    original = path.read_bytes()
+    assert json.loads(original)["backup_cleanup_location"] == location
+    assert web_update.status()["backup_cleanup_pending"] is True
+    observation["pending"] = False
+    assert web_update.status()["backup_cleanup_pending"] is False
+    assert path.read_bytes() == original
+    assert json.loads(original)["backup_cleanup_pending"] is True
+
+
+@pytest.mark.parametrize("problem", ["unknown", "unreadable", "legacy", "other_folder"])
+def test_update_cleanup_never_calls_an_unknown_or_different_folder_clean(install, monkeypatch, problem):
+    from tow import restore_points
+
+    monkeypatch.setattr(web_update, "create_restore_point", lambda: {"id": "synthetic-copy", "cleanup_warning": "held"})
+    location = str(restore_points.restore_points_dir().resolve())
+    web_update.start("1.22.21")
+    observed = {"pending": False, "read_error": False, "location": location, "legacy": False}
+    if problem == "unknown":
+        observed["pending"] = None
+    elif problem == "unreadable":
+        observed["read_error"] = True
+    elif problem == "legacy":
+        observed["legacy"] = True
+    else:
+        observed["location"] = str(install[0] / "another-folder")
+        monkeypatch.setattr("tow.backup_actions.in_root", lambda _path: None)
+    monkeypatch.setattr(restore_points, "cleanup_status", lambda: observed)
+    assert web_update.status()["backup_cleanup_pending"] is True
+
+
 def test_parallel_click_is_refused_without_a_second_archive(install, monkeypatch):
     count = []
     monkeypatch.setattr(web_update, "create_restore_point", lambda: count.append(1) or {"id": "copy"})

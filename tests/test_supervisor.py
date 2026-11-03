@@ -566,7 +566,7 @@ class StateWorld(World):
         super().__init__(clock=clock)
         self.health = health
         monkeypatch.setattr("tow.store.load_state", lambda: {"topics": [], "health": dict(self.health)})
-        monkeypatch.setattr("tow.snapshots.status", lambda: {"last_ok_at": T0})
+        monkeypatch.setattr("tow.snapshots.current_status", lambda **_kwargs: {"last_ok_at": T0})
 
     def spawn(self, argv, output, append):
         child = super().spawn(argv, output, append)

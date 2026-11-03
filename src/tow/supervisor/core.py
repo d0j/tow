@@ -184,11 +184,20 @@ class Supervisor:
 
         self.schedule.interval_sec = interval_sec_of(cfg)
         self.schedule.backup_enabled = as_bool(cfg.get("backup_enabled"), True)
+        self._backup_destination(cfg)
         try:
             self.schedule.backup_at = parse_backup_time(cfg.get("backup_time"))
         except ValueError as exc:
             LOG.warning("%s; using 03:30", exc)
         self.schedule.zone = local_zone()
+
+    def _backup_destination(self, cfg: dict[str, Any]) -> None:
+        from tow.snapshots.record import location_revision
+
+        selected = location_revision(cfg)
+        if selected != getattr(self, "_backup_location", None):
+            self.schedule.last.pop("backup", None)
+            self._backup_location = selected
 
     def _refresh(self, mono: float) -> None:
         if mono - self._config_at >= FACTS_EVERY_SEC:
@@ -515,7 +524,9 @@ class Supervisor:
         return {
             "last_scheduled_check": check,
             "last_backup_ok": epoch(self._facts.get("last_backup_ok")) or 0.0,
-            "last_backup_attempt": self._persisted_ts("backup"),
+            "last_backup_attempt": self._persisted_ts("backup")
+            if self._persisted.get("backup_location") == self._backup_location
+            else 0.0,
         }
 
     def _jobs_tick(self, wall: float, mono: float) -> None:
@@ -545,7 +556,9 @@ class Supervisor:
         if name == "backup":
             # A switch made after the periodic config refresh must still prevent launch.
             try:
-                self.schedule.backup_enabled = as_bool(self.deps.load_config().get("backup_enabled"), True)
+                cfg = self.deps.load_config()
+                self.schedule.backup_enabled = as_bool(cfg.get("backup_enabled"), True)
+                self._backup_destination(cfg)
             except Exception as exc:  # noqa: BLE001 - do not launch an automatic write with unreadable settings
                 self.schedule.backup_enabled = False
                 LOG.warning("backup settings not read: %s", type(exc).__name__)
@@ -559,6 +572,8 @@ class Supervisor:
         if persisted_key:
             # Its cadence survives a restart: when it was due, as the schedule counts it.
             self._persisted[persisted_key] = self.schedule.last[name]
+            if name == "backup":
+                self._persisted["backup_location"] = self._backup_location
         with contextlib.suppress(OSError):
             layout.write_json(self._schedule_file, self._persisted)
         argv = [self.python, "-m", "tow", *JOB_ARGS[name]]
@@ -618,6 +633,8 @@ class Supervisor:
                     "started_at": wall,
                     "count": previous.get("count", 0) + 1,
                 }
+                if item.get("module_warmup"):
+                    batch[tid]["module_warmup"] = item["module_warmup"]
             if not batch:
                 return False
             # A topic out of the queue for a while (paused, its site paused, another error between
@@ -719,7 +736,12 @@ class Supervisor:
                 "next_start_at": _now_iso(wall + max(0.0, server.next_start - mono)) if server.child is None else None,
             },
             "restarts": [_now_iso(ts) for ts in self.restarts],
-            "job": {"name": self.job.name, "pid": self.job.child.pid, "since": _now_iso(self.job.started_wall)}
+            "job": {
+                "name": self.job.name,
+                "pid": self.job.child.pid,
+                "since": _now_iso(self.job.started_wall),
+                "deadline": _now_iso(self.job.started_wall + float(BY_NAME[self.job.name].timeout_sec or 0)),
+            }
             if self.job
             else None,
             "jobs": self.jobs_done,
@@ -730,7 +752,11 @@ class Supervisor:
             },
             "woke_at": _now_iso(self.wake.woke_at) if self.wake.woke_at else None,
             "site_retries": {
-                tid: {"at": _now_iso(at), "revision": self.schedule.site_retries[tid]["revision"]}
+                tid: {
+                    "at": _now_iso(at),
+                    "revision": self.schedule.site_retries[tid]["revision"],
+                    "observed_at": self.schedule.site_retries[tid]["observed_at"],
+                }
                 for tid, at in self.schedule.site_retry_due(wall).items()
             },
         }

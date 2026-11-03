@@ -507,13 +507,13 @@ def test_settings_card_errors_are_scrubbed_for_the_network_and_credentials_for_e
     formatted, then the sentence); this PC keeps the paths, and nobody gets a link's
     credentials. The configured folder, a setting the device may edit, stays; nothing stored
     changes."""
-    from tow.snapshots.record import record_status
+    from tow.snapshots import current_status, record_failure, status_path
 
     _seed()
     secrets = load_secrets()
     secrets["telegram"] = {"token": "123456:fake-token", "chat_ids": ["1001"]}
     save_secrets(secrets)
-    folder = str(tmp_path / "Copies")
+    folder = str(tmp_path.parent / (tmp_path.name + "-Copies"))
     cfg = load_config()
     cfg["backup_dir"] = folder
     save_config(cfg)
@@ -527,7 +527,9 @@ def test_settings_card_errors_are_scrubbed_for_the_network_and_credentials_for_e
         )
     state["notify_status"] = {"telegram:1001": status}
     save_state(state)
-    record_status(last_error=CARD_ERROR, last_error_at=1800000000.0)
+    record_failure(CARD_ERROR)
+    assert current_status()["last_error"]  # an actual failure in a valid current backup folder
+    backup_stored = status_path().read_bytes()
     stored = load_state()["notify_status"]
     lan = _lan(monkeypatch)
     local = TestClient(app, headers=ORIGIN)
@@ -545,9 +547,9 @@ def test_settings_card_errors_are_scrubbed_for_the_network_and_credentials_for_e
         }
         return [page["acc-bots"], page["acc-transfer"], found["acc-bots"], found["acc-transfer"]]
 
-    for html in sections(lan):
+    for section_index, html in enumerate(sections(lan)):
         # The link's host stays, as the whole word after "via" (the link itself is gone).
-        assert set(re.findall(r" via ([\w.-]+)", html)) == {"api.telegram.org"}
+        assert set(re.findall(r" via ([\w.-]+)", html)) == {"api.telegram.org"}, section_index
         assert not [word for word in (*CREDENTIALS, *LOCAL_WORDS) if word in html]
     remote = sections(lan)
     assert folder in remote[1]  # the configured folder: a setting, not an error
@@ -555,6 +557,7 @@ def test_settings_card_errors_are_scrubbed_for_the_network_and_credentials_for_e
         assert not [word for word in CREDENTIALS if word in html]
         assert [word for word in LOCAL_WORDS if word in html]
     assert load_state()["notify_status"] == stored
+    assert status_path().read_bytes() == backup_stored
 
 
 # --------------------------------------------------------------------------- History

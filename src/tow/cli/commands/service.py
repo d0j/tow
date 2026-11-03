@@ -127,11 +127,24 @@ def _issues(state: dict[str, Any], cfg: dict[str, Any], next_at: float | None) -
 
     from tow.issues import Snapshot, attention, collect
     from tow.supervisor import data_lost
+    from tow.supervisor.layout import client_continuation_status, site_recovery_status
 
     # The note of a lost data folder matters only while no topic is watched (as on Home); a note
     # such as the restarted download history is no problem to act on (``attention``).
     lost = None if state.get("topics") else data_lost()
-    return attention(collect(Snapshot(state=state, config=cfg, now=time.time(), next_check_at=next_at, data_lost=lost)))
+    return attention(
+        collect(
+            Snapshot(
+                state=state,
+                config=cfg,
+                now=time.time(),
+                next_check_at=next_at,
+                data_lost=lost,
+                site_retries=site_recovery_status(state, cfg),
+                client_continuations=client_continuation_status(state, cfg),
+            )
+        )
+    )
 
 
 def _status(args: argparse.Namespace) -> int:

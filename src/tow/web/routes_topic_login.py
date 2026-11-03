@@ -175,7 +175,7 @@ class _SignIn:
         flash, prompt, kind = _tracker_login_retry_flash(row, _title(self.tracker))
         if kind == "ok":
             self.settle(confirmed=True)
-            _signed_in(self.tracker.name)
+            _signed_in(self.tracker.name, out)
         if (
             prompt
             and row
@@ -210,12 +210,15 @@ class _SignIn:
         return {"text": failed, "kind": "err", "credential_topic": self.tid}
 
 
-def _signed_in(tracker_name: str) -> None:
+def _signed_in(tracker_name: str, out: Mapping[str, Any]) -> None:
     """The check confirmed the sign-in: the site's other topics refused before it are said to
     wait for their next check, not to need a sign-in (Home's "Needs attention"). They are not
     checked now: each check may download a .torrent, and a site may limit those per day."""
+    captured = out.get("auth_refusals")
+    if not isinstance(captured, Mapping) or tracker_name not in captured:
+        return  # a cached revision, paused row or skipped client step did not verify sign-in
     with suppress(OSError):  # a note not written: they ask for a sign-in until then, as before
-        services.note_signed_in(tracker_name)
+        services.note_signed_in(tracker_name, captured=captured)
 
 
 def _title(tracker: GenericHttpTracker) -> str:
@@ -309,7 +312,7 @@ def _browser_auth_callback(
         )
         if row and row.get("ok") and not magnet_fallback:
             services.log_event("browser_auth", topic=topic_id, tracker=tracker_name, status="verified", how="manual")
-            _signed_in(tracker_name)
+            _signed_in(tracker_name, out)
             spec = (services.load_config().get("trackers") or {}).get(tracker_name)
             site = str((spec.get("title") if isinstance(spec, Mapping) else "") or tracker_name)
             return {"ok": True, "message": i18n.t("web.browser_auth.verified", lang, site=site)}

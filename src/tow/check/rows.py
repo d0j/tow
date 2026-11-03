@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from tow import errors
+from tow import auth_observations, errors
 from tow.clock import iso_now, parse_timestamp
 from tow.errors import TowError
 from tow.i18n import t
@@ -85,7 +85,10 @@ def withdrawn_meanwhile(topic: Topic, row: dict[str, Any], old: str, started: tu
         )
     except StoreCorruptionError:
         return False  # the commit will fail closed on its own
-    edited = current is not None and started is not None and client_marks(current) != started
+    edited = current is not None and (
+        (started is not None and client_marks(current) != started)
+        or current.get("file_observation_revision") != topic.get("file_observation_revision")
+    )
     if current is not None and not current.get("paused") and not edited:
         return False
     key = (
@@ -136,6 +139,10 @@ def stamp_result(topic: Topic, row: dict[str, Any]) -> None:
     topic["last_error_class"] = (
         str(row.get("error_class") or error_class(str(row.get("error") or ""))) if row.get("error") else ""
     )
+    if topic["last_error_class"] == "tracker_auth":
+        topic["auth_error_revision"] = auth_observations.new_revision()
+    else:
+        topic.pop("auth_error_revision", None)
     topic["last_check"] = now()
     if row.get("ok") and row.get("status") != "skipped":
         topic["last_ok_at"] = topic["last_check"]  # G3: when it last really worked

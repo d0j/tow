@@ -99,12 +99,12 @@ def _stop(child: Any) -> bool:
 
 
 def _facts() -> dict[str, Any]:
-    from tow import file_repair
+    from tow.check import client_maintenance_pending
     from tow.config import load_config
     from tow.diagnostic_json import epoch
     from tow.records import topics_of
+    from tow.snapshots import current_status as backup_status
     from tow.snapshots import list_snapshots
-    from tow.snapshots import status as backup_status
     from tow.store import load_state
     from tow.topic_timers import active_policies, all_policies
 
@@ -126,24 +126,7 @@ def _facts() -> dict[str, Any]:
         # A revision waits in its client for disk space (tow.check.space): the space pass runs.
         # Not for a file selection changed in TOW meanwhile: the pass leaves it to the next check,
         # and ran every 5 minutes for nothing but a client ping and a line in the log.
-        "space_waiting": any(
-            (
-                (isinstance(topic.get("waiting_space"), dict) and topic.get("waiting_space"))
-                or (
-                    isinstance(topic.get("verification_pending"), dict)
-                    and topic.get("verification_pending")
-                    and not topic["verification_pending"].get("blocked")
-                )
-                or (
-                    isinstance(topic.get("repair_pending"), dict)
-                    and topic.get("repair_pending")
-                    and (not topic["repair_pending"].get("blocked") or file_repair.start_confirmation_pending(topic))
-                )
-            )
-            and not topic.get("paused")
-            and not topic.get("selection_dirty")
-            for topic in topics_of(state)
-        ),
+        "space_waiting": any(client_maintenance_pending(topic) for topic in topics_of(state)),
     }
 
 
@@ -174,10 +157,11 @@ def _remember_data_folder() -> None:
 
 
 def _watchdog_pass(wake_ts: float | None) -> Any:
-    from tow import pulse
+    from tow import backup_maintenance, pulse
     from tow.watchdog import run_watchdog
 
     _expire_undo()
+    backup_maintenance.run()
 
     probes = pulse.Probes(
         machine=pulse.machine,
