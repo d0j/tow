@@ -99,6 +99,7 @@ def _stop(child: Any) -> bool:
 
 
 def _facts() -> dict[str, Any]:
+    from tow import file_repair
     from tow.config import load_config
     from tow.diagnostic_json import epoch
     from tow.records import topics_of
@@ -136,7 +137,7 @@ def _facts() -> dict[str, Any]:
                 or (
                     isinstance(topic.get("repair_pending"), dict)
                     and topic.get("repair_pending")
-                    and not topic["repair_pending"].get("blocked")
+                    and (not topic["repair_pending"].get("blocked") or file_repair.start_confirmation_pending(topic))
                 )
             )
             and not topic.get("paused")

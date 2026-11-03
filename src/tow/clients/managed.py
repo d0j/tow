@@ -1193,7 +1193,8 @@ class ManagedClient:
         self._require_owned(infohash)
         self._start(infohash)
         after = self._repair_evidence(infohash, expected_save_path, expected_files_fingerprint, stopped=False)
-        if str(after.get("state") or "").casefold() not in {
+        state = str(after.get("state") or "").casefold()
+        if state not in {
             "downloading",
             "stalleddl",
             "queueddl",
@@ -1201,7 +1202,16 @@ class ManagedClient:
             "stalledup",
             "queuedup",
         }:
-            raise self._fail("client.managed.repair_start_unconfirmed")
+            if state in {"error", "missingfiles"}:
+                raise self._fail("client.managed.error_state", state=state)
+            # A native start is asynchronous. Only known transition states leave
+            # confirmation pending; a real error or unknown state stays a failure.
+            pending = state in {"stoppeddl", "stoppedup", "pauseddl", "pausedup", "allocating"} or state.startswith(
+                "checking"
+            )
+            raise self._fail(
+                "client.managed.repair_start_unconfirmed" if pending else "client.managed.start_unconfirmed"
+            )
         return after
 
     def set_location(self, infohash: str, save_path: str) -> str:
