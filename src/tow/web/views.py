@@ -26,6 +26,7 @@ from tow.episodes import expected_for_topic, shown_progress
 from tow.errors import render_stored
 from tow.issues import Issue, Snapshot, fingerprint, worst
 from tow.issues import attention as needing_attention
+from tow.issues.recovery import client_error_retrying, planned, restored_confirmation
 from tow.jsonish import as_dict
 from tow.log import error_class, owner_language
 from tow.net_errors import humanize
@@ -528,8 +529,32 @@ def issues_now(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> list[Issue]:
         next_check_at=services.next_check_at(interval_sec_of(cfg), health),
         # The note of a lost data folder matters only while no topic is watched: not read then.
         data_lost=None if state.get("topics") else services.data_lost(),
+        site_retries=_site_recovery(state, cfg),
+        client_continuations=_client_recovery(state, cfg),
     )
     return services.collect_issues(snapshot)
+
+
+def _site_recovery(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    return _context.memo("site_recovery", lambda: services.site_recovery_status(dict(state), dict(cfg)))
+
+
+def _client_recovery(state: Mapping[str, Any], cfg: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    return _context.memo("client_recovery", lambda: services.client_continuation_status(dict(state), dict(cfg)))
+
+
+def _automatic_label(entry: Mapping[str, Any]) -> str:
+    if not planned(entry, now=time.time()):
+        return ""
+    if entry.get("phase") == "running":
+        return t("recovery.running")
+    reason = entry.get("reason")
+    key = {
+        "auth_confirmation": "recovery.signed_in",
+        "client_recovery": "recovery.client",
+        "provider_warming": "recovery.module",
+    }.get(str(reason), "recovery.scheduled")
+    return t(key)
 
 
 def _without_folders(params: Mapping[str, Any]) -> dict[str, Any]:
@@ -788,7 +813,14 @@ def global_interval_minutes(cfg: Mapping[str, Any]) -> int:
 
 # A row's words about its error, as a network device gets them: scrubbed as Recent messages are
 # (a link keeps its host, a folder or file path goes): what the PC running TOW keeps for itself.
-_ERROR_FIELDS = ("last_error", "last_error_human", "error_line", "last_error_details", "file_repair_error")
+_ERROR_FIELDS = (
+    "last_error",
+    "last_error_human",
+    "error_line",
+    "last_error_details",
+    "file_repair_error",
+    "file_repair_waiting",
+)
 
 
 def _for_network(row: dict[str, Any]) -> dict[str, Any]:
@@ -805,9 +837,22 @@ def topic_rows(state: Mapping[str, Any], *, local: bool) -> list[dict[str, Any]]
     _context.trackers()  # a site whose link pattern is broken fails the page, as it always did
     history = _context.history()
     timers = services.topic_timer_status(dict(state))
-    retries = services.site_retry_status(dict(state), cfg)
+    recoveries = _site_recovery(state, cfg)
+    client_recoveries = _client_recovery(state, cfg)
+    native_ids = frozenset(client_recoveries)
+    retries = {
+        identity: datetime.fromtimestamp(item["next_at"], UTC).isoformat()
+        for identity, item in recoveries.items()
+        if item.get("phase") != "running"
+    }
     rows = []
     for topic in state.get("topics") or []:
+        identity = str(topic.get("id") or "")
+        native_label = (
+            _automatic_label(client_recoveries.get(identity, {}))
+            if not topic.get("last_error") or client_error_retrying(topic, native_ids)
+            else ""
+        )
         url = topic.get("url") or ""
         tr = _context.tracker_of(url)
         # The site's title finds the next season and the topic on the site; the row shows the
@@ -863,7 +908,14 @@ def topic_rows(state: Mapping[str, Any], *, local: bool) -> list[dict[str, Any]]
                 "missing_file_count": services.missing_file_count(topic, cfg),
                 "file_repair_phase": _repair_phase(topic),
                 "has_file_repair_request": bool(topic.get("repair_pending")),
+                "file_repair_continuable": services.file_repair_continuable(topic)
+                and services.current_file_repair(topic, as_dict(topic.get("repair_pending")), cfg),
                 "file_repair_error": _repair_error(topic),
+                "file_repair_waiting": _repair_waiting(topic),
+                "file_repair_waiting_label": _repair_waiting_label(topic),
+                "native_recovery_label": native_label,
+                "automatic_recovery_label": _automatic_label(recoveries.get(identity, {})) or native_label,
+                "restored_confirmation": restored_confirmation(topic),
                 "last_event_label": _event_display(event) if event else "",
                 "last_event_at": ui_time(event.get("at")) if event else "",
                 "last_event_iso": str(event.get("at") or "") if event else "",
@@ -949,9 +1001,48 @@ def _repair_error(topic: Mapping[str, Any]) -> str:
     reason = pending.get("blocked")
     return (
         render_stored(reason, as_dict(pending.get("blocked_params")), "")
-        if isinstance(reason, str) and reason.startswith("repair.")
+        if isinstance(reason, str) and i18n.has(reason)
         else ""
     )
+
+
+_REPAIR_WAITING_LABELS = {
+    "repair.waiting_client": "repair.waiting_label.client",
+    "repair.waiting_space": "repair.waiting_label.space",
+    "repair.waiting_volume": "repair.waiting_label.volume",
+    "repair.waiting_confirm": "repair.waiting_label.confirm",
+}
+
+
+def _repair_waiting_code(topic: Mapping[str, Any]) -> str:
+    phase = _repair_phase(topic)
+    pending = as_dict(topic.get("repair_pending"))
+    if (
+        phase == "blocked"
+        and services.file_repair_continuable(topic)
+        and pending.get("blocked")
+        in {
+            "repair.dispatch_unconfirmed",
+            "repair.resume_unconfirmed",
+            "client.managed.repair_start_unconfirmed",
+        }
+    ):
+        return "repair.waiting_confirm"
+    if phase in {"", "blocked"}:
+        return ""
+    code = str(as_dict(pending.get("retry_error")).get("code") or "")
+    return code if code in _REPAIR_WAITING_LABELS else ""
+
+
+def _repair_waiting(topic: Mapping[str, Any]) -> str:
+    code = _repair_waiting_code(topic)
+    retry = as_dict(as_dict(topic.get("repair_pending")).get("retry_error"))
+    return render_stored(code, as_dict(retry.get("params")), "") if code else ""
+
+
+def _repair_waiting_label(topic: Mapping[str, Any]) -> str:
+    key = _REPAIR_WAITING_LABELS.get(_repair_waiting_code(topic))
+    return t(key) if key else ""
 
 
 def service_view() -> dict[str, Any]:

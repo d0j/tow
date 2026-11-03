@@ -28,6 +28,8 @@ class Snapshot:
     now: float
     next_check_at: float | None = None
     data_lost: Mapping[str, Any] | None = None
+    site_retries: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    client_continuations: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
     @property
     def health(self) -> Mapping[str, Any]:
@@ -82,7 +84,7 @@ class Fix:
 
 @dataclass(frozen=True, slots=True)
 class Issue:
-    """One thing that needs the owner now.
+    """A current problem and whether resolving it needs the owner now.
 
     ``id`` is stable while the problem lasts (the kind, ``:subject`` for one per subject); two
     issues with the same id are one problem seen twice and are merged by ``collect`` (counts
@@ -99,10 +101,13 @@ class Issue:
     count: int = 1
     subjects: tuple[str, ...] = ()
     target_many: Target | None = None
+    requires_attention: bool = True
 
     def __post_init__(self) -> None:
         if self.severity not in SEVERITIES:
             raise ValueError(f"issue {self.id}: severity {self.severity!r} is not one of {SEVERITIES}")
+        if type(self.requires_attention) is not bool:
+            raise ValueError(f"issue {self.id}: requires_attention must be a boolean")
 
 
 def worst(issues: Iterable[Issue]) -> str:
@@ -123,6 +128,7 @@ def fingerprint(issues: Iterable[Issue]) -> str:
                 list(issue.subjects),
                 issue.message.key,
                 dict(issue.message.params),
+                issue.requires_attention,
             ],
             sort_keys=True,
             ensure_ascii=False,

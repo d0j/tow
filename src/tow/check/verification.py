@@ -10,9 +10,10 @@ import contextlib
 import copy
 from typing import TYPE_CHECKING, Any
 
+from tow.check import client_waits
 from tow.check.client_ops import client_unreachable, info_confirms, info_owned_by_tow
 from tow.check.rows import client_marks, removal_seen_by, set_error, stamp_result, withdrawn_meanwhile
-from tow.clients import files
+from tow.clients import factory, files
 from tow.clients.managed import AWAITING_INITIAL_CHECK, ClientVerificationPending
 from tow.clients.spec import TorrentClientAdapter
 from tow.clients.state import is_stopped
@@ -23,12 +24,15 @@ from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import error_fields, owner_language
 from tow.records import Topic, topics_of
+from tow.store import load_state, persistence_lock, save_state
 
 if TYPE_CHECKING:
     from tow.check.topic import CheckRun, TopicCheck
 
 OWNER_REPAIR_CODES = frozenset(
     {
+        "check.restored_confirmation",
+        "check.selection_unconfirmed",
         "client.managed.not_owned",
         "client.managed.wrong_folder",
         "client.managed.hash_changed_selection",
@@ -46,6 +50,7 @@ MISSING_CONFIRM_SEC = 600
 # A verification still waiting after this long is the owner's to look at (a red client error),
 # not a reason to drop, replace or finish the receipt: it is still confirmed when the client is done.
 OVERDUE_SEC = 12 * 3600
+OBSERVABLE_BLOCKS = frozenset({"client.managed.error_state", "client.managed.start_unconfirmed"})
 # Where a receipt whose selection is not applied yet (``AWAITING_INITIAL_CHECK``) is saved: never
 # as ``receipt``, which TOW 1.30.10 and older read as an applied, read-back selection - an add of
 # all files would pass that, and they would start it without measuring disk space. Without a
@@ -57,15 +62,21 @@ class _NotListedYet(Exception):
     """The client answered without the torrent; its removal is not confirmed yet."""
 
 
-def waiting_topics(state: dict[str, Any]) -> list[Topic]:
-    return [
-        topic
-        for topic in topics_of(state)
-        if as_dict(topic.get("verification_pending"))
-        and not as_dict(topic.get("verification_pending")).get("blocked")
+def maintenance_pending(topic: Topic) -> bool:
+    waiting = as_dict(topic.get("verification_pending"))
+    return bool(
+        waiting
         and not topic.get("paused")
         and not topic.get("selection_dirty")
-    ]
+        and (
+            not waiting.get("blocked")
+            or (str(waiting.get("blocked") or "") in OBSERVABLE_BLOCKS and not waiting.get("repair_only"))
+        )
+    )
+
+
+def waiting_topics(state: dict[str, Any]) -> list[Topic]:
+    return [topic for topic in topics_of(state) if maintenance_pending(topic)]
 
 
 def _stamp() -> str:
@@ -212,6 +223,7 @@ def _block_start_handover(
     if (receipt := _start_receipt(h, before)) is not None:
         record["receipt"] = receipt
     topic["verification_pending"] = record
+    record["client_generation"] = topic.get("file_observation_revision")
     if topic.get("tracking_mode") == "once":
         topic["once_done"] = False  # not done: a one-time topic is checked again until it is
 
@@ -252,6 +264,7 @@ def _defer_start(
         "completion_event": "client_started",
         "resume_after_check": True,
         "receipt": receipt,
+        "client_generation": topic.get("file_observation_revision"),
     }
     if topic.get("tracking_mode") == "once":
         topic["once_done"] = False
@@ -351,6 +364,7 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
         and not work.row.get("readd_removed")
         and "tow-pending" not in {str(tag).strip().casefold() for tag in info.get("tags") or []},
     }
+    work.topic["verification_pending"]["client_generation"] = work.topic.get("file_observation_revision")
     _keep_receipt(work.topic["verification_pending"], receipt)
     if waited_for_space:
         work.topic["verification_pending"].update(completion_event="client_started", resume_after_check=True)
@@ -430,9 +444,14 @@ def _confirm(
     # may retry it again. Never resume an ordinary torrent paused in the client by its owner.
     stopped = is_stopped(info)
     pending_mark = "tow-pending" in {str(tag).casefold().strip() for tag in (info or {}).get("tags") or []}
-    retry = stopped and (
-        ((pending_mark or waiting.get("resume_after_check")) and not waiting.get("resume_attempted"))
-        or run.readd_removed
+    observe_only = bool(waiting.get("blocked")) and not run.readd_removed
+    retry = (
+        stopped
+        and not observe_only
+        and (
+            ((pending_mark or waiting.get("resume_after_check")) and not waiting.get("resume_attempted"))
+            or run.readd_removed
+        )
     )
     finish = getattr(client, "finish_verification", None)
     if not callable(finish):
@@ -443,7 +462,7 @@ def _confirm(
             str(waiting.get("path") or ""),
             receipt_of(waiting) or {},
             start_stopped=retry,
-            on_start=lambda: _start_given(waiting),
+            on_start=lambda: _reserve_start(topic, waiting, run=run, allow_legacy=run.readd_removed),
         )
     except TowError as error:
         if error.code == "client.managed.missing":
@@ -465,6 +484,167 @@ def _start_given(waiting: dict[str, Any]) -> None:
         _adopt_receipt(waiting, {key: value for key, value in receipt.items() if key not in {"phase", "start"}})
 
 
+def _source_matches(source: dict[str, Any], expected: dict[str, Any], *, space: bool) -> bool:
+    keys = ("hash", "client", "selection", "since") if space else ("hash", "client", "path", "owner", "since")
+    authority = ("blocked", "repair_only", "resume_attempted")
+    return all(source.get(key) == expected.get(key) for key in (*keys, *authority)) and (
+        space or receipt_of(source) == receipt_of(expected)
+    )
+
+
+def _connection_options(configuration: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in configuration.items() if key not in {"title", "default"}}
+
+
+def _reserve_start(
+    topic: Topic,
+    waiting: dict[str, Any],
+    *,
+    run: CheckRun | None = None,
+    source_space: dict[str, Any] | None = None,
+    allow_legacy: bool = False,
+) -> None:
+    """Durably consume this transaction's one start immediately before the native RPC.
+
+    A crash after the reservation is an unconfirmed start, never permission to resend it.
+    Only this marker is merged, preserving concurrent owner edits and other topic fields.
+    """
+    candidate = copy.deepcopy(waiting)
+    _start_given(candidate)
+    key = "waiting_space" if source_space is not None else "verification_pending"
+    expected = source_space if source_space is not None else waiting
+    with persistence_lock():
+        from tow.check.run import fresh_client_settings
+
+        cfg, current_secrets = fresh_client_settings()
+        state = load_state(quarantine=False)
+        disk = next((row for row in topics_of(state) if row.get("id") == topic.get("id")), None)
+        source = as_dict(disk.get(key)) if disk is not None else {}
+        selected = str((disk or {}).get("client_id") or factory.default_client_id(cfg))
+        configuration = factory.client_configuration(cfg, selected)
+        if (
+            disk is None
+            or selected != waiting.get("client")
+            or not configuration.get("enabled", True)
+            or disk.get("paused")
+            or disk.get("selection_dirty")
+            or client_marks(disk) != client_marks(topic)
+            or disk.get("file_observation_revision") != topic.get("file_observation_revision")
+            or str(disk.get("hash") or "").upper() != str(waiting.get("hash") or "").upper()
+        ):
+            raise TowError("check.selection_unconfirmed")
+        if (
+            run is not None
+            and run.client_config
+            and (
+                _connection_options(configuration)
+                != _connection_options(factory.client_configuration(run.client_config, selected))
+                or factory.client_secret_block(cfg, current_secrets, selected)
+                != factory.client_secret_block(run.client_config, run.secrets, selected)
+            )
+        ):
+            raise TowError("check.selection_unconfirmed")
+        # A just-finished paused initial handover can become a space wait in this same run.
+        if source_space is not None and not source:
+            source = as_dict(disk.get("verification_pending"))
+            initial = as_dict(receipt_of(source))
+            matches = (
+                initial.get("phase") == AWAITING_INITIAL_CHECK
+                and initial.get("start") is False
+                and source.get("owner") == list(client_marks(topic))
+                and str(source.get("hash") or "").upper() == str(waiting.get("hash") or "").upper()
+                and initial.get("wanted") == as_dict(receipt_of(waiting)).get("wanted")
+            )
+        else:
+            matches = _source_matches(source, expected, space=source_space is not None)
+        generation = source.get("client_generation")
+        if (
+            not matches
+            or (source.get("resume_attempted") and not allow_legacy)
+            or (generation != topic.get("file_observation_revision") and not allow_legacy)
+        ):
+            raise TowError("check.selection_unconfirmed")
+        candidate["client_generation"] = topic.get("file_observation_revision")
+        if not allow_legacy:
+            try:
+                age = (machine_now() - parse_timestamp(str(candidate.get("since") or ""))).total_seconds()
+            except TypeError, ValueError, OverflowError:
+                age = OVERDUE_SEC
+            if age < 0 or age >= OVERDUE_SEC:
+                raise TowError("check.verification_overdue")
+        disk["verification_pending"] = candidate
+        disk.pop("waiting_space", None)
+        # The pending receipt itself keeps one-time work eligible after a crash. Changing
+        # this owner field here would look like a concurrent edit to the final state merge.
+        save_state(state)
+    waiting.clear()
+    waiting.update(candidate)
+    topic["verification_pending"] = waiting
+    topic.pop("waiting_space", None)
+    if topic.get("tracking_mode") == "once":
+        topic["once_done"] = False
+
+
+def start_waiting(
+    topic: Topic,
+    run: CheckRun,
+    row: dict[str, Any],
+    client: TorrentClientAdapter,
+    *,
+    info: dict[str, Any],
+    client_id: str,
+) -> None:
+    """Hand a space wait to the existing one-start verification workflow, before dispatch."""
+    previous = copy.deepcopy(as_dict(topic.get("waiting_space")))
+    h, destination = str(previous.get("hash") or ""), str(topic.get("save_path") or "")
+    receipt = _start_receipt(h, info)
+    if receipt is None:
+        raise TowError("check.selection_unconfirmed")
+    waiting = {
+        "hash": h,
+        "client": client_id,
+        "path": destination,
+        "owner": list(client_marks(topic)),
+        "since": str(previous.get("since") or _stamp()),
+        "kind": str(previous.get("kind") or "added"),
+        "selection_update": False,
+        "completion_event": "client_started",
+        "resume_after_check": True,
+        "receipt": receipt,
+        "client_generation": topic.get("file_observation_revision"),
+    }
+    try:
+        confirmed = client.finish_verification(
+            h,
+            destination,
+            receipt,
+            start_stopped=True,
+            on_start=lambda: _reserve_start(
+                topic, waiting, run=run, source_space=previous, allow_legacy=run.readd_removed
+            ),
+        )
+    except ClientVerificationPending as pending:
+        if not waiting.get("resume_attempted"):
+            raise  # a receipt was not reserved: preserve the original wait, never invent a start
+        if pending.receipt:
+            _adopt_receipt(waiting, pending.receipt)
+        _still_waiting(topic, run, row, waiting, h, ())
+    except TowError as error:
+        if waiting.get("resume_attempted") and error.code == "client.managed.start_unconfirmed":
+            _still_waiting(topic, run, row, waiting, h, ())
+            return  # the one start was reserved; only subsequent observations may confirm it
+        if waiting.get("resume_attempted") and error.code in TERMINAL_CODES:
+            waiting["blocked"] = error.code
+            waiting["blocked_params"] = error_fields(error).get("error_params") or {}
+            if error.code in OWNER_REPAIR_CODES:
+                waiting["repair_only"] = True
+        raise
+    else:
+        if not waiting.get("resume_attempted"):
+            topic.pop("waiting_space", None)  # the owner already started it during the read-back
+        _finished(topic, run, row, waiting, client_id, h, client=client, info=confirmed)
+
+
 def _restore_check_times(topic: Topic, previous_check: str | None, previous_ok_at: str | None) -> None:
     if previous_check is None:
         topic.pop("last_check", None)
@@ -483,6 +663,16 @@ def recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: bool
     kept for the next pass and nothing else is asked of the site or the client for it now."""
     previous_check = topic.get("last_check")
     previous_ok_at = topic.get("last_ok_at")
+    waiting = as_dict(topic.get("verification_pending"))
+    if waiting and client_waits.deferred(
+        topic, now=machine_now().timestamp(), manual=run.readd_removed, cfg=run.client_config or None
+    ):
+        row["client_retry_deferred"] = True
+        if waiting.get("blocked"):
+            blocked_row(topic, row, str(topic.get("hash") or ""))
+        else:
+            pending_row(row, str(topic.get("hash") or ""))
+        return True
     try:
         return _recheck(topic, run, row, pass_only=pass_only)
     except Exception as error:  # noqa: BLE001 - one topic's defect must not abort every other topic
@@ -503,6 +693,10 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
     waiting = as_dict(topic.get("verification_pending"))
     if not isinstance(waiting, dict) or not waiting or topic.get("selection_dirty"):
         return False
+    if waiting.get("blocked") == "check.restored_confirmation" and not run.readd_removed:
+        if pass_only:
+            blocked_row(topic, row, str(topic.get("hash") or ""))
+        return pass_only  # even an incomplete archived binding is never a new permission
     h = str(waiting.get("hash") or "").upper()
     client_id, client = run.get_client_for(topic)
     if (
@@ -513,7 +707,15 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
         if run.apply:
             topic.pop("verification_pending", None)
         return False  # owner's new settings need an ordinary check, never this old receipt
-    if waiting.get("blocked") and not run.readd_removed:
+    if "client_generation" in waiting and waiting["client_generation"] != topic.get("file_observation_revision"):
+        if run.readd_removed:
+            row["verification_repair"] = True
+            return False
+        waiting.update(blocked="check.selection_unconfirmed", blocked_params={}, repair_only=True)
+        _failed(topic, run, row, waiting, TowError("check.selection_unconfirmed"), ())
+        return True
+    observe_blocked = str(waiting.get("blocked") or "") in OBSERVABLE_BLOCKS and not waiting.get("repair_only")
+    if waiting.get("blocked") and not run.readd_removed and not observe_blocked:
         if pass_only:
             blocked_row(topic, row, h)
         return pass_only  # no fast retry; ordinary site checks can still find a new revision
@@ -543,13 +745,19 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
             _adopt_receipt(waiting, error.receipt)
             _still_waiting(topic, run, row, waiting, h, before_error)
     except Exception as error:  # noqa: BLE001 - one failed confirmation never ends the batch
-        _failed(topic, run, row, waiting, error, before_error)
+        if getattr(error, "code", None) == "client.managed.start_unconfirmed" and waiting.get("resume_attempted"):
+            waiting.pop("blocked", None)
+            waiting.pop("blocked_params", None)
+            _still_waiting(topic, run, row, waiting, h, before_error)
+        else:
+            _failed(topic, run, row, waiting, error, before_error)
     else:
+        client_waits.clear_retry(waiting)
         _finished(topic, run, row, waiting, client_id, h, client=client, info=confirmed)
     stamp_result(topic, row)
     if pass_only:
         _restore_check_times(topic, previous_check, previous_ok_at)
-    return True
+    return not (observe_blocked and waiting.get("blocked") and not pass_only)
 
 
 def _still_waiting(
@@ -582,6 +790,9 @@ def _failed(
     before_error: tuple[Any, ...],
 ) -> None:
     """The confirmation failed: a terminal reason blocks the receipt; logged and told once."""
+    error = client_waits.remember(waiting, error, now=machine_now().timestamp())
+    if client_waits.deferred(topic, now=machine_now().timestamp()):
+        row["client_retry_deferred"] = True
     code = getattr(error, "code", None)
     if code in TERMINAL_CODES:
         waiting["blocked"] = str(code)  # retain reason independently of reconcile errors
@@ -630,18 +841,30 @@ def _finished(
     topic.pop("verification_pending", None)
     if str(topic.get("tracking_mode") or "watch") == "once":
         topic["once_done"] = True
-    row.update(ok=True, status="succeeded", added=not waiting.get("selection_update"), verification_pending=False)
+    row.update(
+        ok=True,
+        status="succeeded",
+        added=not waiting.get("selection_update") and waiting.get("completion_event") != "client_started",
+        verification_pending=False,
+    )
     row.pop("skipped", None)
     for key in ("error", "error_record", "error_class"):
         row.pop(key, None)
     # The kind comes from state.json: only the one TOW writes there is taken (an edited or foreign
     # state never puts its own string into the log as a kind).
-    run.record(
+    event = (
         "client_started"
         if waiting.get("completion_event") == "client_started"
         else "client_selection_updated"
         if waiting.get("selection_update")
-        else "client_added",
+        else "client_added"
+    )
+    if event == "client_started" and (info or {}).get("start_confirmed") is False:
+        return  # the add/selection is complete, but stopped+complete proves no running transition
+    if event == "client_started":
+        row["started"] = True
+    run.record(
+        event,
         operation_id=new_operation_id("client-confirm"),
         component="client",
         integration_id=client_id,

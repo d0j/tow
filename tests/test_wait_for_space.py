@@ -95,6 +95,21 @@ class Client:
         self.torrents[h]["state"] = "downloading"
         return self.inspect_torrent(h)
 
+    def finish_verification(self, h, destination, receipt, *, start_stopped=False, on_start=None):
+        info = self.inspect_torrent(h)
+        assert info
+        assert info["save_path"] == destination
+        assert receipt["wanted"] == [row["index"] for row in info["files"] if row["priority"] > 0]
+        if info["state"].startswith("stopped") and start_stopped:
+            assert on_start is not None
+            on_start()
+            info = self.start_owned_torrent(h)
+        if info["state"].startswith("stopped") and info.get("progress", 0) < 1:
+            from tow.errors import TowError
+
+            raise TowError("client.managed.start_unconfirmed")
+        return {**info, "start_confirmed": not info["state"].startswith("stopped")}
+
     def stop_owned_torrent(self, h):
         self.torrents[h]["state"] = "stoppedDL"
         return self.inspect_torrent(h)
@@ -698,7 +713,7 @@ def _recording_selection(client: Client) -> list[bool]:
     return calls
 
 
-def test_space_start_not_read_back_keeps_waiting(world):
+def test_space_start_not_read_back_keeps_one_durable_observation_without_restarting(world):
     from tow.log import read_events
 
     _check()
@@ -708,8 +723,11 @@ def test_space_start_not_read_back_keeps_waiting(world):
     rows = _space_pass()
     topic = _topic()
     assert rows[0]["ok"] is False
-    assert topic["last_error_code"] == "check.start_unconfirmed"
-    assert topic["waiting_space"]["hash"] == NEW  # still waiting: the next pass tries again
+    assert not topic.get("last_error_code")
+    assert not topic.get("waiting_space")
+    assert topic["verification_pending"]["hash"] == NEW
+    assert topic["verification_pending"]["resume_attempted"] is True
+    assert rows[0]["status"] == "verification_pending"
     assert world.client.torrents[NEW]["state"] == "stoppedDL"
     assert "client_started" not in {event["kind"] for event in read_events(limit=500)}
     world.client.torrents[NEW]["progress"] = 1.0  # a complete torrent may stay stopped after its start

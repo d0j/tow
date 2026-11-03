@@ -207,6 +207,9 @@ def _apply_config_overrides(parsed: dict[str, Any], overrides: dict[str, Any]) -
 def _forget_volumes(state: dict[str, Any]) -> None:
     """The volumes the exporting computer recorded for its backup folders, and its notes of
     missing volumes or files, are its own observations: an import keeps none of them."""
+    from tow import repair_authorization
+
+    repair_authorization.forget(state)
     state.pop("backup_volumes", None)
     topics = list(state.get("topics") or [])
     undo = state.get("undo")

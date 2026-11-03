@@ -268,13 +268,14 @@ def _report(monkeypatch, planned: dict[str, Any], **extra: Any) -> None:
 
 
 def test_home_shows_the_planned_retry_of_the_current_outage(monkeypatch):
+    monkeypatch.setattr(site_retries.time, "time", lambda: T0)
     state = {"topics": [failed("a"), failed("b"), failed("c")], "mirrors": {}}
     plan = site_retries.policies(state, config())
     at = datetime.fromtimestamp(T0 + 1800, UTC).isoformat()
     _report(
         monkeypatch,
         {
-            "a": {"at": at, "revision": plan["a"]["revision"]},
+            "a": {"at": at, "revision": plan["a"]["revision"], "observed_at": T0},
             "b": {"at": at, "revision": "an earlier outage"},
             "c": {"at": "not a time", "revision": plan["c"]["revision"]},
         },

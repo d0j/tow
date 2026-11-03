@@ -54,7 +54,10 @@ Times are short: “20:31” today, “15 Oct, 20:31” this year, “15 Oct 202
 has its date. They are in the time zone of the computer running TOW; a tap on a time shows it in full with its
 seconds and UTC offset, and so does the pointer resting on it.
 
-The **warning triangle** in the header counts current problems, including failed topic checks. Click it to open
+The **warning triangle** in the header counts problems that need your action. A temporary failure with a current,
+bounded automatic retry is shown in the topic's row and panel instead; the last failure stays in History. If that
+retry expires, is exhausted or cannot run, the problem returns to the triangle. A stopped TOW service cannot promise
+an automatic retry. Click the triangle to open
 **Needs attention**: the list is closed by default and opens over the page without moving the content. Each link
 opens the relevant topic, site or Settings card and focuses the fix button when available. The triangle disappears
 automatically after TOW confirms that no current problems remain; old History entries do not keep it visible. A
@@ -121,7 +124,14 @@ stopped torrent is never resumed. Checking and recovery run in the background, w
 five minutes and a finite time limit; the row shows the phase. **Do not continue automatically** prevents further
 commands; an operation already accepted by the client can finish there. Pausing observation also cancels further
 recovery commands. Only fresh disk evidence and the client's completed file progress confirm restoration. A
-failed or interrupted recovery stays visible with its reason and can be requested again.
+failed or interrupted recovery stays visible with its reason and can be requested again. Within the original
+12-hour limit, temporary client disconnection, lack of space and absence of the original disk wait automatically;
+the row says what it is waiting for. A lost command acknowledgement is followed by observation, never replaying
+the command. Credentials, a different disk, changed ownership or selection and a newly observed stop require you.
+
+Restoring a backup, importing or undoing a deletion does not restore permission to start a stopped torrent.
+Open the affected topic and choose **Continue download** to confirm that continuation. Automatic checks and
+**Check all** cannot give that permission.
 
 While the native file check runs, cancel through TOW or pause the TOW topic. qBittorrent's API cannot reliably
 distinguish its automatic stop after checking from a stop in the client during that check. Once recovery is
@@ -263,6 +273,12 @@ manual checks and progress checks do not reset it.
   checks at most once in ten minutes per site, the row's ↻ every time.
 - **Site pause** stops scheduled checks of every topic on that site.
 
+Temporary client connection failures use the same three-attempt queue. An answering client still loading its
+torrents is not called disconnected. After sign-in is verified, the other topics wait for their ordinary timer
+without spending another limited `.torrent` download just to test sign-in. A slow on-demand access module gets
+one bounded readiness continuation; no site request is made until it is ready. None of these bypasses a server's
+waiting time, a download limit, a pause or a changed file selection.
+
 ## Notifications
 
 Settings → Notifications: Telegram, Discord, WhatsApp (via CallMeBot), ntfy. Each card has “How to connect” steps;
@@ -271,6 +287,9 @@ once it is connected, **Send a test** sends a test message and **Disconnect** re
 - One message per topic per check: added, new version, new episodes, download complete, removed, back in the
   client. An error in the same check is added to the message, not hidden.
 - Errors are sent when they appear or change kind, not on every check; “… — works again” follows the recovery.
+  A messenger's requested waiting time also applies after a restart and to **Send test**. Temporary delivery
+  failures retain the message; a forbidden recipient is probed at most three times in 24 hours, six hours apart.
+  Invalid credentials or a missing recipient require correcting the settings.
   A site that does not answer (yellow) is reported once it fails three checks in a row, so a mirror that drops out
   now and then does not send “error” and “works again” every other check.
   When one site fails the same way for three or more topics in one check, you get one message for the site.
@@ -338,6 +357,11 @@ once it is connected, **Send a test** sends a test message and **Disconnect** re
   earlier copies too; only the new copy and future-dated ones always stay.
 - Both saved-copy lists offer **Check**, **Restore** and **Delete**. Deletion requires confirmation for the
   dated copy and cannot be undone; it removes only that copy, not current settings, topics or history.
+- If automatic cleanup was interrupted, the running service retries it with backoff, at most three failures
+  in 24 hours. It removes at most one owned copy from each local backup folder per pass, only after verifying
+  a retained copy and rechecking the folder, disk and retention policy. Unknown copies and network shares are
+  left alone. A successful cleanup clears its warning; changing the folder does not inherit the old folder's
+  success or failure.
 - Before any restore TOW checks the copy and saves the current state; network access settings and the two backup
   folders stay as they are (when the settings in force cannot be read, a nightly backup restore leaves network
   access off and says so, and takes the folders from the copy).
@@ -504,8 +528,9 @@ this tab is no longer kept.” What is in the list:
 
 Routine scheduled checks that found nothing, each successful delivery and other bookkeeping are in History only. The
 list is not a complete history: an event the log could not write (a full disk) is missing there too.
-Problems that last (a topic error, a client that does not answer) stay in **Needs attention** until they are
-fixed. Folding or closing a message does not clear the topic's error or its History record.
+Problems without an eligible automatic continuation stay in **Needs attention** until fixed. A fresh successful
+observation clears the warning on every browser. Folding or closing a message does not clear the topic's error
+or its History record. The coloured dot still describes the latest observation while a retry is pending.
 
 | Message | Meaning | What to do |
 |---|---|---|

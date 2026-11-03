@@ -30,6 +30,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from tow import platform
+from tow.check import client_waits
 from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
     client_unreachable,
@@ -39,9 +40,8 @@ from tow.check.client_ops import (
 )
 from tow.check.rows import client_marks, fail_row, note_removed, set_error, stamp_result, withdrawn_meanwhile
 from tow.clients import state as client_state
-from tow.clients.managed import ClientVerificationPending, completed_progress
 from tow.clients.spec import TorrentClientAdapter
-from tow.clock import iso_now
+from tow.clock import iso_now, machine_now
 from tow.errors import TowError
 from tow.events import new_operation_id
 from tow.jsonish import as_dict
@@ -250,7 +250,11 @@ def waiting_of(topic: Topic) -> dict[str, Any]:
 
 def waiting_topics(state: dict[str, Any]) -> list[Topic]:
     """The topics whose revision waits for room (a paused one is left alone, as by checks)."""
-    return [topic for topic in topics_of(state) if waiting_of(topic) and not topic.get("paused")]
+    return [
+        topic
+        for topic in topics_of(state)
+        if waiting_of(topic) and not waiting_of(topic).get("blocked") and not topic.get("paused")
+    ]
 
 
 def waiting_for(topic: Topic, infohash: str) -> dict[str, Any] | None:
@@ -286,6 +290,7 @@ def wait_for_space(
         "since": str(earlier.get("since") or iso_now()),
         "selection": selection_key(info),
         "kind": kind,
+        "client_generation": topic.get("file_observation_revision"),
     }
     if earlier.get("reported") is True:
         topic["waiting_space"]["reported"] = True
@@ -358,6 +363,26 @@ def recheck(
     *,
     begun: tuple[str, ...] | None = None,
 ) -> str:
+    try:
+        return _recheck(topic, run, row, client, client_id, begun=begun)
+    except Exception as error:
+        normalized = client_waits.remember(waiting_of(topic), error, now=machine_now().timestamp())
+        if client_waits.deferred(topic, now=machine_now().timestamp()):
+            row["client_retry_deferred"] = True
+        if normalized is error:
+            raise
+        raise normalized from error
+
+
+def _recheck(
+    topic: Topic,
+    run: CheckRun,
+    row: dict[str, Any],
+    client: TorrentClientAdapter | None,
+    client_id: str,
+    *,
+    begun: tuple[str, ...] | None = None,
+) -> str:
     """Look at a waiting topic's torrent in its client - never at the site - and start it when
     its files fit now. Returns WAITING, STARTED, WOULD_START (a dry run), WITHDRAWN (the owner
     paused, deleted or edited the topic since ``begun``, its ``client_marks`` when the run
@@ -370,15 +395,32 @@ def recheck(
     the files, an error) and a drive that cannot be measured right now decide nothing: the
     topic keeps waiting as it was."""
     waiting = waiting_of(topic)
+    if client_waits.deferred(
+        topic, now=machine_now().timestamp(), manual=run.readd_removed, cfg=run.client_config or None
+    ):
+        row["client_retry_deferred"] = True
+        if waiting.get("blocked"):
+            raise TowError(str(waiting["blocked"]), **as_dict(waiting.get("blocked_params")))
+        return _keep_waiting(topic, run, row, h=str(waiting.get("hash") or ""), waiting=waiting)
     h = str(waiting.get("hash") or "").upper()
     recorded_client = str(waiting.get("client") or "")
     if not h or h != str(topic.get("hash") or "").upper() or (recorded_client and recorded_client != client_id):
         forget(topic)  # a record left from an earlier revision, or of a client the topic left
         return STALE
+    if waiting.get("blocked") and not run.readd_removed:
+        raise TowError(str(waiting["blocked"]), **as_dict(waiting.get("blocked_params")))
+    if "client_generation" in waiting and waiting["client_generation"] != topic.get("file_observation_revision"):
+        if not run.readd_removed:
+            waiting.update(blocked="check.selection_unconfirmed", blocked_params={})
+            raise TowError("check.selection_unconfirmed")
+        waiting["client_generation"] = topic.get("file_observation_revision")
+        waiting.pop("blocked", None)
+        waiting.pop("blocked_params", None)
     row.update({"hash": h, "changed": False})
     if client is None:
         raise client_unreachable(run, client_id)
     info = client.inspect_torrent(h)
+    client_waits.clear_retry(waiting)
     if info is None:
         forget(topic)
         return GONE
@@ -419,24 +461,10 @@ def recheck(
     destination = str(topic.get("save_path") or "")
     if not info_confirms(info, h, destination, require_tow_ownership=True):
         raise TowError("check.save_path_unconfirmed")
-    try:
-        client.start_owned_torrent(h)
-    except ClientVerificationPending:
-        from tow.check import verification
+    from tow.check import verification
 
-        verification.defer_start(
-            topic, run, row, client, h=h, client_id=client_id, destination=destination, before=info, kind=kind
-        )
-        return VERIFYING
-    after = client.inspect_torrent(h)  # the start counts only once the client confirms it
-    if not info_confirms(after, h, destination, require_tow_ownership=True) or (
-        is_stopped(after) and not completed_progress((after or {}).get("progress"))
-    ):
-        raise TowError("check.start_unconfirmed")
-    row.update({"ok": True, "status": "succeeded", "started": True})
-    _clear_row_error(row)
-    started(topic, run, row, h=h, client_id=client_id, kind=kind)
-    return STARTED
+    verification.start_waiting(topic, run, row, client, info=info, client_id=client_id)
+    return STARTED if row.get("ok") else VERIFYING
 
 
 def _clear_row_error(row: dict[str, Any]) -> None:
@@ -485,6 +513,11 @@ def space_pass_row(topic: Topic, run: CheckRun, row: dict[str, Any]) -> None:
     try:
         outcome = recheck(topic, run, row, client, client_id, begun=begun)
     except Exception as error:  # noqa: BLE001 - one topic's failure is its result, never the pass's end
+        code = getattr(error, "code", None)
+        if code in {"check.selection_unconfirmed", "check.save_path_unconfirmed"}:
+            waiting = waiting_of(topic)
+            if waiting:
+                waiting.update(blocked=code, blocked_params=error_fields(error).get("error_params") or {})
         before = (topic.get("last_error_code"), topic.get("last_error_params"), topic.get("last_error"))
         row.update({"ok": False, "status": "failed"})
         set_error(row, error)

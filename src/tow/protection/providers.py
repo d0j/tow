@@ -147,7 +147,16 @@ def _service_status(response: httpx.Response, *, local: bool = False) -> None:
         phase = "startup" if warming else "service"
         headers = response.headers
         retry_after = _retry_after(headers.get("retry-after"), headers.get("date"), headers.get("age"))
-        raise ProviderUnavailableError("busy", retry_after=retry_after, phase=phase)
+        continuation = None
+        nonce, remaining = headers.get("x-tow-module-nonce", ""), headers.get("x-tow-module-remaining", "")
+        if (
+            warming
+            and re.fullmatch(r"[a-f0-9]{32}", nonce)
+            and re.fullmatch(r"[0-9]{1,3}", remaining)
+            and 1 <= int(remaining) <= 120
+        ):
+            continuation = {"nonce": nonce, "deadline": time.time() + int(remaining)}
+        raise ProviderUnavailableError("busy", retry_after=retry_after, phase=phase, continuation=continuation)
     if response.status_code in {400, 401, 403, 404, 405, 422, 501}:
         raise ProviderUnavailableError("protocol")
     if response.status_code != 200:

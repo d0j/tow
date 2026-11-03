@@ -5,6 +5,28 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Added
+- Bounded automatic continuation for temporary client failures and slow on-demand site-access modules,
+  using the existing retry queue and respecting server waiting times and download limits.
+- Interrupted backup cleanup is retried for verified, owned local copies, preserving a verified retained
+  copy and stopping after three failures in 24 hours.
+
+### Fixed
+- Needs attention now distinguishes an actual automatic continuation from a problem that needs the owner.
+  Pending work and its last cause remain visible; exhausted, stale or unavailable retries remain actionable.
+  Recovery clears warnings on every browser only after fresh evidence. Rows refresh when retries start or
+  expire, even without a file write; native recovery also requires an actual running supervisor plan.
+- File recovery waits for temporary client disconnection, disk space and the original disk within its
+  original deadline. Late acknowledgements are observed without repeating commands. Start reservations
+  survive crashes; a manual stop, changed selection or restored backup cannot authorize another start.
+  Changing or disabling the selected client during a check also prevents the old connection from starting it.
+- Successful site sign-in is tied to the exact observed refusal and awaits the normal check without
+  repeatedly asking for sign-in. A later refusal cannot reuse that confirmation.
+- Messenger waiting times survive restarts and apply to tests too; forbidden recipients get bounded probes,
+  while invalid credentials remain actionable. Watchdog alerts enter the durable queue before being acknowledged.
+- Backup health belongs to its current folder. Successful cleanup clears an update's obsolete warning;
+  damaged retained copies cannot cause deletion of the last valid restore point.
+
 ## [1.35.1] — 2026-11-03
 
 ### Fixed

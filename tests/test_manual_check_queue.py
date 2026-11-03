@@ -812,7 +812,7 @@ def test_the_same_click_again_says_its_check_started_not_queued(client, consumer
 def test_a_sign_in_checked_from_the_queue_is_confirmed_or_put_back(client, monkeypatch, consumers, refused):
     # The queued check of a new password never said the site was signed in (its other topics kept
     # asking for a sign-in), and a password the site refused stayed saved.
-    from tow import i18n
+    from tow import auth_observations, i18n
 
     monkeypatch.setattr("tow.web.services.load_config", lambda: {"trackers": {"nnmclub": NNM}})
     save_state({"topics": [{"id": "t1", "title": "Show A", "url": "https://nnmclub.to/forum/viewtopic.php?t=1234567"}]})
@@ -821,19 +821,25 @@ def test_a_sign_in_checked_from_the_queue_is_confirmed_or_put_back(client, monke
     monkeypatch.setattr("tow.web.services.save_secrets", lambda value: secrets.update(copy.deepcopy(value)))
     monkeypatch.setattr("tow.web.services.log_event", lambda *_a, **_kw: None)
     signed_in = []
-    monkeypatch.setattr("tow.web.services.note_signed_in", signed_in.append)
+    monkeypatch.setattr("tow.web.services.note_signed_in", lambda name, *, captured: signed_in.append((name, captured)))
+    proof = {
+        "nnmclub": {
+            "site_revision": auth_observations.site_revision({"trackers": {"nnmclub": NNM}}, "nnmclub"),
+            "topics": {},
+        }
+    }
     calls = []
     row = (
         {"id": "t1", "title": "Show A", "ok": False, "error": "nnmclub: sign-in refused", "error_class": "tracker_auth"}
         if refused
-        else {"id": "t1", "title": "Show A", "ok": True}
+        else {"id": "t1", "title": "Show A", "ok": True, "tracker": "nnmclub", "site_answered": True}
     )
 
     def check(**kw):
         calls.append(kw["ids"])
         if len(calls) == 1:
             raise CheckBusyError("a scheduled check holds the lock")
-        return {"results": [row]}
+        return {"results": [row], "auth_refusals": {} if refused else proof}
 
     monkeypatch.setattr("tow.web.services.run_check", check)
     job = _job(
@@ -847,7 +853,7 @@ def test_a_sign_in_checked_from_the_queue_is_confirmed_or_put_back(client, monke
         assert "credential_topic=t1" in ended["redirect"]
     else:
         assert secrets["trackers"]["nnmclub"]["password"] == "pass"
-        assert signed_in == ["nnmclub"]
+        assert signed_in == [("nnmclub", proof)]
         assert ended["flash"] == i18n.t("web.login_retry.ok", site="NNM-Club")
     assert job not in check_jobs.FOLLOW_UPS  # no password kept beside a finished job
 

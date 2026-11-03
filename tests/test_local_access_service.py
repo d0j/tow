@@ -337,6 +337,85 @@ def test_slow_cold_start_survives_one_request_then_reuses_same_child(installed, 
     assert launches == [2]
 
 
+def test_readiness_observes_only_the_existing_nonce_and_never_launches_or_opens_a_site(installed, monkeypatch):
+    service = worker.NativeService(*installed)
+    service.child = SimpleNamespace(poll=lambda: None)
+    service.port, service.start_nonce, service.start_deadline = 1234, "a" * 32, 120
+    monkeypatch.setattr(worker.time, "monotonic", lambda: 50)
+    monkeypatch.setattr(service, "launch", lambda *a: pytest.fail("readiness launched a child"))
+    connection = Mock()
+    connection.getresponse.return_value = SimpleNamespace(status=200, read=lambda size: b'{"version":"3.5.2"}')
+    monkeypatch.setattr(worker.http.client, "HTTPConnection", lambda *a, **kw: connection)
+    assert service.readiness("b" * 32) == "gone"
+    connection.request.assert_not_called()
+    assert service.readiness("a" * 32) == "ready"
+    connection.request.assert_called_once_with("GET", "/")
+    assert service.start_deadline == 120
+
+
+@pytest.mark.parametrize(
+    "answer", ["ready", "warming", "busy", "gone", "unknown", "bad_nonce", "too_large", "redirect", "old_broker"]
+)
+def test_local_readiness_uses_a_bounded_loopback_get_without_ensure(installed, monkeypatch, answer):
+    import httpx
+
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        if answer == "too_large":
+            return httpx.Response(200, content=b"x" * 1025)
+        if answer == "redirect":
+            return httpx.Response(302, headers={"Location": "https://site.example/"})
+        if answer == "old_broker":
+            return httpx.Response(404, json={"msg": "Local module ready on demand", "version": "1"})
+        return httpx.Response(200, json={"nonce": "b" * 32 if answer == "bad_nonce" else "a" * 32, "state": answer})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        local_service.httpx, "Client", lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs)
+    )
+    monkeypatch.setattr(local_service, "ensure", lambda *a: pytest.fail("readiness ensured a module"))
+    result = local_service.readiness(dict(PROVIDER, id="local"), "a" * 32, timeout=0.75)
+    assert result == (answer if answer in {"ready", "warming", "busy", "gone"} else "gone")
+    assert len(calls) == 1
+    assert calls[0].method == "GET"
+    assert str(calls[0].url) == "http://127.0.0.1:8191/tow-ready/" + "a" * 32
+
+
+@pytest.mark.parametrize("local", [False, True])
+@pytest.mark.parametrize(
+    ("nonce", "remaining"), [("a" * 32, "70"), ("wrong", "70"), ("a" * 32, "121"), ("a" * 32, "nan")]
+)
+def test_only_trusted_bounded_warming_headers_grant_a_continuation(local, nonce, remaining):
+    import httpx
+
+    from tow.protection import providers
+    from tow.protection.spec import ProviderUnavailableError
+
+    with pytest.raises(ProviderUnavailableError) as error:
+        providers._service_status(
+            httpx.Response(
+                503,
+                headers={
+                    "x-tow-module-state": "warming",
+                    "x-tow-module-nonce": nonce,
+                    "x-tow-module-remaining": remaining,
+                },
+            ),
+            local=local,
+        )
+    valid = local and nonce == "a" * 32 and remaining == "70"
+    assert bool(error.value.continuation) is valid
+
+
+def test_damaged_manifest_is_not_a_reason_to_restart_or_probe_an_unowned_service(installed, monkeypatch):
+    (installed[0] / "manifest.json").write_text("{}")
+    monkeypatch.setattr(local_service, "ensure", lambda *a: pytest.fail("invalid module was started"))
+    monkeypatch.setattr(local_service, "listening", lambda *a: pytest.fail("invalid module was contacted"))
+    assert local_service.readiness(dict(PROVIDER, id="local"), "a" * 32, timeout=0.5) == "gone"
+
+
 def test_abandoned_warmup_has_independent_cap(installed, monkeypatch):
     service = worker.NativeService(*installed)
     service.child = SimpleNamespace(poll=lambda: None)

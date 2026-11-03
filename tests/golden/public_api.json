@@ -67,13 +67,13 @@
  },
  "tow.issues": {
   "Fix": "class(action: 'str', subject: 'str' = '', label: 'str' = '') -> None",
-  "Issue": "class(kind: 'str', id: 'str', severity: 'str', message: 'Message', target: 'Target', fix: 'Fix | None' = None, count: 'int' = 1, subjects: 'tuple[str, ...]' = (), target_many: 'Target | None' = None) -> None",
+  "Issue": "class(kind: 'str', id: 'str', severity: 'str', message: 'Message', target: 'Target', fix: 'Fix | None' = None, count: 'int' = 1, subjects: 'tuple[str, ...]' = (), target_many: 'Target | None' = None, requires_attention: 'bool' = True) -> None",
   "Kind": "class(name: 'str', order: 'int', collect: 'Callable[[Snapshot], list[Issue]]') -> None",
   "Message": "class(key: 'str', params: 'Mapping[str, Any]' = <factory>) -> None",
   "NOTE_KINDS": "value frozenset",
   "SEVERITIES": "value tuple",
   "SKIPPED": "value list",
-  "Snapshot": "class(state: 'Mapping[str, Any]', config: 'Mapping[str, Any]', now: 'float', next_check_at: 'float | None' = None, data_lost: 'Mapping[str, Any] | None' = None) -> None",
+  "Snapshot": "class(state: 'Mapping[str, Any]', config: 'Mapping[str, Any]', now: 'float', next_check_at: 'float | None' = None, data_lost: 'Mapping[str, Any] | None' = None, site_retries: 'Mapping[str, Mapping[str, Any]]' = <factory>, client_continuations: 'Mapping[str, Mapping[str, Any]]' = <factory>) -> None",
   "Target": "class(page: 'str', open: 'str' = '', filter: 'tuple[tuple[str, str], ...]' = (), anchor: 'str' = '', note: 'bool' = False) -> None",
   "attention": "def(issues: 'Iterable[Issue]') -> 'list[Issue]'",
   "collect": "def(snapshot: 'Snapshot', *, only: 'tuple[Kind, ...] | None' = None) -> 'list[Issue]'",
@@ -82,7 +82,7 @@
   "worst": "def(issues: 'Iterable[Issue]') -> 'str'"
  },
  "tow.notifiers": {
-  "DeliveryError": "class(reason: 'str | Msg', *, transient: 'bool', drop: 'bool' = False) -> 'None'",
+  "DeliveryError": "class(reason: 'str | Msg', *, transient: 'bool', drop: 'bool' = False, retry_at: 'float | None' = None, reprobe: 'bool' = False) -> 'None'",
   "Field": "class(name: 'str', label: 'str', kind: 'str' = 'text', placeholder: 'str' = '', pattern: 'str' = '', error: 'str' = '', required: 'bool' = True, default: 'str' = '', width: 'str' = 'm') -> None",
   "OUTBOX_LIMIT": "value int",
   "cards": "def(secrets: 'dict[str, Any]', state: 'dict[str, Any]', *, local: 'bool' = True) -> 'list[dict[str, Any]]'",
@@ -130,6 +130,7 @@
   "cleanup_status": "def(*, cfg: 'dict[str, Any] | None' = None) -> 'dict[str, Any]'",
   "cleanup_status_unlocked": "def(*, cfg: 'dict[str, Any] | None' = None) -> 'dict[str, Any]'",
   "create_snapshot": "def(*, how: 'str' = 'auto') -> 'dict[str, Any]'",
+  "current_status": "def(*, cfg: 'dict[str, Any] | None' = None) -> 'dict[str, Any]'",
   "delete_snapshot": "def(name: 'str', revision: 'str') -> 'dict[str, Any]'",
   "list_snapshots": "def(limit: 'int | None' = 10) -> 'list[dict[str, Any]]'",
   "record_failure": "def(error: 'str') -> 'None'",

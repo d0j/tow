@@ -237,6 +237,8 @@ class CheckRun:
     replace_previous: bool = False
     # (site, error code) -> {"error", "topics"}: topics not asked because of their site (SITE_SKIP_CODES).
     site_skips: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
+    # Configuration used to construct this run's adapters, fenced again before a deferred RPC.
+    client_config: dict[str, Any] = field(default_factory=dict)
 
 
 def log_site_skips(run: CheckRun) -> None:

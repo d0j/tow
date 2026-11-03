@@ -486,7 +486,7 @@ class ManagedClient:
         if self._preparing(info, after_check=True):
             raise ClientVerificationPending(infohash, prefix=self.title, receipt=receipt)
         self._assert_started(info)
-        return info
+        return {**info, "start_confirmed": self._running(info)}
 
     def _defers_initial_check(self, info: dict[str, Any]) -> bool:
         """The client checks the data it found for a torrent added stopped, and stopping it would

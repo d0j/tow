@@ -299,6 +299,7 @@ HISTORY_ONLY = frozenset(
         "site_prefer",  # also logged when nothing changed
         "client_add_started",  # attempts: their outcome is the message
         "client_verification_pending",
+        "files_repair_waiting",  # an automatic wait, not an owner-action warning
         "site_login",  # a follow-up check may still put the old login back
         "portable_import_applied",  # a restore point may still roll it back
         "bot_delivery_started",

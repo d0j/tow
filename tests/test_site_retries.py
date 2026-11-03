@@ -254,12 +254,12 @@ def test_log_explains_failure_in_both_languages():
     assert "access cookie" in format_event(event)["detail"]
 
 
-def test_one_click_site_incident_opens_the_real_check_control(monkeypatch):
+def test_one_click_owner_required_site_incident_opens_the_real_check_control():
     from fastapi.testclient import TestClient
 
     from tow.config import save_config
     from tow.store import load_state, save_secrets, save_state
-    from tow.web import app, services, views
+    from tow.web import app, views
 
     cfg = load_config()
     cfg["trackers"] = {
@@ -274,9 +274,6 @@ def test_one_click_site_incident_opens_the_real_check_control(monkeypatch):
     save_secrets({"init_done": True})
     topics = [failed("a"), failed("b", "mirrors.rate_limited")]
     save_state({"topics": topics, "mirrors": {}})
-    monkeypatch.setattr(
-        services, "site_retry_status", lambda *args: {"a": datetime.fromtimestamp(T0 + 1800, UTC).isoformat()}
-    )
     client = TestClient(app)
     entry = views.attention_view(load_state(), cfg, local=True)["entries"][0]
     assert len(views.attention_view(load_state(), cfg, local=True)["entries"]) == 1
@@ -286,7 +283,7 @@ def test_one_click_site_incident_opens_the_real_check_control(monkeypatch):
     assert 'data-fix="check_topic:a"' in page.text
     assert "autofocus" in page.text
     assert "/topics/a/check" in page.text
-    assert "Автоматический повтор:" in page.text
+    assert "Повтор запланирован" not in page.text
     assert "Проверить доступ сейчас" in page.text
     assert "Cloudflare" in page.text
 

@@ -94,10 +94,13 @@ PURE: dict[str, set[str]] = {
     # the control that fixes it, the name of a set of issues and the worst severity among them, and
     # which of them need attention now (a filter); no I/O.
     "tow.issues": {"Fix", "Issue", "Snapshot", "attention", "fingerprint", "worst"},
+    # Validate supplied recovery facts and typed errors only; no store, scheduler or client I/O.
+    "tow.issues.recovery": {"client_error_retrying", "planned", "restored_confirmation"},
     # When scheduled checks count as late (a constant): the moment "Needs attention" changes by itself.
     "tow.issues.kinds.check_stale": {"STALE_SLACK_SEC"},
     # datetime_pattern, format_datetime: how a language writes a date (its catalog's pattern); no I/O.
     "tow.i18n": {
+        "has",  # whether the shipped catalog defines a message key; no install data is read
         "AUTO",
         "available",
         "canonical",
@@ -191,7 +194,7 @@ HELPER_ALLOWED: dict[str, set[str]] = {
     # format_size took the place of format_decimal: the size text is one shared formatter now.
     "text": {"tow.i18n.fill", "tow.i18n.format_size"},
     # Moved here from views with the message helpers (not new names).
-    "messages": {"tow.errors.Msg", "tow.i18n.has"},
+    "messages": {"tow.errors.Msg"},
     "views": {
         "tow.adopt.unmarked_hash",
         "tow.check.PREVIOUS_REVISION_ACTIVE",

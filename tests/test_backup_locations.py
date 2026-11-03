@@ -335,7 +335,9 @@ def test_watchdog_reports_a_failed_or_missing_night_copy(night):
             sleep=lambda s: now.__setitem__("t", now["t"] + s),
         )
 
-    assert run()["backup_ok"] is True  # watching starts now
+    first = run()
+    assert first["backup_ok"] is None  # watching starts now; no verified copy exists yet
+    assert first["backup_state"] == "pending"
     now["t"] += BACKUP_STALE_SEC + 60
     assert run()["backup_ok"] is False
     assert (

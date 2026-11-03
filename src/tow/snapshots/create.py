@@ -97,6 +97,8 @@ def create_snapshot(*, how: str = "auto") -> dict[str, Any]:
                 last_missing=result["missing"],
                 last_cleanup_pending=bool(result.get("cleanup_warning")),
                 last_error="",
+                attempt_location=fields["location"],
+                attempt_location_in_root=fields["location_in_root"],
                 **fields,
             )
             # The verified copy proves its folder's volume (recorded once; a missing note goes).
@@ -356,7 +358,7 @@ def _partial_proof(folder: str, key: bytes) -> dict[str, Any]:
     return proof
 
 
-def _partial_owner_proof(folder: Path, key: bytes) -> str | None:
+def partial_owner_proof(folder: Path, key: bytes) -> str | None:
     """The member proving a partial folder is this install's: its signed proof, else a signed MANIFEST."""
     if ordinary_file(folder / _PARTIAL_PROOF, missing=True):
         try:
@@ -374,6 +376,11 @@ def _partial_owner_proof(folder: Path, key: bytes) -> str | None:
     return "MANIFEST.json" if owned_manifest(folder, key) is not None else None
 
 
+def partial_folders(root: Path) -> list[Path]:
+    """The partial-copy names the snapshot writer owns; no contents are trusted by the name."""
+    return [path for path in root.iterdir() if _PARTIAL_NAME.fullmatch(path.name)] if root.is_dir() else []
+
+
 def _remove_stale_partials(root: Path, key: bytes) -> bool:
     """Remove the partial folders a crash, a power loss or a killed copy left (data lock held).
 
@@ -382,12 +389,12 @@ def _remove_stale_partials(root: Path, key: bytes) -> bool:
     """
     pending = False
     try:
-        candidates = [path for path in root.iterdir() if _PARTIAL_NAME.fullmatch(path.name)] if root.is_dir() else []
+        candidates = partial_folders(root)
     except OSError:
         return True
     for folder in candidates:
         try:
-            if not ordinary_directory(folder, missing=True) or (proof := _partial_owner_proof(folder, key)) is None:
+            if not ordinary_directory(folder, missing=True) or (proof := partial_owner_proof(folder, key)) is None:
                 continue
             if not remove_copy(folder, root, proof, {proof, "MANIFEST.json", *copy_members_in(folder)}):
                 pending = True
@@ -413,7 +420,8 @@ def _check_copy_space(root: Path, members: list[tuple[str, Path]]) -> None:
         raise SnapshotError(t("backup.snapshot.no_space", owner_language()))
 
 
-def _copy_disk_bytes(folder: Path) -> int:
+def copy_disk_bytes(folder: Path) -> int:
+    """Service bytes in a tree whose ownership and ordinary members the caller verified."""
     # Ownership and ordinary-tree checks precede this; no links or foreign directories.
     total = 0
     for member in folder.iterdir():
@@ -444,7 +452,7 @@ def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, 
                     continue
                 if owned_tree(folder, {"MANIFEST.json", *manifest["files"]}):
                     created = copy_time(str(manifest["created_at"]))
-                    entries.append((folder.name, created, _copy_disk_bytes(folder)))
+                    entries.append((folder.name, created, copy_disk_bytes(folder)))
                     if folder != target:
                         others.append((folder, {"MANIFEST.json", *manifest["files"]}))
             except OSError, ValueError, TypeError, KeyError, OverflowError, SnapshotError:

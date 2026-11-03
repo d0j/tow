@@ -70,6 +70,6 @@ def send(settings: dict[str, Any], text: str) -> None:
             # The group became a supergroup with a new id: the settings must name that one.
             raise DeliveryError(Msg("notifier.telegram.chat_moved", chat=chat, new=moved), transient=False)
         if response.status_code == 403 or (response.status_code == 400 and "chat not found" in description):
-            raise DeliveryError(Msg("notifier.telegram.chat_unreachable", chat=chat), transient=False)
+            raise DeliveryError(Msg("notifier.telegram.chat_unreachable", chat=chat), transient=False, reprobe=True)
         # Any other refusal (400 for this text, 429/5xx after the retries) is about this message.
         raise status_error(response.status_code, Msg("notifier.telegram.error", code=response.status_code))

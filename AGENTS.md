@@ -29,7 +29,8 @@ unknown.
   mirrors paused, cross-host redirect to an unconfigured host, Cloudflare, all hosts failed). It does not by itself
   prove the torrent or the client is broken.
 - **Red `bad`**: a non-tracker error: torrent client, TOW validation, storage/path, secret/config, authentication,
-  quota or unknown. Red is an actionable failure.
+  quota or unknown. It describes the observed failure; the warning triangle separately says whether the owner
+  must act. A current bounded automatic continuation does not make that observation successful.
 - **Grey `mut`**: no result yet (`last_error` absent, `last_changed` false, `last_ok` false/unknown); say "not
   checked yet", never "ok".
 - **Blue `new`**: `last_changed=true` without an error: new data was observed. An event, not a health result.

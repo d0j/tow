@@ -4,9 +4,12 @@ are counted in it."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from tow.clients import factory
 from tow.issues import clients
 from tow.issues.model import Fix, Issue, Message, Snapshot, Target
+from tow.issues.recovery import client_error_retrying, client_retrying, site_retrying
 from tow.status import error_tone, topic_error_class
 
 KIND = "client_down"
@@ -20,8 +23,17 @@ def collect(snapshot: Snapshot) -> list[Issue]:
     cfg = dict(snapshot.config)
     default = factory.default_client_id(cfg)
     rows = {str(row["id"]): row for row in factory.client_configurations(cfg) if row.get("enabled", True)}
+    recovering = site_retrying(snapshot)
+    native = client_retrying(snapshot)
+    recovering |= frozenset(str(topic["id"]) for topic in snapshot.topics if client_error_retrying(topic, native))
+    marks = snapshot.health.get("ping_failed")
+    manual_failures = marks if isinstance(marks, Mapping) else {}
     issues = []
     for client in found:
+        native_probe = any(
+            str(topic.get("id") or "") in native and str(topic.get("client_id") or default) == client
+            for topic in snapshot.topics
+        )
         affected = tuple(
             str(topic["id"])
             for topic in snapshot.topics
@@ -47,6 +59,9 @@ def collect(snapshot: Snapshot) -> list[Issue]:
                 subjects=(client, *affected),
                 target=Target("settings", open="clients", anchor=f"client-{client}"),
                 fix=Fix("check_client", client, label="settings.common.check"),
+                requires_attention=client in manual_failures
+                or (not affected and not native_probe)
+                or any(identity not in recovering for identity in affected),
             )
         )
     return issues

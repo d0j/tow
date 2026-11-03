@@ -34,7 +34,9 @@ class AccessFailure(ValueError):
 class ProviderUnavailableError(ValueError):
     """An API-level outage, not a site's challenge or a refused clearance replay."""
 
-    def __init__(self, reason: str, *, retry_after: float = 0, phase: str = "service") -> None:
+    def __init__(
+        self, reason: str, *, retry_after: float = 0, phase: str = "service", continuation: dict[str, Any] | None = None
+    ) -> None:
         if reason not in {"unavailable", "busy", "protocol"}:
             raise ValueError("invalid clearance failure reason")
         super().__init__("clearance API " + reason)
@@ -43,6 +45,7 @@ class ProviderUnavailableError(ValueError):
         if phase not in {"startup", "service"}:
             raise ValueError("invalid clearance failure phase")
         self.phase = phase
+        self.continuation = continuation
 
 
 @dataclass(frozen=True, repr=False)

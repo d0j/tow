@@ -55,6 +55,7 @@ from tow.file_presence import count as missing_file_count
 from tow.file_presence import invalidate_client as invalidate_file_observations
 from tow.file_repair import active as file_repair_active
 from tow.file_repair import cancel as cancel_file_repair
+from tow.file_repair import continuation_pending as file_repair_continuable
 from tow.file_repair import current as current_file_repair
 from tow.file_repair import request as request_file_repair
 from tow.guess import guess_site
@@ -108,7 +109,7 @@ from tow.snapshots import (
 )
 from tow.snapshots import cleanup_status as night_cleanup_status
 from tow.snapshots import cleanup_status_unlocked as night_cleanup_status_unlocked
-from tow.snapshots import status as snapshot_status
+from tow.snapshots import current_status as snapshot_status
 from tow.storage.locks import CheckBusyError
 from tow.store import (
     StoreWriteError,
@@ -127,7 +128,14 @@ from tow.store_transaction import commit as commit_stores
 from tow.store_transaction import recover as recover_store_transaction
 from tow.store_transaction import transaction as store_transaction
 from tow.supervisor import data_lost
-from tow.supervisor.layout import install_id, next_check_at, site_retry_status, topic_timer_status
+from tow.supervisor.layout import (
+    client_continuation_status,
+    install_id,
+    next_check_at,
+    site_recovery_status,
+    site_retry_status,
+    topic_timer_status,
+)
 from tow.sync_sources import log_marker as sync_log_marker
 from tow.sync_sources import quarantined as sync_quarantined
 from tow.sync_sources import read as sync_read
@@ -175,6 +183,7 @@ __all__ = [
     "check_snapshot",
     "cleanup_secret_undo",
     "client_answers",
+    "client_continuation_status",
     "client_from_secrets",
     "client_owned_by_tow",
     "collect_issues",
@@ -194,6 +203,7 @@ __all__ = [
     "download_history_from_bytes",
     "export_portable_bundle",
     "file_repair_active",
+    "file_repair_continuable",
     "finished_web_update",
     "folder_free",
     "folder_write_problem",
@@ -266,6 +276,7 @@ __all__ = [
     "sign_out_everywhere",
     "site_error_summary",
     "site_incident",
+    "site_recovery_status",
     "site_retry_status",
     "snapshot_delete_view",
     "snapshot_path",

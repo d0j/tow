@@ -11,6 +11,7 @@ from tow.clients import factory
 from tow.errors import as_value, summary_record
 from tow.issues import clients
 from tow.issues.model import Fix, Issue, Message, Snapshot, Target
+from tow.issues.recovery import client_error_retrying, client_retrying, restored_confirmation, site_retrying
 from tow.records import shown_title
 from tow.status import TRACKER_WARNING_CLASSES, error_tone, topic_error_class
 
@@ -40,9 +41,31 @@ def collect(snapshot: Snapshot) -> list[Issue]:
     # one the import saw, and its topics would then not fold into the client that `down` names.
     default = factory.default_client_id(dict(snapshot.config))
     clients_down = set(clients.down(snapshot))  # their failed topics are counted in client_down
+    recovering = site_retrying(snapshot)
+    client_pending = client_retrying(snapshot)
     found = []
     for topic in snapshot.topics:
         identity = str(topic.get("id") or "")
+        if identity and not topic.get("paused") and restored_confirmation(topic):
+            found.append(
+                Issue(
+                    kind=KIND,
+                    id=f"{KIND}:restore:{identity}",
+                    severity="bad",
+                    message=Message(
+                        "issues.topic_error",
+                        {
+                            "title": shown_title(topic) or identity,
+                            "error": _error({"last_error_code": "check.restored_confirmation"}, snapshot.config),
+                        },
+                    ),
+                    subjects=(identity,),
+                    target=Target("home", open=identity, anchor=f"row-{identity}"),
+                    fix=Fix("check_topic", identity, label="check.confirm_restored"),
+                )
+            )
+            if topic.get("last_error_code") == "check.restored_confirmation":
+                continue  # one owner action, independently of when its next reconcile runs
         if not identity or topic.get("paused") or not topic.get("last_error"):
             continue
         cls = topic_error_class(topic)
@@ -82,6 +105,7 @@ def collect(snapshot: Snapshot) -> list[Issue]:
                         "home", open=identity, anchor=f"row-{identity}", filter=(("f", "problem"), ("t", site))
                     ),
                     fix=Fix("check_topic", identity, label="site_access.retry_check"),
+                    requires_attention=identity not in recovering,
                 )
             )
             continue
@@ -100,6 +124,7 @@ def collect(snapshot: Snapshot) -> list[Issue]:
                 fix=Fix("replace_revision", identity, label="home.topic.replace")
                 if topic.get("last_error_code") == PREVIOUS_REVISION_ACTIVE
                 else None,
+                requires_attention=identity not in recovering and not client_error_retrying(topic, client_pending),
             )
         )
     return found

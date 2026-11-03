@@ -60,15 +60,18 @@ def _merged(issues: list[Issue]) -> list[Issue]:
             out[issue.id] = issue
             continue
         count = first.count + issue.count
-        params = dict(first.message.params)
+        chosen = issue if issue.requires_attention and not first.requires_attention else first
+        params = dict(chosen.message.params)
         if "count" in params:
             params["count"] = count
         out[issue.id] = dataclasses.replace(
-            first,
+            chosen,
+            severity=first.severity,
             count=count,
             subjects=first.subjects + tuple(subject for subject in issue.subjects if subject not in first.subjects),
-            message=Message(first.message.key, params),
-            target=first.target_many or first.target,
+            message=Message(chosen.message.key, params),
+            target=chosen.target_many or chosen.target,
+            requires_attention=first.requires_attention or issue.requires_attention,
         )
     return list(out.values())
 
@@ -80,8 +83,8 @@ NOTE_KINDS = frozenset({"history_rebuilt"})
 
 def attention(issues: Iterable[Issue]) -> list[Issue]:
     """What needs the owner now - Home's "Needs attention" and the count of ``tow status``, by
-    one rule: every issue but a note (``NOTE_KINDS``)."""
-    return [issue for issue in issues if issue.kind not in NOTE_KINDS]
+    one rule: owner action is needed, rather than a confirmed automatic continuation."""
+    return [issue for issue in issues if issue.kind not in NOTE_KINDS and issue.requires_attention]
 
 
 def collect(snapshot: Snapshot, *, only: tuple[Kind, ...] | None = None) -> list[Issue]:

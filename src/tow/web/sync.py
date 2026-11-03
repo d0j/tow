@@ -19,7 +19,7 @@ recomputed at its moment (``deadline``): an Undo that runs out, a check that bec
 down itself (the timers, the Undo's seconds) is published as a fixed moment, never as "now".
 
 Area        Built from (sources)                                             Clock
-topics      state, download history, config, supervisor status; language     midnight (date labels)
+topics      state, download history, config, supervisor status and schedule; language   dates and continuation deadlines
 jobs        the manual check queue of this server (generation)               -
 header      state, config, secrets, supervisor status and schedule; language -
 attention   state, config, supervisor status and schedule; language          the stale-check moment
@@ -359,9 +359,26 @@ def _repair_deadline(state: Mapping[str, Any], now: float) -> float | None:
     return min(deadlines) if deadlines else None
 
 
+def _continuation_deadline(state: dict[str, Any], cfg: dict[str, Any], now: float) -> float | None:
+    """A retry can start or expire without another writer changing the saved files."""
+    moments = []
+    for read in (services.site_recovery_status, services.client_continuation_status):
+        for entry in read(state, cfg).values():
+            for key in ("next_at", "deadline"):
+                value = entry.get(key)
+                if (
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(value)
+                    and value > now
+                ):
+                    moments.append(float(value))
+    return min(moments) if moments else None
+
+
 # Exactly what ``_topic_row.html`` reads of a row (``views.topic_rows``), besides its timer's
 # minutes, the site's title and the day its date labels are written for. ``manual_job`` is the
-# jobs area; the timer's moment and phase are the timers area: a row never changes by the clock.
+# jobs area; the timer's moment and phase are the timers area. Retry labels have fixed deadlines.
 ROW_FIELDS = (
     "id",
     "name",
@@ -377,6 +394,12 @@ ROW_FIELDS = (
     "error_line",
     "verification_pending",
     "file_repair_phase",
+    "file_repair_error",
+    "file_repair_waiting",
+    "file_repair_waiting_label",
+    "automatic_recovery_label",
+    "native_recovery_label",
+    "restored_confirmation",
     "last_event_label",
     "last_event_at",
     "last_event_iso",
@@ -568,7 +591,7 @@ def viewer(request: Request) -> Viewer:
 
 
 def _topics(sample: Sample, who: Viewer, now: float) -> Computed:
-    key = (*sample.key("state", "history", "config", "status"), sample.running)
+    key = (*sample.key("state", "history", "config", "status", "schedule"), sample.running)
 
     def build() -> Computed:
         from tow.web.templating import site_title
@@ -587,7 +610,15 @@ def _topics(sample: Sample, who: Viewer, now: float) -> Computed:
         value = {"order": order, "rows": hashes}
         rev = revision("topics", value, {"lang": who.lang, "local": who.local})
         AREAS_MEMO.remember_rows((who.lang, who.local), rev, hashes)
-        return Computed(value, rev, _earliest(_next_midnight(now), _repair_deadline(sample.state, now)))
+        return Computed(
+            value,
+            rev,
+            _earliest(
+                _next_midnight(now),
+                _repair_deadline(sample.state, now),
+                _continuation_deadline(sample.state, sample.config, now),
+            ),
+        )
 
     return AREAS_MEMO.get("topics", (who.lang, who.local), key, now, build)
 
@@ -625,6 +656,7 @@ def _health(sample: Sample, who: Viewer, now: float) -> Computed:
             stale_at = float(health["next_at_ts"]) + float(health.get("interval_sec") or 0) + STALE_SLACK_SEC + 1
             deadline = stale_at if stale_at > now else None
         deadline = _earliest(deadline, _repair_deadline(sample.state, now))
+        deadline = _earliest(deadline, _continuation_deadline(sample.state, sample.config, now))
         return Computed({"header": health, "attention": attention}, header_rev, deadline, extra=attention_rev)
 
     return AREAS_MEMO.get("health", (who.lang, who.local), key, now, build)

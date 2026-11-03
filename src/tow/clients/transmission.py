@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 from typing import Any, ClassVar, cast
 
 import httpx
@@ -16,6 +17,7 @@ import httpx
 from tow.clients.address import base_url
 from tow.clients.managed import OWNER, PENDING, AddMarkError, ClientError, ManagedClient
 from tow.clients.spec import TorrentClientAdapter
+from tow.http import retry_after_from
 
 KIND = "transmission"
 TITLE = "Transmission"
@@ -128,7 +130,10 @@ class TransmissionClient(ManagedClient):
             if response.status_code == 404:
                 raise self._fail("client.transmission.no_rpc")
             if response.status_code != 200:
-                raise self._fail("client.managed.http_error", code=response.status_code)
+                retry = retry_after_from(response.headers, now=time.time())
+                raise self._fail(
+                    "client.managed.http_error", code=response.status_code, **({"retry_after": retry} if retry else {})
+                )
             try:
                 body = response.json()
             except ValueError as exc:

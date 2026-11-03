@@ -69,5 +69,5 @@ def send(settings: dict[str, Any], text: str) -> None:
     if response.status_code in (200, 204):
         return
     if response.status_code in (401, 403, 404):
-        raise DeliveryError(Msg("notifier.discord.webhook_gone"), transient=False)
+        raise DeliveryError(Msg("notifier.discord.webhook_gone"), transient=False, reprobe=response.status_code == 403)
     raise status_error(response.status_code, Msg("notifier.discord.error", code=response.status_code))

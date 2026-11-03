@@ -260,7 +260,7 @@ def status() -> dict[str, Any]:
             raise WebUpdateError("releases.job_unreadable")
     if "backup_cleanup_pending" in job and not isinstance(job["backup_cleanup_pending"], bool):
         raise WebUpdateError("releases.job_unreadable")
-    result["backup_cleanup_pending"] = job.get("backup_cleanup_pending") is True
+    result["backup_cleanup_pending"] = _cleanup_pending(job)
     if job.get("status") in _ACTIVE and not active:
         result.update(status="interrupted", error="releases.interrupted")
     elif unverified:
@@ -271,6 +271,32 @@ def status() -> dict[str, Any]:
     if not job:
         result["status"] = "idle"
     return result
+
+
+def _cleanup_pending(job: dict[str, Any]) -> bool:
+    """A historical cleanup warning ends only on a confirmed result for that same folder."""
+    if job.get("backup_cleanup_pending") is not True:
+        return False
+    from tow.backup_actions import observed_in
+    from tow.restore_points import cleanup_status
+
+    location = job.get("backup_cleanup_location")
+    if not isinstance(location, str) or not location:
+        return True  # old job records cannot prove which folder was cleaned
+    try:
+        current = cleanup_status()
+        binding = {
+            "location": location,
+            "location_in_root": job.get("backup_cleanup_location_in_root"),
+        }
+        return not (
+            current.get("pending") is False
+            and not current.get("read_error")
+            and not current.get("legacy")
+            and observed_in(binding, Path(current["location"]), str(current["location"]))
+        )
+    except OSError, ValueError, TypeError, KeyError:
+        return True
 
 
 def finished_job() -> dict[str, Any] | None:
@@ -553,6 +579,14 @@ def start(version: str, *, grace: float = 0.0) -> dict[str, Any]:
                 "backup_cleanup_pending": bool(safety.get("cleanup_warning")),
                 "lease_version": 1,
             }
+            if job["backup_cleanup_pending"]:
+                from tow.paths import in_root
+                from tow.restore_points import restore_points_dir
+
+                with contextlib.suppress(OSError, ValueError, RestorePointError):
+                    location = restore_points_dir()
+                    job["backup_cleanup_location"] = str(location.resolve())
+                    job["backup_cleanup_location_in_root"] = in_root(location)
             if math.isfinite(grace) and grace > 0:
                 job["grace"] = min(float(grace), GRACE_MAX_SEC)
             atomic_write_bytes(path, json.dumps(job).encode())

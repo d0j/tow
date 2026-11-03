@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -395,24 +396,33 @@ def site_retry_policies(state: dict[str, Any], cfg: dict[str, Any]) -> dict[str,
         return {}
 
 
+def site_recovery_status(state: dict[str, Any], cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The actual bounded site continuation; reading never schedules a request."""
+    from tow.site_retries import recovery_status
+
+    try:
+        return recovery_status(state, cfg, report=status(), schedule=read_json(schedule_path()), now=time.time())
+    except AttributeError, KeyError, TypeError, ValueError, OverflowError:
+        return {}  # uncertainty cannot hide a problem which may need the owner
+
+
+def client_continuation_status(state: dict[str, Any], cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The live supervisor's client-only continuation; reading never authorizes a command."""
+    from tow.check import client_continuation_status as project
+
+    try:
+        return project(state, cfg, report=status(), now=time.time())
+    except AttributeError, KeyError, TypeError, ValueError, OverflowError:
+        return {}  # missing or damaged evidence must retain owner attention
+
+
 def site_retry_status(state: dict[str, Any], cfg: dict[str, Any]) -> dict[str, str]:
-    active = site_retry_policies(state, cfg)
-    if not active:
-        return {}
-    report = status()
-    if report.get("stopping"):
-        return {}
-    planned = report.get("site_retries")
-    planned = planned if isinstance(planned, dict) else {}
-    result = {}
-    for tid, item in active.items():
-        entry = planned.get(tid)
-        if isinstance(entry, dict) and entry.get("revision") == item["revision"]:
-            with suppress(ValueError, OverflowError, OSError, TypeError):
-                at = datetime.fromisoformat(str(entry.get("at")))
-                if _epoch(at.timestamp()):
-                    result[tid] = at.isoformat()
-    return result
+    """Compatibility view of future/queued retries for the topic's existing time label."""
+    return {
+        tid: datetime.fromtimestamp(item["next_at"], UTC).isoformat()
+        for tid, item in site_recovery_status(state, cfg).items()
+        if item["phase"] != "running"
+    }
 
 
 def next_check_at(interval_sec: int, health: dict[str, Any] | None = None) -> float | None:

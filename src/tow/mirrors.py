@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import math
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlparse
@@ -396,17 +396,22 @@ def note_login(tracker: str) -> None:
         save_state(st)
 
 
-def note_signed_in(tracker: str) -> None:
+def note_signed_in(tracker: str, *, captured: Mapping[str, Any] | None = None) -> None:
     """Remember that the owner's sign-in to this (still configured) site was just confirmed by a
     check (``signed_in_at``): its other topics refused before that are not asked to sign in again
     until their next check says so (``tow.issues.kinds.site_needs_login``)."""
+    from tow import auth_observations
     from tow.config import load_config
 
     with persistence_lock():
-        if not isinstance((load_config().get("trackers") or {}).get(tracker), dict):
+        cfg = load_config()
+        if not isinstance((cfg.get("trackers") or {}).get(tracker), dict):
             return
         st = load_state()
-        _bucket(st, tracker)["signed_in_at"] = _now()
+        proof = auth_observations.accept(st, cfg, tracker, captured if captured is not None else {})
+        bucket = _bucket(st, tracker)
+        bucket["signed_in_at"] = _now()
+        bucket["signed_in_refusals"] = proof
         save_state(st)
 
 

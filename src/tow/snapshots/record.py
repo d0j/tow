@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import os
 import re
 import time
 from pathlib import Path
@@ -21,6 +23,21 @@ from tow.snapshots.manifest import owned_manifest, signing_key
 from tow.store import persistence_lock
 
 STATUS_NAME = "backup-status.json"
+
+
+def location_revision(cfg: dict[str, Any]) -> str:
+    """Opaque identity for a backup attempt's destination, stable within a portable install."""
+    from tow.paths import in_root
+
+    try:
+        location = backup_root(cfg)
+        relative = in_root(location)
+        name = "relative:" + relative if relative is not None else "absolute:" + str(location.resolve())
+        name = os.path.normcase(name)
+    except OSError, ValueError, TypeError, SnapshotError:
+        # A bad copy destination must not disable checks, the web server or the watchdog.
+        name = "unresolved:" + str(cfg.get("backup_dir") or "")
+    return hashlib.sha256(name.encode("utf-8")).hexdigest()
 
 
 def status_path() -> Path:
@@ -42,6 +59,8 @@ def status() -> dict[str, Any]:
                 "last_snapshot": str,
                 "location": str,
                 "location_in_root": str,
+                "attempt_location": str,
+                "attempt_location_in_root": str,
                 "last_cleanup_pending": bool,
                 "last_bytes": int,
                 "last_missing": list,
@@ -143,6 +162,37 @@ def status_failed(value: dict[str, Any]) -> bool:
     return bool(failed is not None and (not value.get("last_ok_at") or failed >= value["last_ok_at"]))
 
 
+def current_status(*, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Copy health in the selected folder; old folders cannot prove or disprove its backup.
+
+    Cleanup keeps using the original record, with its independent inventory binding. A
+    failed attempt has its own location: it must never rebind an earlier successful copy.
+    """
+    value = status()
+    if not value or value.get("read_error"):
+        return value
+    try:
+        location = backup_root(cfg)
+        resolved = str(location.resolve())
+        success_here = observed_in(value, location, resolved)
+        attempt = {
+            "location": value.get("attempt_location", value.get("location")),
+            "location_in_root": value.get("attempt_location_in_root", value.get("location_in_root")),
+        }
+        # A legacy failure without any location stays visible: its cause is unknown.
+        failure_here = not attempt["location"] or observed_in(attempt, location, resolved)
+    except OSError, ValueError, TypeError, SnapshotError:
+        return {"read_error": True, "last_error": t("watchdog.backup.status_unreadable")}
+    scoped = dict(value)
+    if not success_here:
+        for field in ("last_ok_at", "last_snapshot", "last_bytes", "last_missing"):
+            scoped.pop(field, None)
+    if not failure_here:
+        for field in ("last_error", "last_error_at"):
+            scoped.pop(field, None)
+    return scoped
+
+
 def record_status(**fields: Any) -> None:
     from tow.store import atomic_write_text
 
@@ -157,5 +207,11 @@ def record_status(**fields: Any) -> None:
 
 def record_failure(error: str) -> None:
     error = scrub_credentials(error)  # a share's link may carry a sign-in: never stored, never shown
-    record_status(last_error=error[:300], last_error_at=round(time.time(), 3))
+    from tow.paths import in_root
+
+    fields: dict[str, Any] = {"attempt_location": "", "attempt_location_in_root": None}
+    with contextlib.suppress(OSError, ValueError, TypeError, SnapshotError):
+        location = backup_root()
+        fields = {"attempt_location": str(location.resolve()), "attempt_location_in_root": in_root(location)}
+    record_status(last_error=error[:300], last_error_at=round(time.time(), 3), **fields)
     log_event("backup_failed", error=error[:300], how="auto")

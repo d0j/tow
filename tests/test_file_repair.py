@@ -248,7 +248,11 @@ def test_fresh_guards_refuse_mutation_when_the_environment_changed(tmp_path, mon
         client.info["files"][0]["priority"] = 0
     else:
         client.info["tags"] = []
-    assert advance(client)[1]["status"] == "failed"
+    row = advance(client)[1]
+    assert row["status"] == ("repair_pending" if failure in {"space", "volume"} else "failed")
+    if failure in {"space", "volume"}:
+        saved = load_state()["topics"][0]["repair_pending"]
+        assert saved["retry_error"]["code"] == f"repair.waiting_{failure}"
     assert client.calls == []
 
 

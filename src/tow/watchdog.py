@@ -16,6 +16,8 @@ Messages go to the owner's messengers only when something changes - never on eve
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -99,7 +101,13 @@ def _load_state() -> dict[str, Any]:
             ),
         )
         check_types(
-            value, {"last_problem": dict, "restore_point_cleanup_location": str, "backup_cleanup_location": str}
+            value,
+            {
+                "last_problem": dict,
+                "restore_point_cleanup_location": str,
+                "backup_cleanup_location": str,
+                "backup_watch_location": str,
+            },
         )
         problem = value.get("last_problem")
         if isinstance(problem, dict):
@@ -316,25 +324,30 @@ def _backups(p: _Pass, cfg: dict[str, Any]) -> None:
     """Did the last night copy fail, or is the newest good one too old?"""
     from tow.restore_points import cleanup_status
     from tow.snapshots import cleanup_status as night_cleanup_status
-    from tow.snapshots import list_snapshots, status, status_failed
+    from tow.snapshots import current_status, list_snapshots, status_failed
 
     p.report["backup_enabled"] = as_bool(cfg.get("backup_enabled"), True)
     _cleanup_observation(p, "backup_cleanup", night_cleanup_status(cfg=cfg))
     _cleanup_observation(p, "restore_point_cleanup", cleanup_status(cfg=cfg))
+    location = p.report["backup_cleanup_location"]
+    p.report["backup_watch_location"] = location
     if not p.report["backup_enabled"]:
-        p.report.update(backup_ok=None, backup_watch_since=None)
+        p.report.update(backup_ok=None, backup_watch_since=None, backup_state="disabled")
         return  # disabled is not a healthy copy and must not emit a recovery message
-    st = status()
+    st = current_status(cfg=cfg)
     last_ok = st.get("last_ok_at")
     if not isinstance(last_ok, (int, float)):
         newest = list_snapshots(limit=1)
         last_ok = newest[0]["created_ts"] if newest else None
-    watched = p.previous.get("backup_watch_since")
+    same_folder = p.previous.get("backup_watch_location", p.previous.get("backup_cleanup_location")) == location
+    watched = p.previous.get("backup_watch_since") if location and same_folder else None
     since = float(watched) if isinstance(watched, (int, float)) else p.now()
     p.report["backup_watch_since"] = int(since)
     failed = status_failed(st)
     stale = p.now() - float(last_ok if last_ok else since) > BACKUP_STALE_SEC
-    p.report["backup_ok"] = not failed and not stale
+    pending = not failed and not stale and last_ok is None
+    p.report["backup_state"] = "pending" if pending else "failed" if failed or stale else "verified"
+    p.report["backup_ok"] = None if pending else not failed and not stale
     if failed:
         reason = st.get("last_error") or t("watchdog.backup.unknown_reason", p.lang)
         p.backup_why = (
@@ -403,6 +416,11 @@ def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
         if key == "backup_cleanup_monitoring" and not report["backup_cleanup_previously_known"]:
             continue  # there is no prior cleanup fact to lose; copy-status errors are reported separately
         before = previous.get(key)
+        if key == "backup" and previous.get("backup_watch_location", previous.get("backup_cleanup_location")) not in (
+            None,
+            report["backup_watch_location"],
+        ):
+            before = None  # another folder's failure is not recovered by this folder's copy
         if cleanup_key and previous.get(f"{cleanup_key}_location") not in (
             None,
             report[f"{cleanup_key}_location"],
@@ -474,9 +492,10 @@ def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
             report["alerts"].append(t("watchdog.alert.checks_ok", p.lang))
 
 
-def _remember(p: _Pass, current: dict[str, bool], machine: Machine | None) -> None:
+def _remember(p: _Pass, current: dict[str, bool], machine: Machine | None, cfg: dict[str, Any]) -> bool:
     previous, report = p.previous, p.report
     saved: dict[str, Any] = {**current, "at": int(p.now()), "backup_watch_since": report.get("backup_watch_since")}
+    saved["backup_watch_location"] = report["backup_watch_location"]
     for key in ("backup_cleanup", "restore_point_cleanup"):
         saved[f"{key}_location"] = report[f"{key}_location"]
         saved[f"{key}_bound"] = report[f"{key}_bound"]
@@ -497,7 +516,36 @@ def _remember(p: _Pass, current: dict[str, bool], machine: Machine | None) -> No
     problem = {"at": int(p.now()), "text": "\n".join(report["alerts"])} if report["alerts"] else None
     if problem or previous.get("last_problem"):
         saved["last_problem"] = problem or previous.get("last_problem")
-    _save_state(saved)
+    from tow.delivery import stage_text
+    from tow.store import load_state, persistence_lock, save_state
+
+    # The notification intent precedes the diagnostic write. A durable token survives both
+    # dispatch and a crash before that write, so the same observation is never staged twice.
+    with persistence_lock():
+        if _load_state() != previous:
+            report["alerts"] = []  # a concurrent observer won; never rewind its facts
+            report["superseded"] = True
+            return False
+        if report["alerts"]:
+            # The same booleans may describe a different folder or a later boot while the
+            # diagnostic write remains broken. Bind stable source identities, not elapsed
+            # words or the time of this retry, so only a retry of the same event is deduped.
+            sources = {
+                "folders": {key: report.get(f"{key}_location") for key in ("backup_cleanup", "restore_point_cleanup")},
+                "boot": int(machine.boot_ts) if machine is not None else None,
+                "logon": int(machine.logon_ts) if machine is not None and machine.logon_ts is not None else None,
+                "wake": report.get("wake_ts"),
+            }
+            token = hashlib.sha256(
+                json.dumps([previous, current, sources], sort_keys=True, ensure_ascii=False).encode("utf-8")
+            ).hexdigest()
+            state = load_state()
+            if state.get("watchdog_notice_revision") != token:
+                stage_text(state, "\n".join(report["alerts"]), cfg=cfg, operation_id="watchdog")
+                state["watchdog_notice_revision"] = token
+                save_state(state)
+        _save_state(saved)
+    return True
 
 
 def run_watchdog(
@@ -508,7 +556,7 @@ def run_watchdog(
     now: Callable[[], float] = time.time,
     sleep: Callable[[float], None] = time.sleep,
     pulse: Callable[[str, bool], bool] | None = None,
-    flush: Callable[[], None] | None = None,
+    flush: Callable[[], Any] | None = None,
     probes: Probes | None = None,
     wake_ts: float | None = None,
     data_id: str | None = None,
@@ -559,7 +607,7 @@ def run_watchdog(
         "service": report["service_ok"],
         "checks": report["checks_ok"],
     }
-    if report["backup_enabled"]:
+    if report["backup_enabled"] and type(report["backup_ok"]) is bool:
         current["backup"] = report["backup_ok"]
     # An unreadable observation keeps the last confirmed result, not a fabricated recovery.
     for key in ("backup_cleanup", "restore_point_cleanup"):
@@ -575,23 +623,36 @@ def run_watchdog(
         current["service"] = previous.get("service", True)  # the first failed pass: not said yet
     _outage(p, probes, machine)
     _change_alerts(p, current)
-    _remember(p, current, machine)
+    _remember(p, current, machine, cfg)
 
     heartbeat = str(cfg.get("heartbeat_url") or "").strip()
     if heartbeat:
         healthy_now = bool(report["service_ok"] and report["checks_ok"])
         report["heartbeat"] = (pulse or (lambda u, ok: ping_heartbeat(u, ok=ok)))(heartbeat, healthy_now)
-    (flush or _flush_queued_messages)()
+    delivered = False
+    if send is not None:
+        from tow.delivery import dispatch, quiet_now
+
+        sent: list[bool] = []
+        if not quiet_now(cfg):
+
+            def observed_send(*, text: str, operation_id: str, topic: Any) -> bool:
+                result = send(text)
+                sent.append(result)
+                return result
+
+            dispatch(observed_send)
+        delivered = bool(sent) and all(sent)
+    flushed = (flush or _flush_queued_messages)()
+    if send is None:
+        delivered = flushed is True
     if report["alerts"]:
-        from tow.delivery import hold, quiet_now
+        from tow.delivery import quiet_now
 
         if quiet_now(cfg):
             # Like a check's messages: kept, and sent with them when the quiet hours end.
-            hold("\n".join(report["alerts"]))
             delivered = False
             report["held"] = True
-        else:
-            delivered = (send or send_to_messengers)("\n".join(report["alerts"]))
         report["delivered"] = delivered
         log_event("watchdog_alert", alerts=report["alerts"], delivered=delivered, how="auto")
     return report
@@ -606,7 +667,7 @@ def last_problem() -> dict[str, Any] | None:
     return value if isinstance(value, dict) and value.get("text") else None
 
 
-def _flush_queued_messages() -> None:
+def _flush_queued_messages() -> bool | None:
     """Messages not delivered yet, retried on every pass: those a check staged but could not hand
     over (TOW stopped in between) and those a messenger could not take. Nothing goes out during
     the quiet hours; after them, what they held goes too."""
@@ -616,18 +677,19 @@ def _flush_queued_messages() -> None:
 
     cfg = load_config()
     if quiet_now(cfg):
-        return
+        return None
     release_held(cfg)
     state = load_state()
     if not state.get("notify_outbox") and not state.get("notify_pending"):
-        return
+        return None
     try:
         secrets = load_secrets()
     except SecretStoreError:
-        return
+        return None
     if state.get("notify_pending"):
         dispatch(lambda *, text, operation_id, topic: True)  # into the queue; flushed just below
-    flush_outbox(secrets)
+    results = flush_outbox(secrets)
+    return bool(results) and all(ok for ok, _reason in results.values())
 
 
 def send_to_messengers(text: str) -> bool:

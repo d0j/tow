@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tow import check_steps, file_presence, file_repair
+from tow.check import client_continuation_status
 from tow.clients.factory import default_client_id
 from tow.config import load_config
 from tow.issues import Snapshot
@@ -83,10 +84,25 @@ def world():
     return topic, config
 
 
-def test_pending_recovery_shows_work_instead_of_requiring_attention_on_both_devices():
+def live_plan(monkeypatch):
+    from datetime import UTC, datetime
+
+    from tow.supervisor import layout
+
+    monkeypatch.setattr(
+        layout, "status", lambda: {"next": {"space": datetime.fromtimestamp(time.time() + 60, UTC).isoformat()}}
+    )
+
+
+def test_pending_recovery_shows_work_instead_of_requiring_attention_on_both_devices(monkeypatch):
     topic, config = world()
+    live_plan(monkeypatch)
     assert file_presence.count(topic, config) == 3
-    assert collect(Snapshot({"topics": [topic]}, config, time.time())) == []
+    from tow.supervisor import layout
+
+    plans = client_continuation_status({"topics": [topic]}, config, report=layout.status(), now=time.time())
+    [issue] = collect(Snapshot({"topics": [topic]}, config, time.time(), client_continuations=plans))
+    assert not issue.requires_attention
     first, second = TestClient(app), TestClient(app)
     for client in (first, second):
         page = client.get("/")
@@ -160,6 +176,7 @@ def test_concurrent_owner_cancel_survives_progress_merge():
 
 def test_recovery_expiry_changes_shared_attention_and_rows_without_another_store_write(monkeypatch):
     topic, _ = world()
+    live_plan(monkeypatch)
     client = TestClient(app)
     before = client.get("/sync.json").json()
     assert before["areas"]["attention"]["count"] == 0

@@ -312,7 +312,9 @@ def watchdog_text(report: dict[str, Any]) -> str:
     backup = report.get("backup_ok")
     lines.append(
         t(
-            "cli.watchdog.backup_off"
+            "cli.watchdog.backup_pending"
+            if report.get("backup_state") == "pending"
+            else "cli.watchdog.backup_off"
             if backup is None
             else "cli.watchdog.backup_ok"
             if backup

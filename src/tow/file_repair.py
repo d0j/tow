@@ -28,6 +28,15 @@ from tow.store import check_run_lock, load_download_history, load_secrets, load_
 TIMEOUT_SEC = 12 * 3600
 MAX_ATTEMPTS = 3
 ACTIVE_PHASES = frozenset({"requested", "checking", "resuming", "downloading"})
+RESOURCE_BLOCKS = frozenset({"repair.space", "repair.volume_unavailable"})
+OBSERVABLE_BLOCKS = frozenset(
+    {
+        "client.managed.repair_start_unconfirmed",
+        "repair.resume_unconfirmed",
+        "repair.dispatch_unconfirmed",
+        "repair.failed",
+    }
+)
 _ID = re.compile(r"[0-9a-f]{32}")
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 
@@ -70,7 +79,25 @@ def receipt_of(topic: Mapping[str, Any]) -> dict[str, Any]:
         return {}
     if "blocked_params" in value and not isinstance(value["blocked_params"], dict):
         return {}
-    for key in ("stop_dispatched", "recheck_dispatched", "resume_dispatched", "saw_checking", "running_seen"):
+    if "retry_error" in value:
+        retry = value["retry_error"]
+        if not isinstance(retry, dict) or (
+            retry
+            and (
+                not isinstance(retry.get("code"), str)
+                or not retry["code"]
+                or not isinstance(retry.get("params", {}), dict)
+            )
+        ):
+            return {}
+    for key in (
+        "stop_dispatched",
+        "recheck_dispatched",
+        "resume_dispatched",
+        "saw_checking",
+        "running_seen",
+        "owner_required",
+    ):
         if key in value and type(value[key]) is not bool:
             return {}
     for key in ("stop_at", "check_at", "resume_at"):
@@ -79,6 +106,11 @@ def receipt_of(topic: Mapping[str, Any]) -> dict[str, Any]:
             isinstance(stamp, bool) or not isinstance(stamp, (int, float)) or not math.isfinite(stamp) or stamp < 0
         ):
             return {}
+    if any(
+        value.get(f"{command}_dispatched") is True and stamp not in value
+        for command, stamp in (("stop", "stop_at"), ("recheck", "check_at"), ("resume", "resume_at"))
+    ):
+        return {}
     if value["phase"] == "checking" and (value.get("recheck_dispatched") is not True or "check_at" not in value):
         return {}
     needs_start = value["phase"] == "resuming" or (
@@ -96,6 +128,12 @@ def current(topic: Mapping[str, Any], receipt: Mapping[str, Any], config: Mappin
     selected = str(
         topic.get("client_id") or (factory.default_client_id(dict(config)) if config is not None else client_id)
     )
+    if config is not None:
+        try:
+            if not factory.client_configuration(dict(config), selected).get("enabled", True):
+                return False
+        except factory.ClientSettingError, factory.ClientUnavailableError, AttributeError, TypeError, ValueError:
+            return False
     return bool(
         selected == client_id
         and topic.get("repair_request_revision") == receipt.get("id")
@@ -137,15 +175,59 @@ def start_confirmation_pending(topic: Mapping[str, Any], *, now: float | None = 
     )
 
 
+def continuation_pending(topic: Mapping[str, Any], *, now: float | None = None) -> bool:
+    """A still-bound request may continue unsent work or observe a dispatched command.
+
+    A timeout never permits another start. Owner, selection, configuration and explicit
+    stop failures are excluded, and no observation extends the original authorization.
+    """
+    receipt = receipt_of(topic)
+    stamp = time.time() if now is None else now
+    reason = receipt.get("blocked")
+    reason = reason if isinstance(reason, str) else ""
+    command = (
+        "resume" if receipt.get("resume_dispatched") else "recheck" if receipt.get("recheck_dispatched") else "stop"
+    )
+    stamp_key = "check_at" if command == "recheck" else f"{command}_at"
+    dispatched = (
+        receipt.get(f"{command}_dispatched") is True
+        and isinstance(receipt.get(stamp_key), (int, float))
+        and receipt["requested_at"] <= receipt[stamp_key] <= stamp
+    )
+    if reason == "client.managed.repair_start_unconfirmed":
+        return start_confirmation_pending(topic, now=stamp)
+    return bool(
+        receipt
+        and receipt.get("owner_required") is not True
+        and receipt["requested_at"] <= stamp < receipt["deadline"]
+        and current(topic, receipt)
+        and (
+            (receipt["phase"] in ACTIVE_PHASES and not receipt.get("blocked"))
+            or reason in RESOURCE_BLOCKS
+            or (
+                reason in OBSERVABLE_BLOCKS
+                and dispatched
+                and (reason != "repair.resume_unconfirmed" or receipt.get("running_seen") is not True)
+            )
+        )
+    )
+
+
+def maintenance_pending(topic: Mapping[str, Any]) -> bool:
+    receipt = receipt_of(topic)
+    return bool(
+        receipt
+        and not topic.get("paused")
+        and not topic.get("selection_dirty")
+        and ((receipt["phase"] in ACTIVE_PHASES and not receipt.get("blocked")) or continuation_pending(topic))
+    )
+
+
 def waiting_topics(state: Mapping[str, Any]) -> list[Topic]:
     return [
         cast(Topic, topic)
         for topic in state.get("topics") or []
-        if isinstance(topic, dict)
-        and (receipt := receipt_of(topic))
-        and ((receipt["phase"] in ACTIVE_PHASES and not receipt.get("blocked")) or start_confirmation_pending(topic))
-        and not topic.get("paused")
-        and not topic.get("selection_dirty")
+        if isinstance(topic, dict) and maintenance_pending(topic)
     ]
 
 
@@ -321,7 +403,7 @@ def request(topic_id: str) -> dict[str, Any]:
             return existing
         client_id = str(topic.get("client_id") or factory.default_client_id(config))
         if not factory.on_this_computer(config, secrets, client_id):
-            raise TowError("repair.volume_unavailable")
+            raise TowError("repair.remote_unavailable")
         client = factory.from_secrets(config, secrets, client_id)
         record = as_dict(as_dict(history.get("topics")).get(topic_id))
         volume = folders.recorded_volume(record.get("volume"), str(topic.get("save_path") or ""))

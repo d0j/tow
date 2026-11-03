@@ -22,13 +22,35 @@ from tow.check.client_ops import (
     release_relocation,
     reserve_relocation,
 )
+from tow.check.continuations import client_continuation_matches, client_continuation_status
 from tow.check.run import record_check_failure, run_check
+from tow.records import Topic
+
+
+def client_maintenance_pending(topic: Topic) -> bool:
+    """The same client-only continuations the check runner can actually process."""
+    from tow import file_repair
+    from tow.check import space, verification
+
+    return bool(
+        not topic.get("paused")
+        and not topic.get("selection_dirty")
+        and (
+            (space.waiting_of(topic) and not space.waiting_of(topic).get("blocked"))
+            or verification.maintenance_pending(topic)
+            or file_repair.maintenance_pending(topic)
+        )
+    )
+
 
 __all__ = [
     "FREE_SPACE_MARGIN",
     "PREVIOUS_REVISION_ACTIVE",
     "await_relocation",
     "blocked_by_previous_revision",
+    "client_continuation_matches",
+    "client_continuation_status",
+    "client_maintenance_pending",
     "client_owned_by_tow",
     "free_space_problem",
     "record_check_failure",

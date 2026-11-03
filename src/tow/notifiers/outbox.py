@@ -24,6 +24,7 @@ the queue's write sends that part again (no messenger here offers a way to dedup
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 import time
@@ -40,6 +41,9 @@ from tow.records import NotifyStatus
 OUTBOX_LIMIT = 50
 LEASE_SEC = 120
 MAX_ROUNDS = 5
+REPROBE_SEC = 6 * 3600
+REPROBE_TTL_SEC = 24 * 3600
+REPROBE_LIMIT = 3
 # How long a second thread of this process waits for the one delivering to the same recipient
 # (then it reports "busy", like a lease held by another process).
 LOCAL_WAIT_SEC = 30.0
@@ -158,7 +162,15 @@ def _tidy(state: dict[str, Any]) -> None:
     for key in [
         k
         for k, box in outbox.items()
-        if isinstance(box, dict) and not box.get("items") and not box.get("inflight") and not box.get("dropped")
+        if isinstance(box, dict)
+        and not box.get("items")
+        and not box.get("inflight")
+        and not box.get("dropped")
+        and not (
+            type(box.get("retry_at")) in (int, float)
+            and math.isfinite(box["retry_at"])
+            and box["retry_at"] > time.time()
+        )
     ]:
         outbox.pop(key)
     if not outbox:
@@ -243,10 +255,12 @@ def _combined(items: list[dict[str, Any]], dropped: int, *, retry: bool) -> str:
     return t("notifier.common.late", lang) + "\n\n" + note + "\n\n".join([*late, *fresh])
 
 
-def set_status(state: dict[str, Any], key: str, reason: str | Msg | None) -> None:
+def set_status(state: dict[str, Any], key: str, reason: str | Msg | None, *, revision: str | None = None) -> None:
     """The recipient's last delivery: ok, or why not - its text (the message language) and,
     for TOW's own wording, its key and values (the settings page shows it in the reader's)."""
     status = NotifyStatus(ok=reason is None, at=int(time.time()))
+    if revision:
+        status["settings_revision"] = revision
     if isinstance(reason, Msg):
         record = reason.record()
         status["error"] = reason.text(message_language())
@@ -273,9 +287,39 @@ def _claim(key: str, settings: dict[str, Any], token: str) -> tuple[str, dict[st
         now = time.time()
         if _lease_held_by_other(lease, token, now):
             return "busy", None
-        if box.get("blocked") and box["blocked"] == fingerprint(settings):
+        identity = fingerprint(settings)
+        if box.get("wait_fingerprint") != identity:
+            for field in ("retry_at", "reprobe_at", "reprobe_since", "reprobe_attempts", "wait_fingerprint"):
+                box.pop(field, None)
+        retry_at = box.get("retry_at")
+        if (
+            isinstance(retry_at, (int, float))
+            and not isinstance(retry_at, bool)
+            and math.isfinite(retry_at)
+            and now < retry_at
+        ):
             return "blocked", None
+        if box.get("blocked") and box["blocked"] == identity:
+            reprobe_at = box.get("reprobe_at")
+            since = box.get("reprobe_since")
+            attempts = box.get("reprobe_attempts", 0)
+            if not (
+                box.get("items")
+                and isinstance(reprobe_at, (int, float))
+                and not isinstance(reprobe_at, bool)
+                and math.isfinite(reprobe_at)
+                and reprobe_at <= now
+                and isinstance(since, (int, float))
+                and not isinstance(since, bool)
+                and math.isfinite(since)
+                and 0 <= now - since <= REPROBE_TTL_SEC
+                and type(attempts) is int
+                and 0 <= attempts < REPROBE_LIMIT
+            ):
+                return "blocked", None
+            box["reprobe_attempts"] = attempts + 1
         box.pop("blocked", None)
+        expired_wait = box.pop("retry_at", None) is not None
         inflight = box.get("inflight")
         if inflight and int(inflight.get("done") or 0) == 0:
             # Nothing of it arrived yet: rebuild it with whatever was queued meanwhile, and with
@@ -286,7 +330,7 @@ def _claim(key: str, settings: dict[str, Any], token: str) -> tuple[str, dict[st
                 box["dropped"] = int(box.get("dropped") or 0) + carried
         if not box.get("inflight"):
             if not box["items"]:
-                if box.pop("retry", None) or box.pop("one_by_one", None):
+                if box.pop("retry", None) or box.pop("one_by_one", None) or expired_wait:
                     _tidy(state)
                     save_state(state)
                 return "idle", None
@@ -315,6 +359,10 @@ def _progress(
     reason: str | Msg | None = None,
     block_fp: str | None = None,
     refused: bool = False,
+    retry_at: float | None = None,
+    wait_fingerprint: str | None = None,
+    reprobe: bool = False,
+    tested: bool = False,
 ) -> bool:
     """Record what arrived; False (nothing written) when the lease is no longer this claim's -
     it expired and another dispatcher took the queue over: the caller stops sending."""
@@ -327,7 +375,20 @@ def _progress(
             return False
         box = _box(state, key)
         inflight = box.get("inflight") or {}
-        if refused:
+        if tested:
+            if reason is None:
+                set_status(state, key, None, revision=wait_fingerprint)
+                for field in (
+                    "blocked",
+                    "retry_at",
+                    "reprobe_at",
+                    "reprobe_since",
+                    "reprobe_attempts",
+                    "wait_fingerprint",
+                ):
+                    box.pop(field, None)
+            # A test confirms the connection, never receipt of the queue's inflight message.
+        elif refused:
             # The messenger refused this message: a single one is dropped (the reason stays in
             # the status); a combined one is retried one by one to find the message it refuses -
             # unless a part of it already arrived: then sending its messages again would repeat
@@ -339,22 +400,35 @@ def _progress(
                 box["one_by_one"] = True
             box.pop("inflight", None)
             if reason is not None:
-                set_status(state, key, reason)
+                set_status(state, key, reason, revision=wait_fingerprint)
                 reason = None  # the lease is released below like for a finished message
             finished = True
         elif finished:
             sent = set(inflight.get("ids") or [])
             box["items"] = [item for item in box["items"] if item.get("id") not in sent]
             box.pop("inflight", None)
-            set_status(state, key, None)
+            set_status(state, key, None, revision=wait_fingerprint)
+            for field in ("retry_at", "reprobe_at", "reprobe_since", "reprobe_attempts", "wait_fingerprint"):
+                box.pop(field, None)
         elif done is not None and inflight:
             inflight["done"] = done
         if reason is not None:
-            set_status(state, key, reason)
+            set_status(state, key, reason, revision=wait_fingerprint)
             if block_fp:
                 box["blocked"] = block_fp
+            if retry_at is not None and math.isfinite(retry_at) and retry_at > time.time():
+                box["retry_at"] = retry_at
+                box["wait_fingerprint"] = wait_fingerprint
+            if reprobe and block_fp:
+                box.setdefault("reprobe_since", time.time())
+                box.setdefault("reprobe_attempts", 0)
+                box["reprobe_at"] = time.time() + REPROBE_SEC
+                box["wait_fingerprint"] = block_fp
+            elif block_fp:
+                for field in ("reprobe_at", "reprobe_since", "reprobe_attempts"):
+                    box.pop(field, None)
         leases = state.setdefault("notify_lease", {})
-        if finished or reason is not None:
+        if finished or reason is not None or tested:
             leases.pop(key, None)
         else:
             leases[key] = _lease(token, time.time() + LEASE_SEC)
@@ -422,16 +496,27 @@ def _send_inflight(
             module.send(settings, parts[index])
         except DeliveryError as exc:
             if exc.drop:
-                if _progress(key, token, done=index, reason=exc.detail, refused=True):
+                if _progress(
+                    key, token, done=index, reason=exc.detail, refused=True, wait_fingerprint=fingerprint(settings)
+                ):
                     _log_refused(key, exc.reason, 1 if index else len(inflight.get("ids") or []))
                 return "refused", exc.reason
             permanent = not exc.transient
-            _progress(key, token, done=index, reason=exc.detail, block_fp=fingerprint(settings) if permanent else None)
+            _progress(
+                key,
+                token,
+                done=index,
+                reason=exc.detail,
+                block_fp=fingerprint(settings) if permanent else None,
+                retry_at=exc.retry_at,
+                wait_fingerprint=fingerprint(settings),
+                reprobe=exc.reprobe,
+            )
             return "failed", exc.reason
         except Exception as exc:  # noqa: BLE001 - a bug in one messenger must not stop the others; recorded
             lang = message_language()
             failure = Msg("notifier.common.internal_error", title=title(module, lang), error=type(exc).__name__)
-            _progress(key, token, done=index, reason=failure)
+            _progress(key, token, done=index, reason=failure, wait_fingerprint=fingerprint(settings))
             return "failed", failure.text(lang)
         if index + 1 < len(parts):
             if not _progress(key, token, done=index + 1):
@@ -440,8 +525,67 @@ def _send_inflight(
                 _sleep(pause)
     # Delivered. When the lease was taken over meanwhile nothing is written: the next claim
     # finds the queue busy and this pass ends with what it delivered.
-    _progress(key, token, finished=True)
+    _progress(key, token, finished=True, wait_fingerprint=fingerprint(settings))
     return "sent", ""
+
+
+def test_message(key: str, module: Notifier, settings: dict[str, Any], text: str) -> tuple[bool, str]:
+    """An owner-requested test shares the recipient's lease and server-imposed wait."""
+    from tow.store import load_state, persistence_lock, save_state
+
+    token, identity = _new_token(), fingerprint(settings)
+    with persistence_lock():
+        state = load_state()
+        lease = (state.get("notify_lease") or {}).get(key) or {}
+        if _lease_held_by_other(lease, token, time.time()):
+            return _busy(module)
+        box = (state.get("notify_outbox") or {}).get(key) or {}
+        retry_at = box.get("retry_at") if isinstance(box, dict) else None
+        if (
+            isinstance(box, dict)
+            and box.get("wait_fingerprint") == identity
+            and isinstance(retry_at, (int, float))
+            and not isinstance(retry_at, bool)
+            and math.isfinite(retry_at)
+            and retry_at > time.time()
+        ):
+            status = (state.get("notify_status") or {}).get(key) or {}
+            return False, str(status.get("error") or t("notifier.common.queued", message_language()))
+        state.setdefault("notify_lease", {})[key] = _lease(token, time.time() + LEASE_SEC)
+        save_state(state)
+    failure = None
+    try:
+        for part in parts_for(module, text):
+            module.send(settings, part)
+            if not _progress(key, token):  # renew between parts; a lost reservation stops the test
+                return _busy(module)
+    except DeliveryError as exc:
+        failure = exc
+    except Exception as exc:  # noqa: BLE001 - one notifier's bug must release its reservation too
+        failure = DeliveryError(
+            Msg("notifier.common.internal_error", title=title(module, message_language()), error=type(exc).__name__),
+            transient=True,
+        )
+    except BaseException:
+        with persistence_lock():
+            state = load_state()
+            if _lease_owner((state.get("notify_lease") or {}).get(key) or {}) == token:
+                state["notify_lease"].pop(key, None)
+                _tidy(state)
+                save_state(state)
+        raise
+    if not _progress(
+        key,
+        token,
+        tested=True,
+        reason=failure.detail if failure else None,
+        block_fp=identity if failure and not failure.transient and not failure.drop else None,
+        retry_at=failure.retry_at if failure else None,
+        wait_fingerprint=identity,
+        reprobe=failure.reprobe if failure else False,
+    ):
+        return _busy(module)
+    return (False, failure.reason) if failure else (True, "")
 
 
 def _log_refused(key: str, reason: str, count: int) -> None:

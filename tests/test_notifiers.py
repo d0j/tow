@@ -272,7 +272,7 @@ def test_a_wait_longer_than_the_cap_is_left_to_the_next_delivery(http):
     assert [item["text"] for item in load_state()["notify_outbox"]["discord"]["items"]] == ["x"]
 
 
-def test_telegram_wait_under_parameters_is_honoured(http):
+def test_telegram_wait_under_parameters_is_honoured(http, monkeypatch):
     set_handler, seen, sleeps = http
     answers = iter(
         [
@@ -283,8 +283,14 @@ def test_telegram_wait_under_parameters_is_honoured(http):
     )
     set_handler(lambda _r: next(answers))
     telegram = {"telegram": {"token": TG_TOKEN, "chat_ids": ["1"]}}
+    clock = {"now": base.time.time()}
+    monkeypatch.setattr(base.time, "time", lambda: clock["now"])
     ((ok, _reason),) = notifiers.send_all(telegram, "x").values()
     assert (not ok, len(seen), sleeps) == (True, 1, [])  # 30 s: not waited out inside this delivery
+    ((ok, _reason),) = notifiers.flush(telegram).values()
+    assert not ok
+    assert len(seen) == 1  # another dispatch cannot bypass the service's 30-second wait
+    clock["now"] += 30
     ((ok, _reason),) = notifiers.flush(telegram).values()
     assert ok
     assert sleeps == [2.0]

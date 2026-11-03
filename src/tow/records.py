@@ -108,6 +108,7 @@ class Topic(TypedDict, total=False):
     last_error_code: str
     last_error_params: dict[str, Any]
     last_error_class: str
+    auth_error_revision: str  # a fresh nonsecret generation for each site's sign-in refusal
     error_notified: bool
     error_streak: int  # checks in a row with a site's transport trouble (tow.check notifications)
 
@@ -153,6 +154,7 @@ class NotifyStatus(TypedDict, total=False):
     error: str
     error_code: str
     error_params: dict[str, Any]
+    settings_revision: str
 
 
 # --- download_history.json ------------------------------------------------------------------

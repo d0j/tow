@@ -138,6 +138,7 @@ _CHECK_CLEARABLE_FIELDS = (
     "error_streak",
     "last_error_code",
     "last_error_params",
+    "auth_error_revision",
     "content_ref",
     "content_token",  # read and dropped, no longer written (records.CONTENT_REF_FIELDS)
     "content_hash",
@@ -235,6 +236,10 @@ def merge_check_results(
             if key in source:
                 topic[key] = source[key]
         for key in _CHECK_CLEARABLE_FIELDS:
+            if key in {"verification_pending", "waiting_space"} and set(changed).intersection(
+                {"save_path", "selection", "paused"}
+            ):
+                continue  # no old continuation may resurrect a marker the owner's edit withdrew
             if key == "repair_pending" and "repair_request_revision" in changed:
                 continue
             if key in changed:

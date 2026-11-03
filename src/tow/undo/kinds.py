@@ -52,9 +52,12 @@ def _short_title(record: dict[str, Any]) -> str:
 
 
 def _topic_deleted(ctx: Context) -> Restore:
+    from tow import repair_authorization
+
     record = cast(TopicDeleted, ctx.record)
     topics = ctx.state.setdefault("topics", [])
-    item = record["item"]
+    item = copy.deepcopy(record["item"])
+    repair_authorization.forget({"topics": [item]})
     if not any(str(topic.get("id")) == str(item.get("id")) for topic in topics):
         index = record.get("index")
         if isinstance(index, int) and not isinstance(index, bool) and 0 <= index <= len(topics):

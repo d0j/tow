@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tow import check_transaction, download_history, file_presence
-from tow.check import repair, rows, space, verification
+from tow.check import client_waits, repair, rows, space, verification
 from tow.check.client_ops import ClientPool, remote_clients
 from tow.check.notices import RunNotifications, flush_notifications
 from tow.check.reconcile import reconcile_and_commit, reconcile_preview
@@ -26,6 +26,11 @@ from tow.notify import NotificationBatch
 from tow.records import CheckRow, Health, Topic, health_of, topics_of
 from tow.store import SecretStoreError, check_run_lock, load_state, persistence_lock, save_state
 from tow.trackers import load_trackers
+
+
+def fresh_client_settings() -> tuple[dict[str, Any], dict[str, Any]]:
+    """Re-read adapter settings at the durable dispatch fence, under the caller's lock."""
+    return load_config(), read_secrets()[0]
 
 
 def _check_failure_code(error: str | BaseException) -> str:
@@ -196,7 +201,15 @@ def run_check(
             rebind_volumes=rebind_volumes,
         )
     with check_run_lock(wait=wait):
-        return _run_check(
+        if scheduled_scope == "site_retry":
+            from tow.protection.warmup import prepare_batch
+            from tow.supervisor import layout
+
+            selected = prepare_batch(
+                load_state(quarantine=False), load_config(), layout.read_json(layout.schedule_path())
+            )
+            ids = selected if ids is None else [tid for tid in ids if tid in selected]
+        out = _run_check(
             apply=True,
             notify=notify,
             ids=ids,
@@ -208,6 +221,28 @@ def run_check(
             readd_since=readd_since,
             rebind_volumes=rebind_volumes,
         )
+        if how == "manual" and ids is not None and not (progress_only or space_only):
+            from tow.auth_observations import capture, site_revision
+
+            # The web callback runs after this lock is released. Carry these exact refusal
+            # generations so a later check between the run and callback is never blessed.
+            with persistence_lock():
+                cfg = load_config()
+                refusals = capture(load_state(quarantine=False), cfg)
+                confirmed_sites = {
+                    str(row["tracker"])
+                    for row in out.get("results") or []
+                    if row.get("ok")
+                    and row.get("site_answered")
+                    and row.get("tracker")
+                    and row.get("fallback_reason") != "tracker_auth"
+                    and row.get("source") not in {"magnet", "matching_magnet"}
+                }
+                out["auth_refusals"] = {
+                    name: refusals.get(name, {"site_revision": site_revision(cfg, name), "topics": {}})
+                    for name in confirmed_sites
+                }
+        return out
 
 
 def _today() -> str:
@@ -294,6 +329,12 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False, *, hist
         if "check_failures" in previous_health:
             health["check_failures"] = previous_health["check_failures"]
     health["clients_ok"] = pool.health()
+    if pool.asked and pool.default_id in pool.deferred:
+        for key in ("qbit", "client", "qbit_ok"):
+            if key in previous_health:
+                health[key] = previous_health[key]
+            else:
+                health.pop(key, None)  # type: ignore[misc]
     if not pool.asked:  # no client was asked: keep what the last check or the diagnostics saw
         del health["qbit"], health["client"], health["qbit_ok"], health["clients_ok"]
         if "qbit" in previous_health:
@@ -445,6 +486,11 @@ def _run_check(
         expect_torrents=_clients_expected_to_list(state, want, default_id),
         previous_empty={str(k): int(v) for k, v in as_dict(previous_health.get("clients_empty")).items()},
     )
+    held_clients = client_waits.deferred_clients(
+        state, cfg, now=machine_now().timestamp(), manual=how == "manual" and ids is not None
+    )
+    pool.errors.update(held_clients)
+    pool.deferred = frozenset(held_clients)
     notifications = RunNotifications(
         enabled=notify,
         batch=batch,
@@ -458,10 +504,16 @@ def _run_check(
     )
     # Nothing to check (a new install, or no topic in this run): no client is asked, so one not
     # set up yet is not logged as unreachable; the header keeps what was seen before.
-    if any(want is None or str(topic.get("id")) in want for topic in topics_of(state)):
+    if default_id not in held_clients and any(
+        want is None or str(topic.get("id")) in want for topic in topics_of(state)
+    ):
         pool.open_default(secrets)
     else:
-        pool.asked = False
+        pool.asked = any(
+            (want is None or str(topic.get("id")) in want)
+            and str(topic.get("client_id") or default_id) not in held_clients
+            for topic in topics_of(state)
+        )
     # A site that said "download limit for today" is left alone until the next local day: the
     # limit is kept in the state, so the next scheduled runs do not ask it again. A manual
     # check (the owner pressed the button) still tries.
@@ -480,6 +532,7 @@ def _run_check(
         secrets=secrets,
         client_errors=pool.errors,
         get_client_for=lambda topic: pool.get(topic, run.secrets),
+        client_config=copy.deepcopy(cfg),
         record=_record,
         queue_notification=notifications.queue,
         history_retention=download_history.retention(cfg),
