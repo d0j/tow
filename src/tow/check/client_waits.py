@@ -2,79 +2,88 @@
 
 from __future__ import annotations
 
+import copy
 import math
 from collections.abc import Iterator, Mapping
 from typing import Any
 
+from tow import client_access
 from tow.clients import factory
-from tow.errors import Msg, TowError
-from tow.http import retry_after_from
-
-
-def _causes(error: BaseException) -> list[Any]:
-    queue: list[Any] = [error]
-    found: list[Any] = []
-    while queue and len(found) < 8:
-        item = queue.pop(0)
-        if any(item is previous for previous in found):
-            continue
-        found.append(item)
-        params = item.get("params") if isinstance(item, Mapping) else getattr(item, "params", None)
-        reason = params.get("reason") if isinstance(params, Mapping) else None
-        if isinstance(reason, (Mapping, Msg, TowError)):
-            queue.append(reason)
-        if isinstance(item, BaseException) and (cause := item.__cause__ or item.__context__) is not None:
-            queue.append(cause)
-    return found
+from tow.clock import machine_now, parse_timestamp
+from tow.errors import TowError
+from tow.store import load_state, persistence_lock, save_state
 
 
 def http_status(error: BaseException) -> int | None:
-    for item in _causes(error):
-        if isinstance(item, Mapping):
-            code, params = item.get("code"), item.get("params")
-        else:
-            code, params = getattr(item, "code", None), getattr(item, "params", None)
-        status = params.get("code") if code == "client.managed.http_error" and isinstance(params, Mapping) else None
-        if status is None:
-            status = getattr(item, "http_status_code", None)
-        if status is None:
-            status = getattr(getattr(item, "response", None), "status_code", None)
-        if type(status) is int and 100 <= status < 600:
-            return status
-    return None
+    return client_access.http_status(error)
 
 
 def permanent_http(error: BaseException) -> TowError | None:
-    status = http_status(error)
-    return (
-        TowError("client.managed.http_error", code=status)
-        if (status is not None and 400 <= status < 500 and status not in {408, 425, 429})
-        else None
-    )
+    return client_access.permanent_http(error)
 
 
 def retry_after(error: BaseException, *, now: float) -> float:
-    delay = 0.0
-    for item in _causes(error):
-        params = item.get("params") if isinstance(item, Mapping) else getattr(item, "params", None)
-        params = params if isinstance(params, Mapping) else {}
-        for key in ("retry_at", "retry_after"):
-            value = params.get(key, getattr(item, key, None))
-            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
-                delay = max(delay, min(86400, max(0, value - now if key == "retry_at" else value)))
-        headers = getattr(getattr(item, "response", None), "headers", None)
-        if callable(getattr(headers, "get", None)):
-            delay = max(delay, retry_after_from(headers, now=now))
-    return delay
+    return client_access.retry_after(error, now=now)
 
 
-def remember(waiting: dict[str, Any], error: Exception, *, now: float) -> Exception:
+def record_context(
+    state: dict[str, Any],
+    cfg: dict[str, Any],
+    secrets: dict[str, Any],
+    client_id: str,
+    error: Exception,
+    *,
+    now: float,
+    apply: bool,
+) -> str:
+    """Persist an actual refusal against the settings which made that request, by CAS."""
+    if isinstance(error, client_access.DeferredClientError):
+        return error.observation_id
+    if not apply or http_status(error) is None:
+        return ""
+    from tow.check.run import fresh_client_settings
+
+    ctx = client_access.context(cfg, secrets, client_id)
+    with persistence_lock():
+        fresh_cfg, fresh_secrets = fresh_client_settings()
+        try:
+            fresh_ctx = client_access.context(fresh_cfg, fresh_secrets, client_id)
+        except factory.ClientSettingError, factory.ClientUnavailableError, AttributeError, TypeError, ValueError:
+            return ""
+        if (
+            fresh_ctx["endpoint"] != ctx["endpoint"]
+            or fresh_ctx["client"] != ctx["client"]
+            or (not client_access.temporary_http(error) and fresh_ctx["auth"] != ctx["auth"])
+        ):
+            return ""  # an old in-flight failure says nothing about the owner's new credentials
+        disk = load_state(quarantine=False)
+        before = copy.deepcopy(disk.get("client_access"))
+        ident = client_access.observe(disk, ctx, error, now=now)
+        if before != disk.get("client_access"):
+            save_state(disk)
+        state["client_access"] = copy.deepcopy(disk.get("client_access") or {})
+        return ident
+
+
+def note_failure(run: Any, client_id: str, error: Exception) -> str:
+    cached = getattr(run, "client_errors", {}).get(client_id)
+    if isinstance(cached, client_access.DeferredClientError):
+        return cached.observation_id
+    cfg = getattr(run, "client_config", None)
+    if not cfg:
+        return ""
+    return record_context(run.state, cfg, run.secrets, client_id, error, now=machine_now().timestamp(), apply=run.apply)
+
+
+def remember(waiting: dict[str, Any], error: Exception, *, now: float, observation_id: str = "") -> Exception:
     """Keep a server refusal on the existing receipt, without renewing its transaction."""
     status = http_status(error)
     if status is None:
         return error
     if (permanent := permanent_http(error)) is not None:
         waiting.update(blocked=permanent.code, blocked_params=permanent.params)
+        if observation_id:
+            waiting["http_refusal_id"] = observation_id
         return permanent
     if status in {408, 425, 429} or status >= 500:
         delay = retry_after(error, now=now)
@@ -113,7 +122,13 @@ def _current(topic: Mapping[str, Any], waiting: Mapping[str, Any], cfg: Mapping[
 
 
 def deferred(
-    topic: Mapping[str, Any], *, now: float, manual: bool = False, cfg: Mapping[str, Any] | None = None
+    topic: Mapping[str, Any],
+    *,
+    now: float,
+    manual: bool = False,
+    cfg: Mapping[str, Any] | None = None,
+    state: Mapping[str, Any] | None = None,
+    secrets: Mapping[str, Any] | None = None,
 ) -> bool:
     """A current refusal excludes automatic native reads, including progress reconciliation."""
     for waiting in _receipts(topic, cfg):
@@ -123,8 +138,34 @@ def deferred(
         params = waiting.get("blocked_params")
         if not manual and waiting.get("blocked") == "client.managed.http_error" and isinstance(params, Mapping):
             status = params.get("code")
-            if type(status) is int and 400 <= status < 500 and status not in {408, 425, 429}:
-                return True
+            if (
+                type(status) is int
+                and status in {401, 403}
+                and state is not None
+                and cfg is not None
+                and secrets is not None
+            ):
+                records = state.get("client_access")
+                bucket = records.get(str(waiting["client"])) if isinstance(records, Mapping) else None
+                if not isinstance(bucket, Mapping) or not isinstance(bucket.get("auth"), Mapping):
+                    continue
+                try:
+                    ctx = client_access.context(cfg, secrets, str(waiting["client"]))
+                except factory.ClientUnavailableError, AttributeError, ValueError, TypeError, KeyError, OverflowError:
+                    continue
+                refusal = client_access.auth_refusal(state, ctx, now=now)
+                try:
+                    until = (
+                        float(waiting["deadline"])
+                        if "deadline" in waiting
+                        else (
+                            parse_timestamp(str(waiting.get("since") or "")).timestamp() + client_access.AUTH_WAIT_SEC
+                        )
+                    )
+                except TypeError, ValueError, OverflowError:
+                    until = 0
+                if now < until and refusal:
+                    return True
     return False
 
 
@@ -150,20 +191,29 @@ def _receipts(topic: Mapping[str, Any], cfg: Mapping[str, Any] | None) -> Iterat
 
 
 def deferred_clients(
-    state: Mapping[str, Any], cfg: Mapping[str, Any], *, now: float, manual: bool = False
+    state: Mapping[str, Any],
+    cfg: Mapping[str, Any],
+    *,
+    now: float,
+    manual: bool = False,
+    secrets: Mapping[str, Any] | None = None,
 ) -> dict[str, Exception]:
     """A current HTTP refusal covers that connection's ping and its other topics too."""
     held: dict[str, Exception] = {}
-    for topic in state.get("topics") or []:
-        if not isinstance(topic, Mapping) or not deferred(topic, now=now, manual=manual, cfg=cfg):
+    records = state.get("client_access")
+    if secrets is None or not isinstance(records, Mapping) or not records:
+        return held
+    for configuration in factory.client_configurations(dict(cfg)):
+        if not configuration.get("enabled", True):
             continue
-        for waiting in _receipts(topic, cfg):
-            status = waiting.get("retry_status")
-            params = waiting.get("blocked_params")
-            if waiting.get("blocked") == "client.managed.http_error" and isinstance(params, Mapping):
-                status = params.get("code")
-            if type(status) is int:
-                floor = waiting.get("not_before")
-                delay = max(0.0, float(floor) - now) if isinstance(floor, (int, float)) and math.isfinite(floor) else 0
-                held[str(waiting["client"])] = TowError("client.managed.http_error", code=status, retry_after=delay)
+        ident = str(configuration["id"])
+        try:
+            ctx = client_access.endpoint(cfg, secrets, ident)
+            floor = client_access.server_wait(state, ctx, now=now)
+        except factory.ClientUnavailableError, AttributeError, ValueError, TypeError, KeyError, OverflowError:
+            continue
+        if floor:
+            held[ident] = client_access.DeferredClientError(
+                floor["code"], retry_after=floor["not_before"] - now, observation_id=str(floor["id"])
+            )
     return held

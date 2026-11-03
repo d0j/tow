@@ -7,7 +7,7 @@ import copy
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
-from tow import check_transaction, download_history, file_presence, site_retries
+from tow import check_transaction, client_access, download_history, file_presence, site_retries
 from tow.check.client_ops import client_unreachable, info_confirms
 from tow.check.notices import queue_recoveries
 from tow.check.rows import fail_row, note_removed, row_error, stamp_result
@@ -208,6 +208,8 @@ def _reconcile_one(
         now=machine_now().timestamp(),
         manual=getattr(run, "readd_removed", False),
         cfg=getattr(run, "client_config", None) or None,
+        state=getattr(run, "state", None),
+        secrets=getattr(run, "secrets", None),
     ):
         return
     client_id, topic_client = run.get_client_for(topic)
@@ -235,6 +237,13 @@ def _reconcile_one(
             rebind["local_files"] = False
         reconcile = reconcile_topic(topic, topic_client, history, now=iso_now(), **rebind)
     except Exception as exc:  # noqa: BLE001 - a failed reconcile is the topic's result (recorded), never the run's end
+        observation_id = client_waits.note_failure(run, client_id, exc)
+        if observation_id:
+            row["client_http_observed"] = True
+            for marker in ("verification_pending", "waiting_space", "repair_pending"):
+                waiting = topic.get(marker)
+                if isinstance(waiting, dict) and waiting.get("blocked") == "client.managed.http_error":
+                    waiting["http_refusal_id"] = observation_id
         if had_history:
             history_topics[topic_key] = cast(HistoryRecord, topic_history_before)
         else:
@@ -343,7 +352,13 @@ def _reconcile_one(
 
 
 def _client_error_resolved(topic: Topic, client: TorrentClientAdapter) -> bool:
-    if not site_retries.client_recovery(topic) or topic.get("selection_verified") is not True:
+    params = topic.get("last_error_params")
+    error = TowError(str(topic.get("last_error_code") or ""), **(dict(params) if isinstance(params, Mapping) else {}))
+    auth_outage = topic.get("last_error_code") == "check.client_unreachable" and client_access.http_status(error) in {
+        401,
+        403,
+    }
+    if not (site_retries.client_recovery(topic) or auth_outage) or topic.get("selection_verified") is not True:
         return False
     infohash = str(topic.get("hash") or "")
     if not infohash or str(topic.get("selection_hash") or "").casefold() != infohash.casefold():

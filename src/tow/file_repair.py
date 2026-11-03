@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from typing import Any, cast
 from uuid import uuid4
 
-from tow import file_presence, folders
+from tow import client_access, file_presence, folders
 from tow.clients import factory, files
 from tow.clients.spec import TorrentClientAdapter
 from tow.clients.state import matches_hash
@@ -219,7 +219,11 @@ def maintenance_pending(topic: Mapping[str, Any]) -> bool:
         receipt
         and not topic.get("paused")
         and not topic.get("selection_dirty")
-        and ((receipt["phase"] in ACTIVE_PHASES and not receipt.get("blocked")) or continuation_pending(topic))
+        and (
+            (receipt["phase"] in ACTIVE_PHASES and not receipt.get("blocked"))
+            or continuation_pending(topic)
+            or client_access.receipt_auth_pending(receipt, now=time.time())
+        )
     )
 
 

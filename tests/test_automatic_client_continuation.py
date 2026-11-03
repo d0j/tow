@@ -552,7 +552,7 @@ def test_real_qbittorrent_http_exceptions_distinguish_required_action_from_trans
     if status == 403:
         assert row["status"] == "failed"
         assert pending["blocked"] == "client.managed.http_error"
-        assert not file_repair.maintenance_pending(load_state()["topics"][0])
+        assert not file_repair.continuation_pending(load_state()["topics"][0])  # read-only proof cannot resume it
     else:
         assert row["status"] == "repair_pending"
         assert pending["retry_error"]["code"] == "repair.waiting_client"

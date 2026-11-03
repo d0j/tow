@@ -29,7 +29,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
-from tow import platform
+from tow import client_access, platform
 from tow.check import client_waits
 from tow.check.client_ops import (
     PREVIOUS_REVISION_ACTIVE,
@@ -253,7 +253,12 @@ def waiting_topics(state: dict[str, Any]) -> list[Topic]:
     return [
         topic
         for topic in topics_of(state)
-        if waiting_of(topic) and not waiting_of(topic).get("blocked") and not topic.get("paused")
+        if waiting_of(topic)
+        and (
+            not waiting_of(topic).get("blocked")
+            or client_access.receipt_auth_pending(waiting_of(topic), now=machine_now().timestamp())
+        )
+        and not topic.get("paused")
     ]
 
 
@@ -366,8 +371,15 @@ def recheck(
     try:
         return _recheck(topic, run, row, client, client_id, begun=begun)
     except Exception as error:
-        normalized = client_waits.remember(waiting_of(topic), error, now=machine_now().timestamp())
-        if client_waits.deferred(topic, now=machine_now().timestamp()):
+        observation_id = client_waits.note_failure(run, client_id, error)
+        normalized = client_waits.remember(
+            waiting_of(topic), error, now=machine_now().timestamp(), observation_id=observation_id
+        )
+        if observation_id:
+            row["client_http_observed"] = True
+        if client_waits.deferred(
+            topic, now=machine_now().timestamp(), cfg=run.client_config or None, state=run.state, secrets=run.secrets
+        ):
             row["client_retry_deferred"] = True
         if normalized is error:
             raise
@@ -396,7 +408,12 @@ def _recheck(
     topic keeps waiting as it was."""
     waiting = waiting_of(topic)
     if client_waits.deferred(
-        topic, now=machine_now().timestamp(), manual=run.readd_removed, cfg=run.client_config or None
+        topic,
+        now=machine_now().timestamp(),
+        manual=run.readd_removed,
+        cfg=run.client_config or None,
+        state=run.state,
+        secrets=run.secrets,
     ):
         row["client_retry_deferred"] = True
         if waiting.get("blocked"):
@@ -407,20 +424,19 @@ def _recheck(
     if not h or h != str(topic.get("hash") or "").upper() or (recorded_client and recorded_client != client_id):
         forget(topic)  # a record left from an earlier revision, or of a client the topic left
         return STALE
-    if waiting.get("blocked") and not run.readd_removed:
+    observing_auth = (
+        client_access.receipt_auth_pending(waiting, now=machine_now().timestamp()) and not run.readd_removed
+    )
+    if waiting.get("blocked") and not run.readd_removed and not observing_auth:
         raise TowError(str(waiting["blocked"]), **as_dict(waiting.get("blocked_params")))
-    if "client_generation" in waiting and waiting["client_generation"] != topic.get("file_observation_revision"):
-        if not run.readd_removed:
-            waiting.update(blocked="check.selection_unconfirmed", blocked_params={})
-            raise TowError("check.selection_unconfirmed")
-        waiting["client_generation"] = topic.get("file_observation_revision")
-        waiting.pop("blocked", None)
-        waiting.pop("blocked_params", None)
+    _check_generation(topic, waiting, allow_legacy=run.readd_removed)
     row.update({"hash": h, "changed": False})
     if client is None:
         raise client_unreachable(run, client_id)
     info = client.inspect_torrent(h)
     client_waits.clear_retry(waiting)
+    if observing_auth:
+        return _auth_goal(topic, waiting, info, h)
     if info is None:
         forget(topic)
         return GONE
@@ -465,6 +481,27 @@ def _recheck(
 
     verification.start_waiting(topic, run, row, client, info=info, client_id=client_id)
     return STARTED if row.get("ok") else VERIFYING
+
+
+def _check_generation(topic: Topic, waiting: dict[str, Any], *, allow_legacy: bool) -> None:
+    if "client_generation" in waiting and waiting["client_generation"] != topic.get("file_observation_revision"):
+        if not allow_legacy:
+            waiting.update(blocked="check.selection_unconfirmed", blocked_params={})
+            raise TowError("check.selection_unconfirmed")
+        waiting["client_generation"] = topic.get("file_observation_revision")
+        waiting.pop("blocked", None)
+        waiting.pop("blocked_params", None)
+
+
+def _auth_goal(topic: Topic, waiting: dict[str, Any], info: dict[str, Any] | None, h: str) -> str:
+    if info_confirms(info, h, str(topic.get("save_path") or ""), require_tow_ownership=True) and info is not None:
+        if selection_key(info) != waiting.get("selection"):
+            raise TowError("check.selection_unconfirmed")
+        if _running(info) or (is_stopped(info) and all(row.get("progress") == 1 for row in _wanted_rows(info))):
+            forget(topic)
+            return OWNER
+    waiting.update(blocked="client.managed.start_unconfirmed", blocked_params={})
+    raise TowError("client.managed.start_unconfirmed")
 
 
 def _clear_row_error(row: dict[str, Any]) -> None:

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from tow import check_transaction, download_history, file_presence
+from tow import check_transaction, client_access, download_history, file_presence
 from tow.check import client_waits, repair, rows, space, verification
 from tow.check.client_ops import ClientPool, remote_clients
 from tow.check.notices import RunNotifications, flush_notifications
@@ -19,6 +19,7 @@ from tow.check_steps import changed_owner_fields, merge_check_results, owner_fie
 from tow.clients import factory as client_factory
 from tow.clock import iso_now, machine_now
 from tow.config import as_bool, load_config
+from tow.errors import TowError
 from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import error_class, error_fields, log_event, owner_language
@@ -128,6 +129,21 @@ def _progress_only_row(topic: Topic) -> dict[str, Any]:
 
 # How long the Home page says that the download history was started over.
 HISTORY_REBUILT_NOTICE_SEC = 7 * 24 * 3600
+
+
+def _observe_native_row(run: CheckRun, row: dict[str, Any]) -> None:
+    if row.get("client_http_observed") or row.get("client_retry_deferred"):
+        return
+    record = as_dict(row.get("error_record"))
+    code = record.get("code")
+    if not isinstance(code, str):
+        return
+    client_id = str(row.get("client_id") or client_factory.default_client_id(run.client_config))
+    if isinstance(run.client_errors.get(client_id), client_access.DeferredClientError):
+        return
+    error = TowError(code, **as_dict(record.get("params")))
+    if client_waits.note_failure(run, client_id, error):
+        row["client_http_observed"] = True
 
 
 def _note_history_rebuilt(health: Health, previous: Health, *, rebuilt: bool) -> None:
@@ -473,6 +489,21 @@ def _run_check(
 
     want = _wanted_ids(state, ids, scheduled_scope, space_only=space_only)
     default_id = client_factory.default_client_id(cfg)
+    client_config = copy.deepcopy(cfg)
+
+    def observed_failure(client_id: str, error: Exception) -> Exception:
+        ident = client_waits.record_context(
+            state, client_config, secrets, client_id, error, now=machine_now().timestamp(), apply=apply
+        )
+        status = client_access.http_status(error)
+        if ident and status is not None:
+            return client_access.DeferredClientError(
+                status,
+                observation_id=ident,
+                retry_after=client_access.retry_after(error, now=machine_now().timestamp()),
+            )
+        return error
+
     pool = ClientPool(
         cfg=cfg,
         apply=apply,
@@ -485,9 +516,10 @@ def _run_check(
         previous_clients_ok=dict(previous_health.get("clients_ok") or {}),
         expect_torrents=_clients_expected_to_list(state, want, default_id),
         previous_empty={str(k): int(v) for k, v in as_dict(previous_health.get("clients_empty")).items()},
+        observe_failure=observed_failure,
     )
     held_clients = client_waits.deferred_clients(
-        state, cfg, now=machine_now().timestamp(), manual=how == "manual" and ids is not None
+        state, cfg, secrets=secrets, now=machine_now().timestamp(), manual=how == "manual" and ids is not None
     )
     pool.errors.update(held_clients)
     pool.deferred = frozenset(held_clients)
@@ -504,22 +536,44 @@ def _run_check(
     )
     # Nothing to check (a new install, or no topic in this run): no client is asked, so one not
     # set up yet is not logged as unreachable; the header keeps what was seen before.
+    readable = [
+        topic
+        for topic in topics_of(state)
+        if (want is None or str(topic.get("id")) in want)
+        and not client_waits.deferred(
+            topic,
+            now=machine_now().timestamp(),
+            cfg=cfg,
+            state=state,
+            secrets=secrets,
+            manual=how == "manual" and ids is not None,
+        )
+    ]
     if default_id not in held_clients and any(
-        want is None or str(topic.get("id")) in want for topic in topics_of(state)
+        str(topic.get("client_id") or default_id) == default_id for topic in readable
     ):
         pool.open_default(secrets)
     else:
-        pool.asked = any(
-            (want is None or str(topic.get("id")) in want)
-            and str(topic.get("client_id") or default_id) not in held_clients
-            for topic in topics_of(state)
-        )
+        pool.asked = any(str(topic.get("client_id") or default_id) not in held_clients for topic in readable)
+        pool.deferred |= {default_id}
     # A site that said "download limit for today" is left alone until the next local day: the
     # limit is kept in the state, so the next scheduled runs do not ask it again. A manual
     # check (the owner pressed the button) still tries.
     today = _today()
     limited_today = {str(name) for name, day in as_dict(state.get("daily_limit")).items() if day == today}
     quota: set[str] = set(limited_today) if how in {"auto", "timer", "retry"} else set()
+
+    def get_client_for(topic: Topic) -> tuple[str, Any]:
+        ident = str(topic.get("client_id") or pool.default_id)
+        held = client_waits.deferred_clients(
+            run.state, client_config, secrets=run.secrets, now=machine_now().timestamp()
+        )
+        if ident in held:
+            pool.errors[ident] = held[ident]
+            pool.deferred |= {ident}
+            return ident, None
+        return pool.get(topic, run.secrets)
+
     run = CheckRun(
         apply=apply,
         notify=notify,
@@ -531,8 +585,8 @@ def _run_check(
         quota=quota,
         secrets=secrets,
         client_errors=pool.errors,
-        get_client_for=lambda topic: pool.get(topic, run.secrets),
-        client_config=copy.deepcopy(cfg),
+        get_client_for=get_client_for,
+        client_config=client_config,
         record=_record,
         queue_notification=notifications.queue,
         history_retention=download_history.retention(cfg),
@@ -566,6 +620,7 @@ def _run_check(
             if progress_only:
                 verification.recheck(topic, run, row, pass_only=True)
             results.append(row)
+        _observe_native_row(run, row)
     secrets = run.secrets  # the per-topic step may have re-read tracker cookies
     log_site_skips(run)
     pool.queue_recovered()

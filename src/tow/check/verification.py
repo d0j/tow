@@ -10,11 +10,12 @@ import contextlib
 import copy
 from typing import TYPE_CHECKING, Any
 
+from tow import client_access
 from tow.check import client_waits
 from tow.check.client_ops import client_unreachable, info_confirms, info_owned_by_tow
 from tow.check.rows import client_marks, removal_seen_by, set_error, stamp_result, withdrawn_meanwhile
 from tow.clients import factory, files
-from tow.clients.managed import AWAITING_INITIAL_CHECK, ClientVerificationPending
+from tow.clients.managed import AWAITING_INITIAL_CHECK, ClientVerificationPending, completed_progress
 from tow.clients.spec import TorrentClientAdapter
 from tow.clients.state import is_stopped
 from tow.clock import machine_now, parse_timestamp
@@ -71,8 +72,44 @@ def maintenance_pending(topic: Topic) -> bool:
         and (
             not waiting.get("blocked")
             or (str(waiting.get("blocked") or "") in OBSERVABLE_BLOCKS and not waiting.get("repair_only"))
+            or _auth_observation(waiting)
         )
     )
+
+
+def _auth_observation(waiting: dict[str, Any]) -> bool:
+    return client_access.receipt_auth_pending(waiting, now=machine_now().timestamp())
+
+
+def _auth_goal(
+    client: TorrentClientAdapter, waiting: dict[str, Any], h: str, info: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Credential repair permits fresh proof, never a selection, label, or start RPC."""
+    receipt = as_dict(receipt_of(waiting))
+    if (
+        receipt.get("phase") == AWAITING_INITIAL_CHECK
+        or not receipt
+        or not receipt.get("wanted")
+        or not receipt.get("files")
+    ):
+        raise TowError("check.selection_unconfirmed")
+    if not info_confirms(info, h, str(waiting.get("path") or ""), require_tow_ownership=True):
+        raise TowError("check.selection_unconfirmed")
+    assert info is not None
+    files.verify_selection(
+        list(receipt.get("files") or []),
+        list(info.get("files") or []),
+        set(receipt.get("wanted") or []),
+        ignored=set(receipt.get("ignored") or []),
+        fail=lambda: TowError("check.selection_unconfirmed"),
+    )
+    state = str(info.get("state") or "").casefold()
+    if state.startswith("checking") or state == "allocating":
+        raise ClientVerificationPending(h, prefix=client.client_kind, receipt=receipt)
+    running = state.startswith(("downloading", "uploading", "stalled", "queued", "forced", "metadl"))
+    if not running and not (is_stopped(info) and completed_progress(info.get("progress"))):
+        raise TowError("client.managed.start_unconfirmed")
+    return {**info, "start_confirmed": running}
 
 
 def waiting_topics(state: dict[str, Any]) -> list[Topic]:
@@ -431,6 +468,8 @@ def _confirm(
     if client is None:
         raise client_unreachable(run, client_id)
     info = client.inspect_torrent(h)
+    if not run.readd_removed and _auth_observation(waiting):
+        return _auth_goal(client, waiting, h, info)
     if run.readd_removed and (
         (info is None and removal_seen_by(topic, run.readd_since))
         or str(waiting.get("blocked") or "") in OWNER_REPAIR_CODES
@@ -665,7 +704,12 @@ def recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: bool
     previous_ok_at = topic.get("last_ok_at")
     waiting = as_dict(topic.get("verification_pending"))
     if waiting and client_waits.deferred(
-        topic, now=machine_now().timestamp(), manual=run.readd_removed, cfg=run.client_config or None
+        topic,
+        now=machine_now().timestamp(),
+        manual=run.readd_removed,
+        cfg=run.client_config or None,
+        state=run.state,
+        secrets=run.secrets,
     ):
         row["client_retry_deferred"] = True
         if waiting.get("blocked"):
@@ -714,7 +758,10 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
         waiting.update(blocked="check.selection_unconfirmed", blocked_params={}, repair_only=True)
         _failed(topic, run, row, waiting, TowError("check.selection_unconfirmed"), ())
         return True
-    observe_blocked = str(waiting.get("blocked") or "") in OBSERVABLE_BLOCKS and not waiting.get("repair_only")
+    observe_auth = _auth_observation(waiting)
+    observe_blocked = (
+        str(waiting.get("blocked") or "") in OBSERVABLE_BLOCKS and not waiting.get("repair_only")
+    ) or observe_auth
     if waiting.get("blocked") and not run.readd_removed and not observe_blocked:
         if pass_only:
             blocked_row(topic, row, h)
@@ -740,9 +787,7 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
             row.update(ok=False, status="failed")
             set_error(row, error)
         else:
-            waiting.pop("blocked", None)
-            waiting.pop("blocked_params", None)
-            _adopt_receipt(waiting, error.receipt)
+            _accept_pending_receipt(waiting, error.receipt, preserve_block=observe_auth)
             _still_waiting(topic, run, row, waiting, h, before_error)
     except Exception as error:  # noqa: BLE001 - one failed confirmation never ends the batch
         if getattr(error, "code", None) == "client.managed.start_unconfirmed" and waiting.get("resume_attempted"):
@@ -758,6 +803,13 @@ def _recheck(topic: Topic, run: CheckRun, row: dict[str, Any], *, pass_only: boo
     if pass_only:
         _restore_check_times(topic, previous_check, previous_ok_at)
     return not (observe_blocked and waiting.get("blocked") and not pass_only)
+
+
+def _accept_pending_receipt(waiting: dict[str, Any], receipt: dict[str, Any], *, preserve_block: bool) -> None:
+    if not preserve_block:
+        waiting.pop("blocked", None)
+        waiting.pop("blocked_params", None)
+    _adopt_receipt(waiting, receipt)
 
 
 def _still_waiting(
@@ -790,8 +842,18 @@ def _failed(
     before_error: tuple[Any, ...],
 ) -> None:
     """The confirmation failed: a terminal reason blocks the receipt; logged and told once."""
-    error = client_waits.remember(waiting, error, now=machine_now().timestamp())
-    if client_waits.deferred(topic, now=machine_now().timestamp()):
+    if _auth_observation(waiting) and getattr(error, "code", None) in {
+        "check.selection_unconfirmed",
+        "client.managed.start_unconfirmed",
+    }:
+        waiting["repair_only"] = True
+    observation_id = client_waits.note_failure(run, str(waiting.get("client") or ""), error)
+    error = client_waits.remember(waiting, error, now=machine_now().timestamp(), observation_id=observation_id)
+    if observation_id:
+        row["client_http_observed"] = True
+    if client_waits.deferred(
+        topic, now=machine_now().timestamp(), cfg=run.client_config or None, state=run.state, secrets=run.secrets
+    ):
         row["client_retry_deferred"] = True
     code = getattr(error, "code", None)
     if code in TERMINAL_CODES:
