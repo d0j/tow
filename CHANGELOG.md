@@ -5,10 +5,6 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
-### Fixed
-- Distinct Unicode hosts and case-sensitive IPv6 zone identifiers keep separate client observations;
-  changing to another host still requires re-entering a saved password.
-
 ## [1.36.0] — 2026-11-03
 
 ### Added
@@ -37,6 +33,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
   replace the current connection's health.
 - Saving a client's default port or normalizing its host spelling preserves an unchanged endpoint's
   native verification; it no longer mistakes a credential repair for a different torrent client.
+- Distinct Unicode hosts and case-sensitive IPv6 zone identifiers keep separate client observations;
+  changing to another host still requires re-entering a saved password.
 
 ## [1.35.1] — 2026-11-03
 
