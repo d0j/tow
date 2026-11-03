@@ -5,6 +5,10 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+- Distinct Unicode hosts and case-sensitive IPv6 zone identifiers keep separate client observations;
+  changing to another host still requires re-entering a saved password.
+
 ## [1.36.0] — 2026-11-03
 
 ### Added

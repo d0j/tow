@@ -283,6 +283,8 @@ the topic which observed it. Correcting credentials releases an old read refusal
 torrent start. A test that finishes after its connection changed cannot overwrite the current status.
 Saving a password keeps an unchanged connection's file verification, including when the form fills in its
 default port or normalizes the host's letter case.
+Distinct Unicode domains and IPv6 zone identifiers remain separate addresses; changing to one requires
+entering the password again before it can replace the saved connection.
 
 ## Notifications
 

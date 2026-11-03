@@ -109,7 +109,7 @@ def endpoint(cfg: Mapping[str, Any], secrets: Mapping[str, Any], client_id: str 
     endpoint = [
         kind,
         address.scheme.casefold(),
-        str(address.hostname or "").casefold(),
+        str(address.hostname or ""),
         address.port or (443 if address.scheme.casefold() == "https" else 80),
         address.path.rstrip("/"),
     ]
