@@ -8,7 +8,7 @@ import json
 import re
 from typing import Any
 
-from tow.clients.files import map_files, normalize_path
+from tow.clients.files import map_files, normalize_path, padding_like
 from tow.episodes import (
     expected_for_topic,
     is_video_file,
@@ -236,6 +236,26 @@ def selection_fingerprint(topic: Topic) -> str | None:
         elif mode == "files" and (legacy_paths := _legacy_alias_paths(topic)) is not None:
             context.append(legacy_paths)
     return hashlib.sha256(json.dumps(context, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def selected_native_indices(topic: Topic, rows: list[dict[str, Any]], *, content_path: str, save_path: str) -> set[int]:
+    """Resolve the owner's scope independently of the client's current wanted flags.
+
+    The existing alias/root mapping and policy resolver use row positions; return the real
+    native indices, which need not be contiguous or in listing order. No filesystem access.
+    """
+    prepared: list[tuple[Any, str, int | None, bool]] = [
+        (row, str(row["name"]), int(row["size"]), True) for row in rows
+    ]
+    season = preferred_season_for(topic, [str(key) for key in topic.get("selected_episode_keys") or []])
+    plan, canonical = _file_rule_evidence(topic, prepared, season, content_path=content_path, save_path=save_path)
+    if plan is None:
+        source = tuple(
+            TorrentFile(position, canonical.get(position, row["name"]), row["size"], padding_like(row["name"]))
+            for position, row in enumerate(rows)
+        )
+        plan = resolve_selection(source, policy_from_topic(topic), preferred_season=season)
+    return {rows[position]["index"] for position in plan.selected_indices if not padding_like(rows[position]["name"])}
 
 
 def _expected_from_observed(

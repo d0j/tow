@@ -255,6 +255,8 @@ def _reconcile_one(
         )
         return
     presence_transition = file_presence.observe(topic, reconcile, client_id=client_id, at=iso_now())
+    if presence_transition == "restored":
+        topic.pop("repair_pending", None)  # Fresh completion also settles an earlier blocked recovery.
     if presence_transition:
         pending_records.append(
             (

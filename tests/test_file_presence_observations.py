@@ -152,6 +152,50 @@ def test_fully_known_healthy_observation_clears_diagnostic_and_check_merge_clear
     assert "files_missing" not in disk["topics"][0]
 
 
+@pytest.mark.parametrize("evidence", [{"absent_files": 3}, {"absent_files": 0, "incomplete_files": 3}])
+def test_invalidated_piece_cache_or_preallocation_is_not_a_file_recovery(evidence):
+    item = topic()
+    observe_missing(item)
+    before = deepcopy(item["files_missing"])
+
+    transition = file_presence.observe(
+        item, {"missing_files": 0, "unverified_files": 0, **evidence}, client_id="main", at=SECOND
+    )
+
+    assert transition == ""
+    assert item["files_missing"] == before
+    assert file_presence.count(item, CONFIG) == 3
+
+
+def test_partial_recovery_updates_remaining_count_without_repeating_the_missing_warning():
+    item = topic()
+    observe_missing(item)
+    transition = file_presence.observe(
+        item,
+        {"missing_files": 0, "unverified_files": 0, "absent_files": 2, "incomplete_files": 2},
+        client_id="main",
+        at=SECOND,
+    )
+    assert transition == ""
+    assert file_presence.count(item, CONFIG) == 2
+    assert item["files_missing"]["at"] == FIRST
+
+
+def test_an_inflight_progress_commit_cannot_erase_a_new_repair_request_or_resurrect_a_cancelled_one():
+    checked = topic()
+    disk_topic = deepcopy(checked)
+    disk_topic.update(repair_request_revision="new-request", repair_pending={"id": "new-request"})
+    disk = {"topics": [disk_topic]}
+    check_steps.merge_check_results(disk, {"topics": [checked]}, edited={"presence-topic": {"repair_request_revision"}})
+    assert disk_topic["repair_pending"] == {"id": "new-request"}
+
+    checked.update(repair_request_revision="new-request", repair_pending={"id": "new-request", "phase": "checking"})
+    disk_topic.pop("repair_pending")
+    disk_topic["repair_request_revision"] = "cancelled"
+    check_steps.merge_check_results(disk, {"topics": [checked]}, edited={"presence-topic": {"repair_request_revision"}})
+    assert "repair_pending" not in disk_topic
+
+
 @pytest.mark.parametrize("legacy", ["unknown legacy value", ["unknown"], 42])
 def test_new_valid_absence_can_replace_malformed_imported_diagnostic(legacy):
     item = topic(files_missing=legacy)
@@ -268,7 +312,9 @@ def test_independent_web_sessions_share_absence_warning_counter_and_detail_statu
     for response in (home_a, home_b):
         assert response.status_code == 200
         assert 'data-issue-id="files_missing:presence-topic"' in response.text
-        assert 'href="/?open=presence-topic#row-presence-topic"' in response.text
+        assert (
+            "/?open=presence-topic&amp;fix=repair_files%3Apresence-topic&amp;spot=row-presence-topic" in response.text
+        )
         assert "2/24" in response.text
     assert details_a.status_code == details_b.status_code == 200
     assert details_a.json() == details_b.json()

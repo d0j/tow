@@ -9,7 +9,7 @@ from typing import Any
 def outcome_of(row: Mapping[str, Any]) -> str:
     if row.get("note"):
         return "skipped"
-    if row.get("status") in {"verification_pending", "waiting_space"}:
+    if row.get("status") in {"verification_pending", "waiting_space", "repair_pending"}:
         return "pending"
     if not row.get("ok"):
         return "fail"

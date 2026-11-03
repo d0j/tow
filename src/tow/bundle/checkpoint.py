@@ -16,6 +16,7 @@ from tow.clock import iso_now
 from tow.errors import Msg
 from tow.paths import config_path, data_dir, download_history_path, state_path
 from tow.platform import plain_kind
+from tow.repair_authorization import without_authorizations
 from tow.store import decode_json_bytes, encrypted_secrets_path, persistence_lock, secret_undo_path
 
 CHECKPOINT_FORMAT = "tow-import-checkpoint-v1"
@@ -129,7 +130,7 @@ def _recover_import_transactions_locked() -> list[str]:
         if transaction["status"] != "prepared":
             continue
         try:
-            _rollback_import(checkpoint, apply=True)
+            _rollback_import(checkpoint, apply=True, forget_repairs=transaction.get("forget_repairs") is True)
             write_import_transaction(checkpoint, status="rolled_back", recovered=True)
         except ExportImportError as exc:
             raise ExportImportError("incomplete import recovery failed") from exc
@@ -230,10 +231,12 @@ def _read_checkpoint(checkpoint: Path) -> dict[str, Any]:
     return data
 
 
-def rollback_import(checkpoint: Path, *, apply: bool = False) -> dict[str, Any]:
+def rollback_import(
+    checkpoint: Path, *, apply: bool = False, preserve_repair_authorization: bool = False
+) -> dict[str, Any]:
     try:
         with persistence_lock():
-            return _rollback_import(checkpoint, apply=apply)
+            return _rollback_import(checkpoint, apply=apply, forget_repairs=not preserve_repair_authorization)
     except ExportImportError:
         raise
     except Exception as exc:
@@ -278,7 +281,7 @@ def _restore_runtime_targets(snapshot: dict[str, bytes | None], expected_targets
             raise ExportImportError(f"cannot read rollback compensation: {member}") from exc
 
 
-def _rollback_import(checkpoint: Path, *, apply: bool = False) -> dict[str, Any]:
+def _rollback_import(checkpoint: Path, *, apply: bool = False, forget_repairs: bool = False) -> dict[str, Any]:
     checkpoint = Path(checkpoint)
     manifest = _read_checkpoint(checkpoint)
     expected_targets = dict(_checkpoint_targets())
@@ -304,11 +307,15 @@ def _rollback_import(checkpoint: Path, *, apply: bool = False) -> dict[str, Any]
             content = read_limited(backup, label=f"checkpoint {member}")
             if entry.get("sha256") != sha256(content):
                 raise ExportImportError(f"import checkpoint checksum mismatch: {member}")
+            if forget_repairs and member == "state.json":
+                content = without_authorizations(content)
         else:
             content = None
         restore_plan.append((member, target, content))
 
-    write_import_transaction(checkpoint, status="prepared", operation_id=operation_id, phase="rollback")
+    write_import_transaction(
+        checkpoint, status="prepared", operation_id=operation_id, phase="rollback", forget_repairs=forget_repairs
+    )
     restored: list[str] = []
     try:
         for member, target, content in restore_plan:
@@ -342,6 +349,7 @@ def _rollback_import(checkpoint: Path, *, apply: bool = False) -> dict[str, Any]
                 status=status,
                 operation_id=operation_id,
                 phase="rollback",
+                forget_repairs=forget_repairs,
                 rollback_status="failed_compensated",
                 rollback_error=type(exc).__name__,
             )

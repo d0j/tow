@@ -162,6 +162,8 @@ RECEIPTS_SINCE = (1, 30, 5)
 # ``content_token``): an older one loses it for a topic waiting for its first add, fetches the
 # torrent again and can fall back to the page's magnet link.
 CONTENT_REF_SINCE = (1, 32, 0)
+# The first version that can continue or cancel an authorized native file repair.
+REPAIR_SINCE = (1, 35, 0)
 # The Windows bundle's start files in <TOW> (scripts/root_files.py writes them).
 ROOT_FILE_NAMES = ("Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd")
 TEST_CUT_EXIT = 97
@@ -237,6 +239,14 @@ TEXTS = {
         "{ref} does not know the torrent prepared for {topics}, which wait for their first add: it would"
         " fetch it again from the site. Let TOW add them first (or wait until the Undo button for a removed or"
         " edited one is gone) and update then, or choose {since} or newer; nothing was updated"
+    ),
+    "repair_pending": (
+        "{ref} does not support the pending file repair for {topics}. Finish or cancel the repair"
+        " (including a live Undo) before updating, or choose {since} or newer; nothing was updated"
+    ),
+    "repair_restore_pending": (
+        "{ref} cannot finish the interrupted data restore safely. Start TOW {since} or newer"
+        " to finish recovery before updating; nothing was updated"
     ),
     "data_unverified": (
         "this install's data/state.json cannot be read ({error}), so it is not known whether {ref} can read it;"
@@ -2347,6 +2357,49 @@ class Update:
         ]
         self.refuse_waiting("content_ref_pending", waiting, CONTENT_REF_SINCE)
 
+    def refuse_pending_repairs(self, target: str) -> None:
+        """A live or blocked repair must not be left to a version that cannot finish it."""
+        if not self.target_older_than(target, REPAIR_SINCE):
+            return
+        self.refuse_pending_repair_restores()
+        state = self.state_for_refusal()
+        topics = state.get("topics")
+        candidates = [topic for topic in (topics if isinstance(topics, list) else []) if isinstance(topic, dict)]
+        undo = state.get("undo")
+        if isinstance(undo, dict) and isinstance(undo.get("item"), dict) and self.undo_live(undo):
+            candidates.append(undo["item"])
+        waiting = [
+            str(topic.get("title") or topic.get("id") or "?") for topic in candidates if topic.get("repair_pending")
+        ]
+        self.refuse_waiting("repair_pending", waiting, REPAIR_SINCE)
+
+    def refuse_pending_repair_restores(self) -> None:
+        """An old recovery reader must not revive authorization from an interrupted rollback."""
+        root = self.root / "data" / "import-checkpoints"
+        try:
+            if not root.exists():
+                return
+            if root.is_symlink() or not root.is_dir():
+                raise ValueError("the import-checkpoints folder is not an ordinary directory")
+            for checkpoint in root.iterdir():
+                if not checkpoint.is_dir():
+                    continue
+                if checkpoint.is_symlink():
+                    raise ValueError("an import checkpoint is not an ordinary directory")
+                path = checkpoint / "TRANSACTION.json"
+                if not path.exists():
+                    continue
+                if path.is_symlink() or not path.is_file() or path.stat().st_size > 64 * 1024:
+                    raise ValueError("an import transaction is not an ordinary bounded file")
+                transaction = json.loads(path.read_bytes().decode("utf-8"))
+                if not isinstance(transaction, dict):
+                    raise TypeError("an import transaction is not an object")
+                if transaction.get("status") == "prepared" and transaction.get("forget_repairs") is True:
+                    since = "v" + ".".join(str(part) for part in REPAIR_SINCE)
+                    raise UpdateError(self.text("repair_restore_pending", ref=self.ref, since=since))
+        except (OSError, ValueError, TypeError, RecursionError) as exc:
+            raise UpdateError(self.text("data_unverified", ref=self.ref, error=exc)) from exc
+
     def refuse_unusable_uv_config(self, target: str) -> None:
         """runtime/uv.toml for the target is checked while TOW still runs: the target's [tool.uv]
         must be writable as a uv.toml, and the owner's own lines must stay readable beside it."""
@@ -2391,6 +2444,7 @@ class Update:
                     self.refuse_unreadable_data(target)
                     self.refuse_pending_receipts(target)
                     self.refuse_pending_content_refs(target)
+                    self.refuse_pending_repairs(target)
                     self.refuse_unusable_uv_config(target)
                     # Ready to stop TOW, which still runs; nothing is recorded or stopped yet. The
                     # web update's worker lets open pages see the job here (update_worker._run);

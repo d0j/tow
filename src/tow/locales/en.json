@@ -347,7 +347,8 @@
     "policy": "Stable releases only. Nothing is installed without you.",
     "how": "How to update",
     "install": "Press “Update” above, or run “Update TOW” in the TOW folder. For a specific version run:",
-    "no_script": "Without JavaScript, use Release notes to check the latest version."
+    "no_script": "Without JavaScript, use Release notes to check the latest version.",
+    "repair_pending": "Finish or cancel file recovery before installing a version older than 1.35.0."
   },
   "base": {
     "skip": "Skip to content",
@@ -791,7 +792,12 @@
       "no_magnet": "the client cannot safely fetch magnet link data; a .torrent is needed",
       "no_address": "no address given",
       "http_error": "error {code}",
-      "rpc_refused": "{method}: the client answered “{answer}”"
+      "rpc_refused": "{method}: the client answered “{answer}”",
+      "recheck_unavailable": "this client cannot safely recheck these files",
+      "recheck_requires_stopped": "stop this torrent in the client before requesting a file check",
+      "repair_changed": "the torrent or its selected files changed before recovery",
+      "repair_start_unconfirmed": "the client did not confirm the recovery download",
+      "action_recheck": "check files"
     },
     "qbittorrent": {
       "step_open": "In qBittorrent: Tools → Options → Web UI.",
@@ -1087,7 +1093,7 @@
     "site_access": "{site}: site access is limited (topics: {count})",
     "site_connection": "{site}: no connection to the site (topics: {count})",
     "topic_error": "{title} — {error}",
-    "files_missing": "{title}: files missing or incomplete ({count}). Open the topic for details.",
+    "files_missing": "{title}: files missing or incomplete ({count}). Open the topic to restore them.",
     "data_lost": "TOW's data folder ({folder}) was deleted or replaced while TOW was running: the topics, history and settings kept there are gone from TOW, which goes on empty. Restore a nightly backup: the copies are kept outside the data folder.",
     "check_stale": "Scheduled checks have not run since {at}.",
     "check_blocked_secrets": "Checks do not complete: saved passwords and tokens cannot be opened.",
@@ -1187,7 +1193,7 @@
       "once_done": "The one-time add is done.",
       "open_site": "Open {site} on Sites",
       "client_settings": "Torrent client settings",
-      "files_missing": "Selected files missing or incomplete: {count}. Check them in your torrent client.",
+      "files_missing": "Selected files missing or incomplete: {count}.",
       "files_missing_details": "Show file status",
       "search_on": "Find on {site}",
       "next_season": "Next season",
@@ -1582,7 +1588,12 @@
       "check_recovered": "check works again",
       "backup_recovered": "nightly backup works again",
       "delivery_recovered": "messages are delivered again",
-      "settings_update_result": "TOW update finished"
+      "settings_update_result": "TOW update finished",
+      "files_repair_requested": "file recovery requested",
+      "files_repair_started": "checking files for recovery",
+      "files_repair_resumed": "file recovery download started",
+      "files_repair_failed": "file recovery stopped",
+      "files_repair_cancelled": "file recovery cancelled"
     },
     "cls": {
       "quota": "daily limit",
@@ -1609,7 +1620,7 @@
     "check_result": "checked: {n}, without errors: {ok}",
     "check_outcomes": "updated: {new}, unchanged: {same}, waiting: {pending}, skipped: {skipped}, failed: {fail}",
     "client_pass_result": "topics: {n}",
-    "files_missing_detail": "Not found or incomplete: {n}. Check the files in your torrent client.",
+    "files_missing_detail": "Not found or incomplete: {n}. Open the topic in TOW to restore its files.",
     "files_restored_detail": "Selected files found again; their location and size are confirmed.",
     "site_skipped": "topics not checked: {n}",
     "previous_stopped": "previous version stopped",
@@ -2348,7 +2359,9 @@
     "owner_left": "this window no longer follows the update; it goes on by itself (its log: {log}; its result: update-state.json)",
     "uv_settings_invalid": "the uv settings of {ref} cannot be written ({error}); nothing was updated",
     "uv_config_failed": "uv's settings for this install were not written again: {error}",
-    "uv_config_invalid": "uv cannot use {path} ({error}): correct or remove your lines below \"# --- your settings below ---\"; nothing was updated"
+    "uv_config_invalid": "uv cannot use {path} ({error}): correct or remove your lines below \"# --- your settings below ---\"; nothing was updated",
+    "repair_pending": "{ref} does not support the pending file repair for {topics}. Finish or cancel the repair (including a live Undo) before updating, or choose {since} or newer; nothing was updated",
+    "repair_restore_pending": "{ref} cannot finish the interrupted data restore safely. Start TOW {since} or newer to finish recovery before updating; nothing was updated"
   },
   "watchdog": {
     "cause": {
@@ -2864,5 +2877,41 @@
     "heading": "This page does not exist",
     "text": "The address may be old or mistyped.",
     "home": "Home"
+  },
+  "repair": {
+    "action": "Restore files",
+    "confirm": "Ask the selected torrent client to check this torrent and download its missing selected files? Existing files and file priorities are kept.",
+    "accepted": "File recovery is in progress. TOW will check the result automatically.",
+    "busy": "A check is running. Try restoring files after it finishes.",
+    "cancel": "Do not continue automatically",
+    "cancel_help": "Prevents further recovery commands. An already requested command may still finish; stop its current check or download in the torrent client if needed.",
+    "cancelled": "Automatic file recovery cancelled. The torrent client keeps its current state.",
+    "stopped": "File recovery stopped. Check the reason below, then try again.",
+    "phase": {
+      "requested": "File recovery queued",
+      "checking": "Checking files",
+      "resuming": "Starting file recovery",
+      "downloading": "Restoring files",
+      "blocked": "File recovery stopped"
+    },
+    "unavailable": "This topic is not available for file recovery.",
+    "not_owned": "This torrent is not marked as belonging to TOW. Adopt it before restoring files.",
+    "changed": "The torrent, folder or connection changed. File recovery was cancelled.",
+    "paused": "The topic is paused. Resume observation before requesting file recovery.",
+    "selection_changed": "The selected files changed. Apply the new selection before restoring files.",
+    "volume_unavailable": "The original disk or folder is unavailable. File recovery will not write to another disk.",
+    "client_busy": "The torrent client is moving or checking this torrent. Wait for that operation to finish.",
+    "no_missing": "No missing selected files were confirmed. No recovery command was sent.",
+    "unsupported": "This torrent client does not support safe file recovery.",
+    "space": "There is not enough free space to restore the selected files ({bytes} bytes needed).",
+    "overlap": "Another active torrent writes to the same files. Stop that torrent before restoring this version.",
+    "deadline": "File recovery did not finish within its time limit. Check peers, free space and the torrent client, then retry.",
+    "dispatch_unconfirmed": "The client did not confirm the file check. TOW stopped automatic attempts; inspect this torrent in the client.",
+    "resume_unconfirmed": "The client did not confirm the recovery download. TOW will not keep resuming it automatically.",
+    "client_stopped": "The torrent was stopped during recovery. TOW will respect that stop; request recovery again when ready.",
+    "failed": "File recovery could not continue: {reason}",
+    "dismiss": "Cancel file recovery",
+    "request_failed": "File recovery was not started. Open the Log for the cause.",
+    "cancel_failed": "The cancellation could not be saved. File recovery may still continue; open the Log for the cause."
   }
 }

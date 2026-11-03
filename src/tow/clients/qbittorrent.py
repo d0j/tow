@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, ClassVar
 from urllib.parse import quote
 
@@ -69,6 +69,7 @@ class QBittorrentClient(ManagedClient):
         **ManagedClient.capabilities,
         "magnet_metadata": True,
         "metadata_preview": True,
+        "recheck_files": True,
     }
 
     def __init__(self, host: str, port: int, username: str, password: str) -> None:
@@ -172,6 +173,59 @@ class QBittorrentClient(ManagedClient):
         if not callable(method):
             raise _fail("client.qbittorrent.no_start")
         method(torrent_hashes=infohash.lower())
+
+    def _recheck(self, infohash: str) -> None:
+        method = getattr(self._c, "torrents_recheck", None)
+        if not callable(method):
+            raise _fail("client.managed.recheck_unavailable")
+        self._changing()
+        answer = method(torrent_hashes=infohash.lower())
+        if isinstance(answer, bool):
+            raise _fail("client.qbittorrent.api_malformed", action=Msg("client.managed.action_recheck"))
+        self._api_ok(answer, action="client.managed.action_recheck")
+
+    def _repair_options(self, infohash: str, info: dict[str, Any], *, stopped: bool) -> None:
+        # forceRecheck() uses ordinary start internally. Preserve a forced task by
+        # refusing it rather than silently changing its queue/force-start setting.
+        rows = self._c.torrents_info(torrent_hashes=infohash.lower())
+        if len(rows) != 1:
+            raise _fail("client.managed.repair_changed")
+        current = self._report(rows[0], [], infohash)
+        if (
+            str(current.get("hash") or "").upper() != str(info.get("hash") or "").upper()
+            or not matches_hash(current, infohash)
+            or not paths_equal(str(current.get("save_path") or ""), str(info.get("save_path") or ""))
+        ):
+            raise _fail("client.managed.repair_changed")
+        if OWNER not in self._tags(current):
+            raise _fail("client.managed.not_owned")
+        if PENDING in self._tags(current) or current.get("force_start") is not False:
+            raise _fail("client.managed.recheck_unavailable")
+        if stopped:
+            if current.get("state") != info.get("state") or current.get("progress") != info.get("progress"):
+                raise _fail("client.managed.repair_changed")
+        else:
+            # An ordinary start can advance while its file list is read. Its latest
+            # control state decides success, including a stop or error observed now.
+            info.update(state=current["state"], progress=current["progress"])
+
+    def _other_torrents(self, current_hash: str, expected_save_path: str) -> list[dict[str, Any]]:
+        rows = self._c.torrents_info()
+        if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+            raise _fail("client.managed.repair_changed")
+        listing = [
+            {
+                "hash": getattr(row, "hash", ""),
+                "save_path": getattr(row, "save_path", ""),
+                "state": str(getattr(row, "state", "") or ""),
+            }
+            for row in rows
+        ]
+        found = []
+        for candidate in self._repair_candidates(listing, current_hash, expected_save_path):
+            info = self.inspect_torrent(str(candidate["hash"]))
+            found.append(self._repair_other_readback(candidate, info))
+        return found
 
     def _add_label(self, infohash: str, tags: list[str], label: str) -> None:
         """A tag, never the category: with automatic torrent management a category moves the files."""
@@ -675,6 +729,7 @@ class QBittorrentClient(ManagedClient):
             "save_path": getattr(torrent, "save_path", None),
             "content_path": getattr(torrent, "content_path", None),
             "state": str(getattr(torrent, "state", "") or ""),
+            "force_start": getattr(torrent, "force_start", None),
             "tags": self._tag_list(torrent),
             "files": normalized_files,
         }

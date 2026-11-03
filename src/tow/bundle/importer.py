@@ -208,10 +208,16 @@ def _forget_volumes(state: dict[str, Any]) -> None:
     """The volumes the exporting computer recorded for its backup folders, and its notes of
     missing volumes or files, are its own observations: an import keeps none of them."""
     state.pop("backup_volumes", None)
-    for topic in state.get("topics") or []:
+    topics = list(state.get("topics") or [])
+    undo = state.get("undo")
+    if isinstance(undo, dict) and isinstance(undo.get("item"), dict):
+        topics.append(undo["item"])
+    for topic in topics:
         if isinstance(topic, dict):
             topic.pop("volume_unseen", None)
             topic.pop("files_missing", None)
+            topic.pop("repair_pending", None)
+            topic.pop("repair_request_revision", None)
 
 
 def _without_volumes(history: Any) -> Any:
@@ -333,7 +339,7 @@ def _import_bundle(
         write_import_transaction(checkpoint, status="committed", operation_id=uuid.uuid4().hex)
     except (ExportImportError, SecretStoreError, OSError) as exc:
         try:
-            rollback_import(checkpoint, apply=True)
+            rollback_import(checkpoint, apply=True, preserve_repair_authorization=True)
         except ExportImportError as rollback_exc:
             raise ExportImportError(
                 "import failed and destination rollback also failed", owner_text=Msg("cli.bundle.not_restored")

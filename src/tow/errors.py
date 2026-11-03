@@ -46,6 +46,13 @@ STATUS_CLASSES = (
 # A code or a whole section ("client.") -> its status class; the longest match wins. A section
 # of a plugin (client.<kind>.*) inherits "client.": a new client needs no line here.
 CLASSES: dict[str, str] = {
+    "repair.": "qbit",
+    "repair.changed": "error",
+    "repair.selection_changed": "error",
+    "repair.paused": "error",
+    "repair.no_missing": "error",
+    "repair.volume_unavailable": "no_path",
+    "repair.space": "disk",
     "client.": "qbit",
     "client.managed.wrong_folder": "no_path",
     "client.managed.no_folder": "no_path",

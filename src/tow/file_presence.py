@@ -22,6 +22,8 @@ def invalidate_client(state: dict[str, Any], config: Mapping[str, Any], client_i
     for topic in state.get("topics") or []:
         if isinstance(topic, dict) and str(topic.get("client_id") or default_id) == client_id:
             topic.pop("files_missing", None)
+            topic.pop("repair_pending", None)
+            topic["repair_request_revision"] = uuid4().hex
             topic["file_observation_revision"] = uuid4().hex
 
 
@@ -60,8 +62,20 @@ def observe(topic: Topic, result: Mapping[str, Any], *, client_id: str, at: str)
     before = raw_before if isinstance(raw_before, Mapping) else {}
     prior_count = before.get("count")
     same_problem = before.get("binding") == current_binding and type(prior_count) is int and prior_count > 0
+    incomplete = result.get("incomplete_files")
+    if same_problem and type(incomplete) is int and incomplete > 0:
+        # Rechecked files now have honest incomplete progress. Keep one existing incident,
+        # but let its remaining count follow the recovery without repeating warnings.
+        remaining = missing + incomplete
+        if not unknown and prior_count != remaining:
+            topic["files_missing"] = {**before, "count": remaining}
+        return ""
     if not missing:
         if not unknown:
+            # A native recheck invalidates the client's old 100%. Absent files then become
+            # ordinary incomplete downloads; that is not evidence of their restoration.
+            if same_problem and (result.get("absent_files") or result.get("incomplete_files")):
+                return ""
             topic.pop("files_missing", None)
             return "restored" if same_problem else ""
         return ""

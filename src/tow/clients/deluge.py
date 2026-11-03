@@ -77,6 +77,7 @@ class DelugeClient(ManagedClient):
 
     capabilities: ClassVar[dict[str, bool]] = {
         **ManagedClient.capabilities,
+        "recheck_files": True,
         "magnet_metadata": True,
         "metadata_preview": True,
     }
@@ -285,6 +286,27 @@ class DelugeClient(ManagedClient):
 
     def _start(self, infohash: str) -> None:
         self._call("core.resume_torrents", [infohash.lower()])
+
+    def _recheck(self, infohash: str) -> None:
+        if self._call("core.force_recheck", [infohash.lower()]) is False:
+            raise self._fail("client.managed.recheck_unavailable")
+
+    def _other_torrents(self, current_hash: str, expected_save_path: str) -> list[dict[str, Any]]:
+        rows = self._call("core.get_torrents_status", {}, ["hash", "state", "download_location"])
+        if not isinstance(rows, dict):
+            raise self._fail("client.managed.repair_changed")
+        listing = []
+        for identity, row in rows.items():
+            if not isinstance(row, dict) or str(row.get("hash") or "").casefold() != str(identity).casefold():
+                raise self._fail("client.managed.repair_changed")
+            raw = str(row.get("state") or "").casefold()
+            state = "stoppedDL" if raw == "paused" else "queuedDL" if raw == "queued" else _STATES.get(raw, "unknown")
+            listing.append({"hash": row.get("hash"), "save_path": row.get("download_location"), "state": state})
+        found = []
+        for candidate in self._repair_candidates(listing, current_hash, expected_save_path):
+            info = self.inspect_torrent(str(candidate["hash"]))
+            found.append(self._repair_other_readback(candidate, info))
+        return found
 
     def _set_labels(self, infohash: str, labels: list[str]) -> None:
         self._ensure_labels()

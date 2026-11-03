@@ -42,6 +42,7 @@ def _torrent_json(**overrides: Any) -> dict[str, Any]:
         "tags": "tow, tow-pending",
         "category": "",
         "state": "stoppedDL",
+        "force_start": False,
         "save_path": "M:\\TV",
         "download_path": "",
         "content_path": "M:\\TV\\Show",
@@ -212,6 +213,7 @@ def test_inspect_reads_a_qbittorrent_5_torrent_and_its_files(monkeypatch):
         "save_path": "M:\\TV",
         "content_path": "M:\\TV\\Show",
         "state": "stoppedDL",
+        "force_start": False,
         "tags": ["tow", "tow-pending"],
         "files": [
             {"index": 0, "name": "Show/S01E01.mkv", "size": 10, "progress": 0.8, "priority": 1},

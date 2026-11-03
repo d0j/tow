@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import heapq
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -14,9 +15,11 @@ from tow.clients.factory import client_configurations, default_client_id
 from tow.config import as_bool
 from tow.errors import TowError
 from tow.folders import recent_save_roots
+from tow.log import error_fields
 from tow.records import shown_title
 from tow.topic_form import TopicForm
 from tow.web import _context, edit_base, services, topic_actions
+from tow.web.check_actions import enqueue_check
 from tow.web.messages import flash_redirect, home_redirect, request_flash
 from tow.web.templating import TEMPLATES
 from tow.web.text import t, time_parts
@@ -237,6 +240,37 @@ def topics_pause(tid: str) -> Response:
     if topic is None:
         return flash_redirect("/", "web.topics.not_found", "err")
     topic["paused"] = not bool(topic.get("paused"))
+    if topic["paused"] and topic.get("repair_pending"):
+        # Cancels further client commands; a native check already accepted by the client
+        # may finish there, but TOW must not resume it after this owner pause.
+        from uuid import uuid4
+
+        topic.pop("repair_pending", None)
+        topic["repair_request_revision"] = uuid4().hex
     services.save_state(state)
     services.log_event("topic_pause", topic=tid, title=topic.get("title"), paused=topic["paused"], how="manual")
     return flash_redirect("/", "web.topics.paused" if topic["paused"] else "web.topics.resumed")
+
+
+@router.post("/topics/{tid}/repair-files")
+def topics_repair_files(tid: str) -> Response:
+    try:
+        services.request_file_repair(tid)
+    except services.CheckBusyError:
+        return flash_redirect("/", "repair.busy", "info")
+    except TowError as exc:
+        return flash_redirect(f"/?open={quote(tid)}#row-{quote(tid)}", str(exc), "warn")
+    except Exception as exc:  # noqa: BLE001 - preparing a recovery failed; no native file command was sent
+        services.log_event("files_repair_failed", topic=tid, how="manual", **error_fields(exc))
+        return flash_redirect(f"/?open={quote(tid)}#row-{quote(tid)}", "repair.request_failed", "err")
+    return enqueue_check(topic_id=tid, apply=True)
+
+
+@router.post("/topics/{tid}/cancel-repair")
+def topics_cancel_repair(tid: str) -> Response:
+    try:
+        services.cancel_file_repair(tid)
+    except Exception as exc:  # noqa: BLE001 - a failed cancellation is never reported as saved
+        services.log_event("files_repair_failed", topic=tid, how="manual", **error_fields(exc))
+        return flash_redirect(f"/?open={quote(tid)}#row-{quote(tid)}", "repair.cancel_failed", "err")
+    return flash_redirect(f"/?open={quote(tid)}#row-{quote(tid)}", "repair.cancelled", "info")

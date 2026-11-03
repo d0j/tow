@@ -32,6 +32,8 @@ RECEIPTS_SINCE = (1, 30, 5)
 # Older versions read a prepared torrent's id only as ``content_token`` (scripts/update.py
 # CONTENT_REF_SINCE).
 CONTENT_REF_SINCE = (1, 32, 0)
+# Older versions cannot continue or cancel an authorized native file repair.
+REPAIR_SINCE = (1, 35, 0)
 # Folders of earlier web updates (their copied updater and update.log) kept besides the current
 # job's; older ones are removed when the next update starts.
 JOB_FOLDERS_KEPT = 3
@@ -63,6 +65,7 @@ REFUSALS = (
     "releases.not_published",
     "releases.not_runtime",
     "releases.receipt_pending",
+    "releases.repair_pending",
     "releases.unsupported_version",
 )
 REFUSAL_PARAM = "reason"
@@ -474,6 +477,20 @@ def _content_ref_pending() -> bool:
     return any(isinstance(topic.get("content_ref"), str) and topic["content_ref"] for topic in waiting)
 
 
+def _repair_pending() -> bool:
+    """Active and blocked repairs need a reader that understands their authorization."""
+    from tow.records import topics_of
+    from tow.store import load_state
+    from tow.undo import can_undo
+
+    state = load_state()
+    waiting: list[Any] = list(topics_of(state))
+    undo = state.get("undo")
+    if isinstance(undo, dict) and isinstance(undo.get("item"), dict) and can_undo(state):
+        waiting.append(undo["item"])
+    return any(topic.get("repair_pending") for topic in waiting)
+
+
 def start(version: str, *, grace: float = 0.0) -> dict[str, Any]:
     """Reserve the job and hand it to a detached worker. ``grace``: seconds, at most
     ``GRACE_MAX_SEC``, that the worker keeps TOW running after it publishes "preparing" (the
@@ -504,6 +521,8 @@ def start(version: str, *, grace: float = 0.0) -> dict[str, Any]:
             raise WebUpdateError("releases.receipt_pending")
         if parsed < CONTENT_REF_SINCE and _content_ref_pending():
             raise WebUpdateError("releases.content_ref_pending")
+        if parsed < REPAIR_SINCE and _repair_pending():
+            raise WebUpdateError("releases.repair_pending")
         _prune_job_folders(str(old.get("id") or ""))
         # Archive creation is serialized with store writes and verified by export_bundle.
         try:

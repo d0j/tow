@@ -72,6 +72,8 @@ ROUTES = frozenset(
         ("POST", "/undo"),
         ("POST", "/topics/{tid}/edit"),
         ("POST", "/topics/{tid}/pause"),
+        ("POST", "/topics/{tid}/repair-files"),
+        ("POST", "/topics/{tid}/cancel-repair"),
         ("POST", "/topics/{tid}/replace-revision"),
         ("POST", "/topics/{tid}/adopt"),
         ("POST", "/topics/{tid}/check"),

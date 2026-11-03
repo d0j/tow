@@ -1515,7 +1515,8 @@ def test_restore_whose_rollback_also_fails_says_so(monkeypatch, tmp_path):
             save_config(drifted)
         return result
 
-    def rollback_fails(_checkpoint, *, apply):
+    def rollback_fails(_checkpoint, *, apply, preserve_repair_authorization):
+        assert apply is preserve_repair_authorization is True
         raise ExportImportError("cannot roll back import checkpoint safely")
 
     monkeypatch.setattr(restore_points, "import_bundle", import_then_drift)
@@ -1537,7 +1538,11 @@ def test_restore_apply_error_keeps_current_data_without_rollback(monkeypatch, tm
         return real_import(path, passphrase, **kwargs)
 
     monkeypatch.setattr(restore_points, "import_bundle", apply_fails)
-    monkeypatch.setattr(restore_points, "rollback_import", lambda checkpoint, *, apply: rollbacks.append(checkpoint))
+    monkeypatch.setattr(
+        restore_points,
+        "rollback_import",
+        lambda checkpoint, *, apply, preserve_repair_authorization: rollbacks.append(checkpoint),
+    )
 
     with pytest.raises(RestorePointError, match=_says("data_kept")) as caught:
         restore_from_point(point_id)

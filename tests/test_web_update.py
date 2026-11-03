@@ -143,6 +143,64 @@ def test_going_below_1_32_while_a_topic_waits_for_its_first_add_is_refused(insta
     assert web_update.start("1.32.0")["ok"] is True  # a version that reads the new name
 
 
+@pytest.mark.parametrize("where", ["topics", "undo"])
+@pytest.mark.parametrize("blocked", [False, True])
+def test_active_or_blocked_file_repair_refuses_older_web_update_before_backup(install, monkeypatch, where, blocked):
+    monkeypatch.setattr(web_update, "__version__", "1.35.1")
+    monkeypatch.setattr(web_update, "create_restore_point", lambda: pytest.fail("repair refusal precedes backup"))
+    pending = {
+        "id": "repair-topic",
+        "title": "Synthetic Show",
+        "repair_pending": {"phase": "checking", "blocked": blocked},
+    }
+    state = (
+        {"topics": [pending]}
+        if where == "topics"
+        else {
+            "topics": [],
+            "undo": {"kind": "topic", "ts": datetime.now(UTC).isoformat(), "item": pending},
+        }
+    )
+    save_state(state)
+
+    with pytest.raises(web_update.WebUpdateError, match=r"releases\.repair_pending") as caught:
+        web_update.start("1.34.2")
+
+    assert caught.value.params == {}
+    assert install[1] == []
+    assert not (install[0] / "runtime/web-update/job.json").exists()
+
+
+@pytest.mark.parametrize("pending", [{"phase": "checking"}, {"phase": "checking", "blocked": True}])
+def test_a_web_update_that_understands_repairs_is_allowed(install, monkeypatch, pending):
+    monkeypatch.setattr(web_update, "__version__", "1.35.1")
+    save_state({"topics": [{"id": "repair-topic", "repair_pending": pending}]})
+
+    assert web_update.start("1.35.0")["ok"] is True
+    assert len(install[1]) == 1
+
+
+@pytest.mark.parametrize("where", ["empty", "expired_undo"])
+def test_no_live_repair_does_not_ratchet_the_web_update_minimum(install, monkeypatch, where):
+    from datetime import timedelta
+
+    monkeypatch.setattr(web_update, "__version__", "1.35.1")
+    if where == "empty":
+        state = {"topics": [{"id": "quiet-topic", "repair_pending": {}}]}
+    else:
+        state = {
+            "topics": [],
+            "undo": {
+                "kind": "topic",
+                "ts": (datetime.now(UTC) - timedelta(hours=2)).isoformat(),
+                "item": {"id": "repair-topic", "repair_pending": {"phase": "checking", "blocked": True}},
+            },
+        }
+    save_state(state)
+
+    assert web_update.start("1.34.2")["ok"] is True
+
+
 def test_backup_failure_never_launches_an_updater(install, monkeypatch):
     def failed():
         raise RestorePointError("synthetic backup failure")

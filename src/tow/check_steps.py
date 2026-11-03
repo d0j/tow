@@ -132,6 +132,7 @@ _CHECK_CLEARABLE_FIELDS = (
     "file_aliases",
     "volume_unseen",  # the save folder is off its recorded volume (tow.progress.reconcile)
     "files_missing",
+    "repair_pending",
     "move_pending",
     "error_notified",
     "error_streak",
@@ -158,6 +159,7 @@ OWNER_FIELDS = (
     "client_id",
     "selection",
     "file_observation_revision",
+    "repair_request_revision",
     "tracking_mode",
     "check_interval_min",
     "check_timer_revision",
@@ -233,6 +235,8 @@ def merge_check_results(
             if key in source:
                 topic[key] = source[key]
         for key in _CHECK_CLEARABLE_FIELDS:
+            if key == "repair_pending" and "repair_request_revision" in changed:
+                continue
             if key in changed:
                 continue  # the owner started (or undid) a move meanwhile: theirs wins (M2)
             if key in source:

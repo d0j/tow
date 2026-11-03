@@ -83,7 +83,11 @@ class TransmissionClient(ManagedClient):
     kind = KIND
     client_kind = KIND
 
-    capabilities: ClassVar[dict[str, bool]] = {**ManagedClient.capabilities, "magnet_metadata": False}
+    capabilities: ClassVar[dict[str, bool]] = {
+        **ManagedClient.capabilities,
+        "magnet_metadata": False,
+        "recheck_files": True,
+    }
 
     def __init__(
         self,
@@ -275,6 +279,28 @@ class TransmissionClient(ManagedClient):
 
     def _start(self, infohash: str) -> None:
         self._rpc("torrent-start", ids=[infohash.lower()])
+
+    def _recheck(self, infohash: str) -> None:
+        self._rpc("torrent-verify", ids=[infohash.lower()])
+
+    def _other_torrents(self, current_hash: str, expected_save_path: str) -> list[dict[str, Any]]:
+        rows = self._rpc("torrent-get", fields=["hashString", "status", "error", "downloadDir"]).get("torrents")
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise self._fail("client.managed.repair_changed")
+        listing = [
+            {
+                "hash": row.get("hashString"),
+                "save_path": row.get("downloadDir"),
+                "state": _state_of(row)[0],
+                "stopped": _state_of(row)[1],
+            }
+            for row in rows
+        ]
+        found = []
+        for candidate in self._repair_candidates(listing, current_hash, expected_save_path):
+            info = self.inspect_torrent(str(candidate["hash"]))
+            found.append(self._repair_other_readback(candidate, info))
+        return found
 
     def _set_labels(self, infohash: str, labels: list[str]) -> None:
         self._rpc("torrent-set", ids=[infohash.lower()], labels=labels)
