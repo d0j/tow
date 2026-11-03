@@ -33,6 +33,24 @@ def observe(code, **params):
     return ctx
 
 
+def test_distinct_unicode_host_requires_password_again_without_changing_saved_connection(connection):
+    client, calls = connection
+    secrets = load_secrets()
+    secrets["qbittorrent"]["host"] = "https://faß.example"
+    save_secrets(secrets)
+    before = deepcopy(load_state())
+    response = client.post(
+        "/settings/client",
+        data={"host": "https://fass.example", "port": "8080", "username": "owner", "password": ""},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "пароль" in flash_of(response.headers["location"]).lower()
+    assert load_secrets() == secrets
+    assert load_state() == before
+    assert calls == []
+
+
 def test_settings_test_during_server_pause_makes_no_request_or_false_manual_failure(connection, monkeypatch):
     client, calls = connection
     ctx = observe(429, retry_after=3600)

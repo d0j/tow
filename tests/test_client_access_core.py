@@ -37,6 +37,22 @@ def test_connection_identity_normalizes_defaults_and_keeps_passwords_out_of_meta
     assert "password" not in repr(old)
 
 
+@pytest.mark.parametrize(
+    ("old_host", "new_host"),
+    [
+        ("https://faß.example", "https://fass.example"),
+        ("http://[fe80::1%Ethernet]", "http://[fe80::1%ethernet]"),
+    ],
+)
+def test_distinct_hosts_do_not_share_connection_observations(old_host, new_host):
+    old = client_access.context(CFG, secrets(host=old_host))
+    changed = client_access.context(CFG, secrets(host=new_host))
+    assert old["endpoint"] != changed["endpoint"]
+    state = {}
+    client_access.observe(state, old, TowError("client.managed.http_error", code=429, retry_after=3600), now=1000)
+    assert not client_access.server_wait(state, changed, now=1300)
+
+
 def test_acknowledging_no_matching_auth_observation_is_an_exact_noop():
     ctx = client_access.context(CFG, secrets())
     changed = client_access.context(CFG, secrets("corrected"))
