@@ -64,8 +64,17 @@ def test_a_real_manual_rate_limit_is_saved_and_the_next_click_waits(connection, 
     assert load_state()["client_access"] == before
 
 
-def test_password_only_save_clears_old_read_refusal_without_rotating_command_authority(connection):
+@pytest.mark.parametrize("cosmetic", ["none", "omitted_port", "string_port", "host_case"])
+def test_password_only_save_clears_old_read_refusal_without_rotating_command_authority(connection, cosmetic):
     client, _calls = connection
+    secrets = load_secrets()
+    if cosmetic == "omitted_port":
+        secrets["qbittorrent"].pop("port")
+    elif cosmetic == "string_port":
+        secrets["qbittorrent"]["port"] = "8080"
+    elif cosmetic == "host_case":
+        secrets["qbittorrent"]["host"] = "LOCALHOST"
+    save_secrets(secrets)
     old_context = observe(403)
     state = load_state()
     receipt = {"since": "2026-11-03T00:00:00+00:00", "resume_attempted": True, "blocked": "client.managed.http_error"}
@@ -73,7 +82,12 @@ def test_password_only_save_clears_old_read_refusal_without_rotating_command_aut
     save_state(state)
     result = client.post(
         "/settings/client",
-        data={"host": "127.0.0.1", "port": "8080", "username": "owner", "password": "new"},
+        data={
+            "host": "localhost" if cosmetic == "host_case" else "127.0.0.1",
+            "port": "8080",
+            "username": "owner",
+            "password": "new",
+        },
         follow_redirects=False,
     )
     assert flash_of(result.headers["location"]) == "сохранено"
