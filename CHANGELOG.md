@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.36.0] — 2026-11-03
+
 ### Added
 - Bounded automatic continuation for temporary client failures and slow on-demand site-access modules,
   using the existing retry queue and respecting server waiting times and download limits.
