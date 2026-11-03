@@ -182,10 +182,13 @@ def settings_client(
         remove_password = edit_base.secret_intent(fields, "password")[0] == "remove"
     else:  # this card changed nothing: the client stays as saved now
         host, port_number, username, password = str(now["host"]), int(now["port"]), str(now["username"]), ""
-    endpoint_changed = (str(q.get("host") or "").strip(), q.get("port"), str(q.get("username") or "").strip()) != (
-        host.strip(),
-        port_number,
-        username.strip(),
+    wanted_secrets = copy.deepcopy(s)
+    wanted_block = client_secret_block(cfg, wanted_secrets, ident, ensure=True)
+    wanted_block.update(host=host.strip(), port=port_number)
+    endpoint_changed = (
+        services.client_access.endpoint(cfg, s, ident)["endpoint"]
+        != services.client_access.endpoint(cfg, wanted_secrets, ident)["endpoint"]
+        or str(q.get("username") or "").strip() != username.strip()
     )
     if endpoint_changed and q.get("password") and not password.strip():
         # A stored password must never be sent to a new (possibly mistyped) address.

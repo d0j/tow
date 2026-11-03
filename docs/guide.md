@@ -281,6 +281,8 @@ waiting time, a download limit, a pause or a changed file selection.
 The client's requested server pause also applies to **Check** in Settings and survives cancelling or removing
 the topic which observed it. Correcting credentials releases an old read refusal; it does not grant another
 torrent start. A test that finishes after its connection changed cannot overwrite the current status.
+Saving a password keeps an unchanged connection's file verification, including when the form fills in its
+default port or normalizes the host's letter case.
 
 ## Notifications
 

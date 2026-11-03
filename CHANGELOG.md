@@ -29,6 +29,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 - Client server pauses persist independently of torrent tasks and also cover Settings tests. Corrected
   credentials release stale read refusals without authorizing another start; late old test results cannot
   replace the current connection's health.
+- Saving a client's default port or normalizing its host spelling preserves an unchanged endpoint's
+  native verification; it no longer mistakes a credential repair for a different torrent client.
 
 ## [1.35.1] — 2026-11-03
 
