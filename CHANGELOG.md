@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.35.0] — 2026-11-03
+
 ### Added
 
 - Missing selected files can be restored through the selected torrent client's native file check and download,
