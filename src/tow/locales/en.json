@@ -361,7 +361,8 @@
     "how": "How to update",
     "install": "Press “Update” above, or run “Update TOW” in the TOW folder. For a specific version run:",
     "no_script": "Without JavaScript, use Release notes to check the latest version.",
-    "repair_pending": "Finish or cancel file recovery before installing a version older than 1.35.0."
+    "repair_pending": "Finish or cancel file recovery before installing a version older than 1.35.0.",
+    "client_only_pending": "Finish or cancel pending one-time handoffs before installing a version older than 1.37.1. If their results cannot be verified, restore access to them first."
   },
   "base": {
     "skip": "Skip to content",
@@ -2394,7 +2395,8 @@
     "uv_config_failed": "uv's settings for this install were not written again: {error}",
     "uv_config_invalid": "uv cannot use {path} ({error}): correct or remove your lines below \"# --- your settings below ---\"; nothing was updated",
     "repair_pending": "{ref} does not support the pending file repair for {topics}. Finish or cancel the repair (including a live Undo) before updating, or choose {since} or newer; nothing was updated",
-    "repair_restore_pending": "{ref} cannot finish the interrupted data restore safely. Start TOW {since} or newer to finish recovery before updating; nothing was updated"
+    "repair_restore_pending": "{ref} cannot finish the interrupted data restore safely. Start TOW {since} or newer to finish recovery before updating; nothing was updated",
+    "client_only_pending": "{ref} lacks the required recovery and rollback safeguards for one-time client handoffs. Wait for the handoff to finish, cancel it in TOW, or restore access to its saved result, then retry; choose {since} or newer to continue the handoff. Nothing was updated"
   },
   "watchdog": {
     "notice": {

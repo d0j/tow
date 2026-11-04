@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from copy import deepcopy
 from typing import ClassVar
@@ -353,9 +354,138 @@ def test_archive_and_update_snapshot_allowlists_never_include_handover_authority
     assert receipt_path not in {path for _name, path in live_members()}
     snapshot = updater.data_files(client_only_store.paths.data_dir())
     assert "run/client-only-adds.enc" not in snapshot
+    assert "run/client-only-compat.json" not in snapshot
     exported = bundle.export_bundle(Path(world[4]).parent / "transfer.towx", "synthetic-passphrase")
     assert exported["read_back"]
     assert all("client-only" not in name and not name.startswith("run/") for name in exported["members"])
+
+
+@pytest.mark.parametrize("status", ["pending", "added", "existing", "failed", "cancelled"])
+def test_rollback_projection_distinguishes_pending_from_every_terminal_outcome(world, status):
+    from test_update import updater
+
+    result = send(world)
+    entries = client_only_store.read_entries()
+    entries[result["operation_id"]]["status"] = status
+    client_only_store.write_entries(entries)
+    expected = status == "pending"
+    assert client_only_store.has_pending_or_unknown() is expected
+    assert updater.client_only_pending(client_only_store.paths.data_dir()) is expected
+    projection = (client_only_store.paths.run_dir() / client_only_store.COMPATIBILITY).read_bytes()
+    assert b"secret-passkey" not in projection
+    assert json.loads(projection)["pending"] is expected
+
+
+def test_old_authenticated_terminal_journal_can_repair_missing_projection(world):
+    from test_update import updater
+
+    send(world)
+    marker = client_only_store.paths.run_dir() / client_only_store.COMPATIBILITY
+    marker.unlink()
+    assert updater.client_only_pending(client_only_store.paths.data_dir()) is True
+    calls = list(world[0].calls)
+    assert client_only_store.has_pending_or_unknown() is False
+    assert updater.client_only_pending(client_only_store.paths.data_dir()) is False
+    assert world[0].calls == calls
+
+
+def test_background_producer_migrates_legacy_terminal_projection_without_a_web_read_write(world):
+    from test_update import updater
+
+    result = send(world)
+    marker = client_only_store.paths.run_dir() / client_only_store.COMPATIBILITY
+    marker.unlink()
+    assert client_only.get_result(result["operation_id"]) == result
+    assert client_only.finished() == [result]
+    assert not marker.exists()
+    calls = list(world[0].calls)
+    assert updater.client_only_pending(client_only_store.paths.data_dir()) is True
+    assert client_only.advance_pending() == []
+    assert updater.client_only_pending(client_only_store.paths.data_dir()) is False
+    assert world[0].calls == calls
+
+
+def test_background_compatibility_write_failure_stays_monitor_visible(world, monkeypatch):
+    send(world)
+    marker = client_only_store.paths.run_dir() / client_only_store.COMPATIBILITY
+    marker.unlink()
+    calls = list(world[0].calls)
+    monkeypatch.setattr(
+        client_only_store, "atomic_write_bytes", lambda *_args: (_ for _ in ()).throw(OSError("projection unavailable"))
+    )
+    with pytest.raises(OSError, match="projection unavailable"):
+        client_only.advance_pending()
+    assert client_only_store.has_pending_or_unknown() is True
+    assert not marker.exists()
+    assert world[0].calls == calls
+
+
+def test_torn_receipt_write_cannot_reuse_stale_terminal_projection(world, monkeypatch):
+    from test_update import updater
+
+    result = send(world)
+    entries = client_only_store.read_entries()
+    entries[result["operation_id"]]["status"] = "pending"
+    original = client_only_store.atomic_write_bytes
+
+    def crash_before_marker(path, content):
+        if path.name == client_only_store.COMPATIBILITY:
+            assert updater.client_only_pending(client_only_store.paths.data_dir()) is True
+            raise OSError("power lost before projection")
+        return original(path, content)
+
+    with monkeypatch.context() as cut:
+        cut.setattr(client_only_store, "atomic_write_bytes", crash_before_marker)
+        with pytest.raises(OSError, match="power lost"):
+            client_only_store.write_entries(entries)
+    assert updater.client_only_pending(client_only_store.paths.data_dir()) is True
+    assert client_only_store.has_pending_or_unknown() is True
+    entries[result["operation_id"]]["status"] = "cancelled"
+    client_only_store.write_entries(entries)
+    assert updater.client_only_pending(client_only_store.paths.data_dir()) is False
+
+
+@pytest.mark.parametrize("fault", ["journal_missing", "journal_corrupt", "journal_schema", "unreadable"])
+def test_unknown_handoff_authority_never_allows_old_rollback(world, monkeypatch, fault):
+    from test_update import updater
+
+    send(world)
+    journal = client_only_store.paths.run_dir() / client_only_store.JOURNAL
+    if fault == "journal_missing":
+        journal.unlink()
+    elif fault == "journal_corrupt":
+        journal.write_bytes(b"damaged ciphertext")
+    elif fault == "journal_schema":
+        journal.write_bytes(client_only_store.master_fernet().encrypt(b'{"schema": 99, "entries": {}}'))
+    else:
+        monkeypatch.setattr(client_only_store, "_read_file", lambda *_args: (_ for _ in ()).throw(PermissionError()))
+        monkeypatch.setattr(updater, "_handoff_file", lambda *_args: (_ for _ in ()).throw(PermissionError()))
+    assert client_only_store.has_pending_or_unknown() is True
+    assert updater.client_only_pending(client_only_store.paths.data_dir()) is True
+
+
+def test_no_handoff_journal_does_not_ratchet_rollback_floor(world):
+    from test_update import updater
+
+    assert client_only_store.has_pending_or_unknown() is False
+    assert updater.client_only_pending(client_only_store.paths.data_dir()) is False
+
+
+def test_orphan_projection_blocks_new_handoff_and_monitor_read_without_erasing_evidence(world):
+    send(world)
+    folder = client_only_store.paths.run_dir()
+    journal = folder / client_only_store.JOURNAL
+    journal.unlink()
+    marker = folder / client_only_store.COMPATIBILITY
+    evidence = marker.read_bytes()
+    world[0].calls.clear()
+    with raises_code("client_only.store_invalid"):
+        client_only.finished()
+    with raises_code("client_only.store_invalid"):
+        send(world, request="a fresh explicit request")
+    assert world[0].calls == []
+    assert not journal.exists()
+    assert marker.read_bytes() == evidence
 
 
 def test_cancel_duplicate_busy_request_revokes_the_single_original_add(world, monkeypatch):

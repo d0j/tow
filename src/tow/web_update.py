@@ -34,6 +34,8 @@ RECEIPTS_SINCE = (1, 30, 5)
 CONTENT_REF_SINCE = (1, 32, 0)
 # Older versions cannot continue or cancel an authorized native file repair.
 REPAIR_SINCE = (1, 35, 0)
+# Older versions cannot safely preserve unknown one-time handoff authority.
+CLIENT_ONLY_SINCE = (1, 37, 1)
 # Folders of earlier web updates (their copied updater and update.log) kept besides the current
 # job's; older ones are removed when the next update starts.
 JOB_FOLDERS_KEPT = 3
@@ -56,6 +58,7 @@ REFUSALS = (
     "releases.already_installed",
     "releases.backup_failed_because",
     "releases.busy",
+    "releases.client_only_pending",
     "releases.content_ref_pending",
     "releases.detached_unavailable",
     "releases.interrupted",
@@ -517,6 +520,13 @@ def _repair_pending() -> bool:
     return any(topic.get("repair_pending") for topic in waiting)
 
 
+def _client_only_pending() -> bool:
+    """Unknown handoff authority is not permission to install a reader that ignores it."""
+    from tow import client_only_store
+
+    return client_only_store.has_pending_or_unknown()
+
+
 def start(version: str, *, grace: float = 0.0) -> dict[str, Any]:
     """Reserve the job and hand it to a detached worker. ``grace``: seconds, at most
     ``GRACE_MAX_SEC``, that the worker keeps TOW running after it publishes "preparing" (the
@@ -549,6 +559,8 @@ def start(version: str, *, grace: float = 0.0) -> dict[str, Any]:
             raise WebUpdateError("releases.content_ref_pending")
         if parsed < REPAIR_SINCE and _repair_pending():
             raise WebUpdateError("releases.repair_pending")
+        if parsed < CLIENT_ONLY_SINCE and _client_only_pending():
+            raise WebUpdateError("releases.client_only_pending")
         _prune_job_folders(str(old.get("id") or ""))
         # Archive creation is serialized with store writes and verified by export_bundle.
         try:
