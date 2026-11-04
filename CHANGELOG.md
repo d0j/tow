@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.37.1] — 2026-11-04
+
 ### Fixed
 
 - Pending one-time client handoffs block a rollback below 1.37.1 until they finish or are cancelled;
