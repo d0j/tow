@@ -43,7 +43,7 @@ dependencies = [
     "regex>=2026.9.29",
     "tzdata>=2026.5",
     "uvicorn[standard]>=0.52.4",
-    "websockets>=17.2",
+    "websockets>=17.3",
 ]
 
 [project.urls]
