@@ -138,6 +138,15 @@ def _update_result(rec: Mapping[str, Any]) -> str | None:
     return _UPDATE_RESULTS.get(str(rec.get("status") or ""))
 
 
+def _client_only_result(rec: Mapping[str, Any]) -> str | None:
+    outcome = rec.get("status")
+    if outcome == "failed":
+        return "err"
+    if outcome == "cancelled":
+        return "info"
+    return "ok" if outcome in ("added", "existing") and rec.get("confirmed") is True else None
+
+
 OK, WARN, ERR, INFO = _fixed("ok"), _fixed("warn"), _fixed("err"), _fixed("info")
 
 # kind -> (category, severity of the record or None: not a message). The table in the module
@@ -169,6 +178,9 @@ MATRIX: dict[str, tuple[str, Severity]] = {
     "files_repair_resumed": (DOWNLOADS, INFO),
     "files_repair_failed": (DOWNLOADS, WARN),
     "files_repair_cancelled": (DOWNLOADS, INFO),
+    "client_only_result": (DOWNLOADS, _client_only_result),
+    "client_only_monitor_failed": (OPERATIONS, ERR),
+    "client_only_monitor_recovered": (OPERATIONS, INFO),
     **dict.fromkeys(
         (
             "client_add_failed",
@@ -348,6 +360,7 @@ _KEEP = (
     "error_code",
     "error_params",
     "status",
+    "confirmed",
     "how",
     "client_id",
     "integration_id",
@@ -928,6 +941,10 @@ def _href(entry: Mapping[str, Any]) -> str:
     rec, category = entry["rec"], entry["category"]
     if rec["_kind"] == "action_feedback":
         return _feedback_href(rec.get("feedback_href"))
+    if rec["_kind"] == "client_only_result":
+        return "/history?group=errors" if rec.get("status") == "failed" else "/history?group=downloads"
+    if rec["_kind"] in {"client_only_monitor_failed", "client_only_monitor_recovered"}:
+        return "/history?group=errors" if rec["_kind"] == "client_only_monitor_failed" else "/history?group=changes"
     if rec["_kind"] == "client_starting":
         return "/history?group=changes"
     if rec["_kind"] in {"qbit_unreachable", "client_checked"}:
@@ -1043,6 +1060,8 @@ def _feedback_href(value: Any) -> str:
         pairs = parse_qsl(parts.query, max_num_fields=16)
     except ValueError:
         return "/history"
+    if parts.path.startswith("/client-only/"):
+        return parts.path if re.fullmatch(r"/client-only/[0-9a-f]{32}", parts.path) else "/history"
     if parts.path not in {"/", "/history", "/settings", "/sites"}:
         return "/history"
     query = [
@@ -1337,6 +1356,70 @@ def reconcile_update(job: Mapping[str, Any] | None, *, now: float | None = None)
             status=outcome,
             target_version=str(job.get("target") or "")[:40],
             previous_version=str(job.get("previous") or "")[:40],
+            how="auto",
+        )
+        if logged is not None:
+            feed().refresh()
+        return logged is not None
+
+
+def reconcile_client_only(result: Mapping[str, Any] | None, *, now: float | None = None) -> bool:
+    """Share one terminal handoff result per operation, including after a lost log append."""
+    if not isinstance(result, Mapping):
+        return False
+    operation_id = result.get("operation_id")
+    if not isinstance(operation_id, str) or not _HEX32.fullmatch(operation_id) or _client_only_result(result) is None:
+        return False
+    moment = time.time() if now is None else now
+    finished = result.get("finished_at")
+    if (
+        not isinstance(finished, (int, float))
+        or isinstance(finished, bool)
+        or not moment - RETENTION_SEC <= finished <= moment + 60
+    ):
+        return False
+    error = result.get("error") if result.get("status") == "failed" else None
+    error = error if isinstance(error, Mapping) else {}
+    with _RECONCILE_LOCK:
+        if operation_id in feed().operation_results("client_only_result"):
+            return False
+        logged = eventlog.append_event(
+            "client_only_result",
+            operation_id=operation_id,
+            status=result["status"],
+            confirmed=result.get("confirmed") is True,
+            title=scrub_display(str(result.get("title") or ""), 200),
+            client_id=str(result.get("client_id") or "")[:64],
+            error_code=error.get("code") if isinstance(error.get("code"), str) else "",
+            error_params=dict(error.get("params") or {}) if isinstance(error.get("params"), Mapping) else {},
+            how="manual",
+        )
+        if logged is not None:
+            feed().refresh()
+        return logged is not None
+
+
+def reconcile_client_only_monitor(event: Mapping[str, Any]) -> bool:
+    """A monitor transition is acknowledged only after its event is readable in the log.
+
+    Unlike an add result this says nothing about whether a torrent was added. A lost append
+    acknowledgement is recovered by its durable operation id, without another message.
+    """
+    operation_id = event.get("operation_id")
+    if not isinstance(operation_id, str) or not _HEX32.fullmatch(operation_id) or type(event.get("ok")) is not bool:
+        return False
+    kind = "client_only_monitor_recovered" if event["ok"] else "client_only_monitor_failed"
+    with _RECONCILE_LOCK:
+        current = feed().refresh()
+        if operation_id in {str(rec.get("operation_id")) for rec in current.window.records if rec.get("kind") == kind}:
+            return True
+        if not current.window.readable:
+            return False  # an unreadable old line might already contain this operation
+        logged = eventlog.append_event(
+            kind,
+            operation_id=operation_id,
+            error_code=event.get("error_code") if not event["ok"] else "",
+            error_params={},
             how="auto",
         )
         if logged is not None:

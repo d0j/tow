@@ -5,6 +5,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Added
+
+- A separate **Torrent client only** choice sends the selected contents once, confirms the client result,
+  and keeps the torrent out of TOW's watch list. Initial client checks finish as a bounded handoff;
+  retries do not repeat commands, and an unfinished handoff can be cancelled.
+
 ### Fixed
 
 - A confirmed normal computer restart or sleep followed by a healthy return is informational.

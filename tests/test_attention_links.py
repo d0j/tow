@@ -337,6 +337,30 @@ def test_a_trimmed_history_is_said_on_home_and_lands_on_its_note_in_the_history(
     assert " autofocus" not in page
 
 
+def test_unreadable_handoffs_land_on_the_explanation_and_error_then_clear_after_recovery(client):
+    from tow import client_only_monitor
+    from tow.errors import TowError
+
+    _home_state(_topic("z", 9))
+    assert client_only_monitor.observe(TowError("client_only.store_invalid"))
+    entry = _entries(client)["client_only_monitor"]
+    assert entry["href"] == "/history?group=errors#issue-client_only_monitor"
+
+    page, _ = _land(client, entry, anchor="issue-client_only_monitor", fix="", label="")
+
+    assert html.escape(entry["text"], quote=False) in page
+    assert t("log.kind.client_only_monitor_failed").casefold() in page.casefold()
+    assert t("client_only.store_invalid") in page
+    assert 'data-history-group="errors"' in page
+    assert " autofocus" not in page  # read the error; no blind replay control
+
+    assert client_only_monitor.observe(None)
+    assert "client_only_monitor" not in _entries(client)
+    recovered = client.get("/history?group=errors").text
+    assert 'id="issue-client_only_monitor"' not in recovered
+    assert t("log.kind.client_only_monitor_failed").casefold() in recovered.casefold()  # past errors remain readable
+
+
 def test_a_topic_error_opens_its_row_with_the_current_problem(client):
     _home_state(_topic("a", 1, last_error="Synthetic connection refused", last_error_class="tracker"))
     entry = _entries(client)["topic_error"]
@@ -425,6 +449,7 @@ LANDINGS = {
     "check_blocked": test_a_failed_check_lands_on_its_error_in_the_history_with_check_all,
     "history_rebuilt": test_a_rebuilt_history_lands_on_its_note_with_nothing_to_focus,
     "history_trimmed": test_a_trimmed_history_is_said_on_home_and_lands_on_its_note_in_the_history,
+    "client_only_monitor": test_unreadable_handoffs_land_on_the_explanation_and_error_then_clear_after_recovery,
     "data_lost": test_a_lost_data_folder_lands_on_the_night_copies_with_the_newest_restore,
     "topic_error": test_a_topic_error_opens_its_row_with_the_current_problem,
     "volume_missing": test_a_folder_off_its_disk_lands_on_the_volumes_page_with_its_accept,

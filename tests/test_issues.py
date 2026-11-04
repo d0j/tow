@@ -49,6 +49,7 @@ def test_every_kind_is_found_once_in_its_order():
     assert [kind.name for kind in issues.known_kinds()] == [
         "data_lost",
         "check_stale",
+        "client_only_monitor",
         "check_blocked",
         "client_down",
         "volume_missing",

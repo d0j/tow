@@ -7,7 +7,9 @@ from collections.abc import Mapping, Sequence
 from typing import Any, ClassVar
 from urllib.parse import quote
 
-from qbittorrentapi import Client, NotFound404Error
+from qbittorrentapi import APIError, Client, HTTP5XXError, NotFound404Error
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from tow.clients import files
 from tow.clients.managed import OWNER, PENDING, ClientError, ManagedClient
@@ -56,6 +58,10 @@ def _fail(code: str, /, **params: Any) -> ClientError:
     return ClientError(code, prefix=NAME, **params)
 
 
+class _UnconfirmedWrite(APIError):
+    """A reserved write must reach read-back, never the SDK's automatic retry loop."""
+
+
 class QBittorrentClient(ManagedClient):
     """qBittorrent on the shared contract of ``tow.clients.managed``. Its own: the add (tags for
     TOW's marks and the category apart, no automatic torrent management, a long timeout, a
@@ -85,6 +91,49 @@ class QBittorrentClient(ManagedClient):
         if callable(getattr(type(self._c), "app_web_api_version", None)):  # the library's client
             asked = self._c.app_web_api_version
             self._c.app_web_api_version = self._cached_web_api_version(asked)  # type: ignore[method-assign]
+        self._strict_transport_set = False
+        if callable(getattr(type(self._c), "_request", None)):
+            self._c._request = self._guarded_request(self._c._request)  # type: ignore[method-assign]
+
+    def _single_write_transport(self) -> None:
+        if self._strict_transport_set:
+            return
+        self._c._HTTPADAPTER_ARGS["max_retries"] = 0
+        session = self._c._http_session
+        if session is not None:
+            for adapter in session.adapters.values():
+                if isinstance(adapter, HTTPAdapter):
+                    adapter.max_retries = Retry.from_int(0)
+        self._strict_transport_set = True
+
+    def _guarded_request(self, asked: Any) -> Any:
+        """The locked SDK retries uncertain POSTs even with _retries=0. Isolate only guarded
+        handovers: authentication still uses the SDK, reads keep its retry policy, and an
+        uncertain mutation becomes an APIError with its original typed cause preserved.
+        """
+
+        def request(*args: Any, **kwargs: Any) -> Any:
+            method = kwargs.get("http_method", args[0] if args else "")
+            if self.operation_guard is None or str(method).lower() != "post":
+                return asked(*args, **kwargs)
+            try:
+                self.operation_guard()
+            except Exception as error:
+                raise _UnconfirmedWrite("native write forbidden before dispatch") from error
+            self._single_write_transport()
+            namespace = kwargs.get("api_namespace")
+            if str(getattr(namespace, "value", namespace)) == "auth":
+                return asked(*args, **kwargs)  # an explicit refused login may be retried by the SDK
+            try:
+                return asked(*args, **kwargs)
+            except APIError as error:
+                if not isinstance(error, HTTP5XXError):
+                    raise
+                raise _UnconfirmedWrite("native write acknowledgement is uncertain") from error
+            except Exception as error:
+                raise _UnconfirmedWrite("native write acknowledgement is uncertain") from error
+
+        return request
 
     def _cached_web_api_version(self, asked: Any) -> Any:
         """qbittorrent-api asks the Web API version before every add, start and stop (30 times
@@ -664,6 +713,8 @@ class QBittorrentClient(ManagedClient):
         extra_tags = [tag for tag in self.add_tags if tag not in {OWNER, PENDING}]
         category = str(self.add_category or "").strip()
         if category:
+            if self.operation_guard is not None:
+                self.operation_guard()
             with contextlib.suppress(Exception):  # it may exist already; the add reports real problems
                 self._c.torrents_create_category(name=category)
         add_options: dict[str, Any] = {
@@ -680,6 +731,8 @@ class QBittorrentClient(ManagedClient):
             for value in (metadata.hash_v1, metadata.hash_v2, metadata.hash_v2[:40] if metadata.hash_v2 else None)
             if value
         )
+        if self.operation_guard is not None:
+            self.operation_guard()
         try:
             # A large .torrent can take qBittorrent a while; its library sends a request that
             # timed out once more, and the add must not be one of them.

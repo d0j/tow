@@ -38,6 +38,7 @@ EXPORT_EVENT_KEYS = {
     "event_id",
     "kind",
     "operation_id",
+    "confirmed",
     "topic_id",
     "topic",
     "status",
@@ -511,6 +512,7 @@ HISTORY_GROUPS = {
     "downloads": frozenset(
         {
             "client_added",
+            "client_only_result",
             "client_started",
             "client_updated",
             "new_file",
@@ -537,7 +539,9 @@ HISTORY_GROUPS = {
     "errors": frozenset(
         {
             "check_fail",
+            "client_only_result",
             "files_missing",
+            "client_only_monitor_failed",
             "files_repair_failed",
             "check_site_skipped",
             "content_cache_failed",
@@ -565,6 +569,7 @@ HISTORY_GROUPS = {
             "topic_add",
             "client_starting",
             "watchdog_notice",
+            "client_only_monitor_recovered",
             "topic_delete",
             "topic_edit",
             "topic_pause",
@@ -747,6 +752,12 @@ def history_events(
                 except json.JSONDecodeError:
                     continue
                 if not isinstance(record, dict) or record.get("kind") not in kinds:
+                    continue
+                if (
+                    group == "errors"
+                    and record.get("kind") == "client_only_result"
+                    and record.get("status") != "failed"
+                ):
                     continue
                 if (
                     needle
@@ -1032,6 +1043,8 @@ def format_event(
         bits.extend(scrub_text(str(alert)).strip()[:400] for alert in alerts if str(alert).strip())
     bits.extend(_replace_bits(rec, kind, lang))
     bits.extend(_file_presence_bits(rec, kind, lang))
+    if kind == "client_only_result" and rec.get("status") in ("added", "existing", "failed", "cancelled"):
+        bits.append(t(f"log.client_only.{rec['status']}", lang))
     if rec.get("tracker"):
         bits.append(str(rec["tracker"]))
     bits.extend(_access_diagnostics(rec, lang))

@@ -276,6 +276,8 @@ class DelugeClient(ManagedClient):
         if not torrent_id:
             raise self._fail("client.deluge.add_refused")
         identity = str(torrent_id)
+        if self.operation_guard is not None:
+            self.operation_guard()
         try:
             self._set_labels(identity, labels)
         except Exception as error:

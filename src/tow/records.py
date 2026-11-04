@@ -122,6 +122,7 @@ class Health(TypedDict, total=False):
     clients_ok: dict[str, bool]
     clients_empty: dict[str, int]  # client -> checks in a row it listed no torrent
     clients_starting: list[str]  # local boot-time refusals not announced as a downtime
+    client_only_monitor: dict[str, Any]  # journal readability, not a native client's health
     check_ok: bool
     check_error: str
     check_failures: int

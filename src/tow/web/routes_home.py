@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -114,6 +115,7 @@ def index(request: Request) -> Response:
             "global_interval_min": global_interval_minutes(cfg),
             "credential_prompt": credential_prompt(request),
             "add_draft": add_draft(request),
+            "submission_id": uuid4().hex,
             "flash": request_flash(request) or said,
             "check_result": result,
             # When the result was observed: its check's end, not when it was asked for.

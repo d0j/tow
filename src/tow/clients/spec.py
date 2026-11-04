@@ -51,6 +51,7 @@ class TorrentClientAdapter(Protocol):
     add_category: str
     add_tags: Sequence[str]
     read_only: bool
+    operation_guard: Callable[[], None] | None
 
     def ping(self) -> str: ...
 

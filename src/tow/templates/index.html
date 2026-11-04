@@ -40,6 +40,7 @@
   {#- Compact (1.32): content-sized fields in the shared form grid; a client choice only when there
       is one to make; "follow" a checkbox. -#}
   <form class="form-grid new-topic-form" method="post" action="/topics/add" aria-labelledby="add-topic-title">
+    <input type="hidden" name="submission_id" value="{{ draft.get('submission_id') or submission_id }}">
     <h2 id="add-topic-title" class="add-title">{{ t('home.add.title') }}</h2>
     {% if draft.get('error') %}
     <div class="form-error add-error" id="add-error" role="alert" tabindex="-1" data-focus-field="{{ bad_field }}">
@@ -91,11 +92,13 @@
     <div class="field-row follow-row">
       {#- A cleared box sends nothing: the hidden field says that means "once". -#}
       <input type="hidden" name="tracking_unchecked" value="once">
-      <label class="check-label" for="topic-tracking-mode"><input id="topic-tracking-mode" name="tracking_mode" value="watch" type="checkbox"{% if draft.get('tracking_mode') != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
-      <div class="field interval-field"><label for="topic-check-interval">{{ t('timer.field') }}</label>
+      <label class="check-label" for="topic-tracking-mode" data-enabled-by="topic-client-only" data-enabled-when="unchecked"><input id="topic-tracking-mode" name="tracking_mode" value="watch" type="checkbox"{% if draft.get('tracking_mode') != 'once' %} checked{% endif %}> {{ t('home.add.follow') }}</label>
+      <label class="check-label client-only-choice" for="topic-client-only" title="{{ t('home.add.client_only_hint') }}"><input id="topic-client-only" name="client_only" value="true" type="checkbox" aria-describedby="topic-client-only-hint"{% if draft.get('client_only') == '1' %} checked{% endif %}> {{ t('home.add.client_only') }}</label>
+      <div class="field interval-field" data-enabled-by="topic-client-only" data-enabled-when="unchecked"><label for="topic-check-interval">{{ t('timer.field') }}</label>
         <input id="topic-check-interval" class="w-xs" name="check_interval_min" type="number" min="1" max="10080" step="1" value="{{ draft.get('check_interval_min', '') }}"{{ invalid('topic-check-interval', bad_field, 'topic-check-interval-hint') }}>
         <p id="topic-check-interval-hint" class="field-hint">{{ t('timer.hint', minutes=global_interval_min) }}</p></div>
     </div>
+    <p id="topic-client-only-hint" class="field-hint" data-client-only-hint{% if draft.get('client_only') != '1' %} hidden{% endif %}>{{ t('home.add.client_only_hint') }}</p>
     <p class="field-hint busy-note" data-busy-note role="status" hidden>{{ t('home.add.checking_note') }}</p>
     <div class="actions">
       <button type="submit" data-busy-label="{{ t('home.add.checking') }}">{{ t('home.add.submit') }}</button>

@@ -33,6 +33,7 @@ from tow.web import (
     routes_auth,
     routes_backup,
     routes_check,
+    routes_client_only,
     routes_clients,
     routes_content,
     routes_health,
@@ -67,6 +68,7 @@ ROUTERS: tuple[APIRouter, ...] = (
     routes_sync.router,  # /topics/rows: before any /topics/{tid}
     routes_content.router,
     routes_topics.router,
+    routes_client_only.router,
     routes_topic_login.router,
     routes_undo.router,
     routes_check.router,
@@ -98,9 +100,13 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     producer = ReleaseProducer()
     producer.start()
     reconciler = asyncio.create_task(_reconcile_update_results())
+    submissions = asyncio.create_task(_reconcile_client_only_results())
     try:
         yield
     finally:
+        submissions.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await submissions
         reconciler.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await reconciler
@@ -108,6 +114,40 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 UPDATE_RESULT_EVERY_SEC = 15.0
+CLIENT_ONLY_EVERY_SEC = 5.0
+
+
+async def _reconcile_client_only_results() -> None:
+    """Finish finite one-time handoffs, then leave their client downloads alone."""
+    reported = False
+    while True:
+        await asyncio.sleep(CLIENT_ONLY_EVERY_SEC)
+        try:
+            from tow.web import client_only_actions
+
+            await run_in_threadpool(client_only_actions.reconcile_results)
+        except Exception as error:  # noqa: BLE001 - report unreadable command evidence without guessing an add failed
+            try:
+                from tow.web import services
+
+                await run_in_threadpool(services.note_client_only_monitor_failure, error)
+            except Exception:  # noqa: BLE001 - even the diagnostic store can be unavailable
+                if not reported:
+                    _CONFIG_LOG.warning("the one-time handoff monitoring result could not be recorded")
+            if not reported:
+                _CONFIG_LOG.warning("a one-time client handoff could not be reconciled yet")
+            reported = True
+        else:
+            try:
+                from tow.web import services
+
+                await run_in_threadpool(services.note_client_only_monitor_recovery)
+            except Exception:  # noqa: BLE001 - retain the warning until recovery is durably confirmed
+                if not reported:
+                    _CONFIG_LOG.warning("recovery of one-time handoff monitoring could not be recorded")
+                reported = True
+            else:
+                reported = False
 
 
 async def _reconcile_update_results() -> None:

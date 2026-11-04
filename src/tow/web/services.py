@@ -173,9 +173,11 @@ __all__ = [
     "MessageMarkerRefused",
     "accept_volume",
     "adopt_topic",
+    "advance_client_only",
     "apply_undo",
     "await_relocation",
     "browser_auth",
+    "cancel_client_only",
     "cancel_file_repair",
     "check_outcome",
     "check_outcome_counts",
@@ -206,12 +208,14 @@ __all__ = [
     "export_portable_bundle",
     "file_repair_active",
     "file_repair_continuable",
+    "finished_client_only",
     "finished_web_update",
     "folder_free",
     "folder_write_problem",
     "forget_config_cache",
     "forget_parsed",
     "free_bytes",
+    "get_client_only_result",
     "guess_site",
     "guess_topic_title",
     "history_events",
@@ -234,9 +238,12 @@ __all__ = [
     "next_check_at",
     "night_cleanup_status",
     "night_cleanup_status_unlocked",
+    "note_client_only_monitor_failure",
+    "note_client_only_monitor_recovery",
     "note_signed_in",
     "notify_topic_error",
     "observe_events",
+    "pending_client_only",
     "persistence_lock",
     "prefer_host",
     "prepare_content",
@@ -246,6 +253,7 @@ __all__ = [
     "read_events",
     "read_only_now",
     "read_only_paths",
+    "reconcile_client_only_result",
     "reconcile_update_result",
     "record_check_failure",
     "record_message_feedback",
@@ -270,6 +278,7 @@ __all__ = [
     "scrub_display",
     "scrub_text",
     "secrets_from_bytes",
+    "send_to_client",
     "service_status",
     "set_autostart",
     "set_session_cookie",
@@ -485,6 +494,77 @@ def prepare_content(
 
 def prepare_fresh_content(url: str, client_id: str, allow_limited: bool) -> dict[str, object]:
     return prepare_content(url, client_id, None, allow_limited, fresh=True)
+
+
+def send_to_client(
+    content: bytes,
+    save_path: str,
+    client_id: str,
+    policy: Mapping[str, Any],
+    operation_id: str,
+    *,
+    preferred_season: int | None = None,
+    request_fingerprint: str = "",
+) -> dict[str, Any]:
+    from tow import client_only
+
+    return client_only.send_to_client(
+        content,
+        save_path,
+        client_id,
+        dict(policy),
+        operation_id,
+        preferred_season=preferred_season,
+        request_fingerprint=request_fingerprint,
+    )
+
+
+def get_client_only_result(operation_id: str, *, request_fingerprint: str | None = None) -> dict[str, Any] | None:
+    from tow import client_only
+
+    return client_only.get_result(operation_id, request_fingerprint=request_fingerprint)
+
+
+def advance_client_only(*, limit: int = 4) -> list[dict[str, Any]]:
+    from tow import client_only
+
+    return client_only.advance_pending(limit=limit)
+
+
+def finished_client_only() -> list[dict[str, Any]]:
+    from tow import client_only
+
+    return client_only.finished()
+
+
+def pending_client_only() -> list[str]:
+    from tow import client_only
+
+    return client_only.pending()
+
+
+def cancel_client_only(operation_id: str) -> dict[str, Any]:
+    from tow import client_only
+
+    return client_only.cancel(operation_id)
+
+
+def note_client_only_monitor_failure(error: BaseException) -> bool:
+    from tow.client_only_monitor import observe
+
+    return observe(error)
+
+
+def note_client_only_monitor_recovery() -> bool:
+    from tow.client_only_monitor import observe
+
+    return observe(None)
+
+
+def reconcile_client_only_result(result: Mapping[str, Any]) -> bool:
+    from tow.messages_feed import reconcile_client_only
+
+    return reconcile_client_only(result)
 
 
 def forget_cached_content(url: str) -> None:

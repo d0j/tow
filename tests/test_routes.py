@@ -60,6 +60,8 @@ ROUTES = frozenset(
         ("GET", "/topics/{tid}/edit-panel"),
         ("GET", "/topics/{tid}/edit"),
         ("POST", "/topics/add"),
+        ("GET", "/client-only/{operation_id}"),
+        ("POST", "/client-only/{operation_id}/cancel"),
         ("POST", "/content/resolve"),
         ("GET", "/content/space"),
         ("POST", "/content/snapshot"),
