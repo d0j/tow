@@ -48,6 +48,11 @@ the `installers` workflow on 24.04). The legacy
 `ubuntu-latest` check name is retained for branch protection, but its runner is explicitly
 `ubuntu-24.04`; GitHub's future migration of the floating label cannot remove older-LTS coverage.
 
+The legacy `macos-latest` check names likewise stay stable, while every Apple Silicon job uses the explicit
+`macos-15` ARM64 image: gates, native probes, filesystems, installers, updater, autostart and release smokes.
+Each job verifies its actual ARM64 architecture before testing. The separate extended `macos-15-intel`
+scenario continues to test x64. A new image is adopted explicitly after its runner allocation and full tests pass.
+
 ## Tests
 
 - `uv run --frozen pytest -q` for a quick run (`-n auto` spreads it over every core); the gate runs the suite on

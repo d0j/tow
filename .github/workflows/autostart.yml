@@ -32,13 +32,28 @@ jobs:
       matrix:
         # Both Ubuntu LTS versions: 26.04's systemd too (TC-14).
         os: [windows-latest, macos-latest, ubuntu-24.04, ubuntu-26.04]
-    runs-on: ${{ matrix.os }}
+        include:
+          - os: macos-latest
+            runner: macos-15
+    runs-on: ${{ matrix.runner || matrix.os }}
     # The autostart tests, then an update under the OS manager and its rollback (TC-05).
     timeout-minutes: 70
     env:
       TOW_REAL_AUTOSTART: "1"
       TOW_REAL_AUTOSTART_PORT: "18877"
     steps:
+      - name: Verify native macOS ARM runner
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          machine=$(uname -m)
+          version=$(sw_vers -productVersion)
+          translated=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
+          echo "macOS $version; uname -m: $machine; RUNNER_ARCH: $RUNNER_ARCH; translated: $translated"
+          [ "$RUNNER_OS" = macOS ] && [ "$machine" = arm64 ] && [ "$RUNNER_ARCH" = ARM64 ] && [ "${version%%.*}" = 15 ] && [ "$translated" = 0 ] || {
+            echo "::error::expected native macOS 15 ARM64 without Rosetta"
+            exit 1
+          }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
