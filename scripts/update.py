@@ -164,6 +164,8 @@ RECEIPTS_SINCE = (1, 30, 5)
 CONTENT_REF_SINCE = (1, 32, 0)
 # The first version that can continue or cancel an authorized native file repair.
 REPAIR_SINCE = (1, 35, 0)
+# The first release that preserves finite client-only handoffs AND orphaned outcome evidence.
+CLIENT_ONLY_SINCE = (1, 37, 1)
 # The Windows bundle's start files in <TOW> (scripts/root_files.py writes them).
 ROOT_FILE_NAMES = ("Start TOW.cmd", "Stop TOW.cmd", "Update TOW.cmd")
 TEST_CUT_EXIT = 97
@@ -247,6 +249,12 @@ TEXTS = {
     "repair_restore_pending": (
         "{ref} cannot finish the interrupted data restore safely. Start TOW {since} or newer"
         " to finish recovery before updating; nothing was updated"
+    ),
+    "client_only_pending": (
+        "{ref} lacks the required recovery and rollback safeguards for one-time client handoffs."
+        " Wait for the handoff to finish, cancel it in TOW, or restore access to its saved result,"
+        " then retry; choose {since} or newer"
+        " to continue the handoff. Nothing was updated"
     ),
     "data_unverified": (
         "this install's data/state.json cannot be read ({error}), so it is not known whether {ref} can read it;"
@@ -407,6 +415,57 @@ def data_files(data: Path) -> dict[str, str]:
             if path.is_file() and not path.is_symlink() and _kept(relative):
                 files[relative.as_posix()] = _hash(path)
     return files
+
+
+def _handoff_file(folder: Path, name: str, limit: int) -> bytes:
+    if folder.is_symlink() or (folder.exists() and not folder.is_dir()):
+        raise ValueError("invalid handoff folder")
+    path = folder / name
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or not 0 <= before.st_size <= limit:
+        raise ValueError("invalid handoff file")
+    with path.open("rb") as handle:
+        opened = os.fstat(handle.fileno())
+        if (before.st_dev, before.st_ino, before.st_size) != (opened.st_dev, opened.st_ino, opened.st_size):
+            raise ValueError("handoff changed while opening")
+        raw = handle.read(before.st_size + 1)
+    if len(raw) != before.st_size:
+        raise ValueError("handoff changed while reading")
+    return raw
+
+
+def client_only_pending(data: Path) -> bool:
+    """Fail closed unless the current encrypted journal has a matching terminal projection.
+
+    TOW writes the authenticated journal before this derived, non-secret projection under its
+    persistence lock. A torn pair, an older journal without a projection, or unreadable files
+    never grant permission to abandon an unfinished handoff. This grants no client commands.
+    """
+    folder = data / "run"
+    try:
+        try:
+            raw = _handoff_file(folder, "client-only-adds.enc", 64 * 1024 * 1024)
+        except FileNotFoundError:
+            try:
+                _handoff_file(folder, "client-only-compat.json", 4096)
+            except FileNotFoundError:
+                return False
+            return True
+        marker = _handoff_file(folder, "client-only-compat.json", 4096)
+        value = json.loads(marker.decode("utf-8"))
+        if (
+            not isinstance(value, dict)
+            or set(value) != {"schema", "journal_sha256", "pending"}
+            or type(value["schema"]) is not int
+            or value["schema"] != 1
+            or type(value["pending"]) is not bool
+            or value["journal_sha256"] != hashlib.sha256(raw).hexdigest()
+            or marker != json.dumps(value, sort_keys=True).encode()
+        ):
+            return True
+        return bool(value["pending"])
+    except (OSError, ValueError, TypeError, RecursionError):
+        return True
 
 
 def launcher_env(
@@ -2321,6 +2380,24 @@ class Update:
         ]
         self.refuse_waiting("receipt_pending", waiting, RECEIPTS_SINCE)
 
+    def refuse_pending_client_only(self, target: str) -> None:
+        import tomllib  # Python 3.11+: loaded after main() can explain an older Python
+
+        text = self.code.target_text(target, "pyproject.toml") or ""
+        version = None
+        try:
+            project = tomllib.loads(text).get("project")
+            declared = project.get("version") if isinstance(project, dict) else None
+            if isinstance(declared, str):
+                version = release_version(declared)
+        except (ValueError, RecursionError):
+            pass  # no proven compatible project.version: pending evidence must be checked
+        if version is not None and version >= CLIENT_ONLY_SINCE:
+            return
+        if client_only_pending(self.root / "data"):
+            since = "v" + ".".join(str(part) for part in CLIENT_ONLY_SINCE)
+            raise UpdateError(self.text("client_only_pending", ref=self.ref, since=since))
+
     def undo_live(self, record: Mapping[str, Any]) -> bool:
         """The "Undo" of ``record`` can still be pressed: younger than config.yaml's
         ``flash_ttl_sec`` (tow.config.flash_ttl: 60 when absent or 0, within 15-3600). An expired
@@ -2445,6 +2522,7 @@ class Update:
                     self.refuse_pending_receipts(target)
                     self.refuse_pending_content_refs(target)
                     self.refuse_pending_repairs(target)
+                    self.refuse_pending_client_only(target)
                     self.refuse_unusable_uv_config(target)
                     # Ready to stop TOW, which still runs; nothing is recorded or stopped yet. The
                     # web update's worker lets open pages see the job here (update_worker._run);
@@ -2482,6 +2560,9 @@ class Update:
             try:
                 self.progress("stopping")
                 self.stop()
+                # A request can arrive after the preflight while TOW still serves the form.
+                # Once quiescent no producer can change this journal before code is switched.
+                self.refuse_pending_client_only(target)
                 self.progress("backup")
                 self.take_snapshot(target)
                 # Before anything moves: a switch cut off now is undone with these files.

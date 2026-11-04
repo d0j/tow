@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- Pending one-time client handoffs block a rollback below 1.37.1 until they finish or are cancelled;
+  an unreadable handoff record also refuses the downgrade before TOW stops.
+
 ## [1.37.0] — 2026-11-04
 
 ### Added

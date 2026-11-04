@@ -418,6 +418,8 @@ Settings → **Version and updates**; the version in the corner of every page op
   what to do (usually: run it again).
 - **Going back:** **Install another version or roll back** installs an earlier release, 1.22.21 or newer. A version
   that cannot read the current data (anything before 1.23.0 once 1.23 ran) is refused before TOW stops.
+  Before going below 1.37.1, finish or cancel pending **Torrent client only** handoffs. If their results cannot be
+  read, restore access first: older versions lack the required recovery and rollback safeguards for these handoffs.
 - **Without the page** (TOW started by systemd or launchd, or a version before 1.22.20) use `Update TOW.cmd`,
   `Update TOW.command` (macOS), `update-tow` (Linux) or the command `tow update --ref <tag>` prints:
   [README](../README.md#update-and-backups).

@@ -617,4 +617,5 @@ def advance(operation_id: str) -> Result:
 
 
 def advance_pending(*, limit: int = 4) -> list[Result]:
+    client_only_store.sync_compatibility()
     return [advance(operation_id) for operation_id in pending()[: max(0, min(limit, client_only_store.MAX_RECEIPTS))]]

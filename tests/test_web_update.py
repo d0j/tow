@@ -243,6 +243,104 @@ def test_no_live_repair_does_not_ratchet_the_web_update_minimum(install, monkeyp
     assert web_update.start("1.34.2")["ok"] is True
 
 
+def _handoff_receipt(status):
+    """An authenticated store record, without a native client or watched-topic placeholder."""
+    now = time.time()
+    identity = "a" * 32
+    return {
+        identity: {
+            "operation_id": identity,
+            "status": status,
+            "phase": "checking" if status == "pending" else "done",
+            "created_at": now,
+            "deadline": now + 600,
+            "next_at": now + 5,
+            "add_dispatched": False,
+            "start_dispatched": False,
+            "context": {"client": "default", "endpoint": "b" * 64, "auth": "c" * 64},
+            "client_id": "default",
+            "hashes": ["A" * 40],
+            "hash": "A" * 40,
+            "failures": 0,
+            "save_path": "D:/Synthetic",
+            "install": "d" * 64,
+            "payload": "",
+            "request": "e" * 64,
+        }
+    }
+
+
+@pytest.mark.parametrize("condition", ["pending", "unreadable"])
+@pytest.mark.parametrize("target", ["1.36.0", "1.37.0"])
+def test_older_web_update_refuses_unfinished_or_unknown_handoff_before_any_backup(
+    install, monkeypatch, condition, target
+):
+    from tow import client_only_store, paths
+    from tow.store import load_state
+
+    monkeypatch.setattr(web_update, "__version__", "1.38.0")
+    monkeypatch.setattr(web_update, "create_restore_point", lambda: pytest.fail("handoff refusal precedes backup"))
+    path = paths.run_dir() / "client-only-adds.enc"
+    if condition == "pending":
+        client_only_store.write_entries(_handoff_receipt("pending"))
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"unreadable handoff evidence")
+    before, state = path.read_bytes(), load_state()
+
+    with pytest.raises(web_update.WebUpdateError, match=r"releases\.client_only_pending") as caught:
+        web_update.start(target)
+
+    assert caught.value.params == {}
+    assert install[1] == []
+    assert not (install[0] / "runtime/web-update/job.json").exists()
+    assert path.read_bytes() == before
+    assert load_state() == state
+
+
+@pytest.mark.parametrize("status", [None, "added", "existing", "failed", "cancelled"])
+def test_absent_or_authenticated_terminal_handoffs_allow_an_older_web_update(install, monkeypatch, status):
+    from tow import client_only_store
+
+    monkeypatch.setattr(web_update, "__version__", "1.37.1")
+    if status is not None:
+        client_only_store.write_entries(_handoff_receipt(status))
+
+    assert web_update.start("1.36.0")["ok"] is True
+    assert len(install[1]) == 1
+
+
+@pytest.mark.parametrize("target", ["1.37.1", "1.38.0"])
+def test_a_compatible_web_target_does_not_read_or_repair_handoff_records(install, monkeypatch, target):
+    monkeypatch.setattr(web_update, "__version__", "1.36.0")
+    monkeypatch.setattr(
+        web_update, "_client_only_pending", lambda: pytest.fail("compatible reader needs no floor check")
+    )
+
+    assert web_update.start(target)["ok"] is True
+
+
+@pytest.mark.parametrize("language", ["en", "ru"])
+def test_handoff_rollback_refusal_is_explained_by_the_real_web_endpoint(install, monkeypatch, language):
+    from tow import client_only_store
+    from tow.config import load_config, save_config
+
+    cfg = load_config()
+    cfg["language"] = language
+    save_config(cfg)
+    monkeypatch.setattr(web_update, "__version__", "1.37.1")
+    monkeypatch.setattr(web_update, "create_restore_point", lambda: pytest.fail("no backup on refusal"))
+    monkeypatch.setattr(services, "start_web_update", web_update.start)
+    client_only_store.write_entries(_handoff_receipt("pending"))
+    browser = TestClient(app, headers={"Origin": "http://127.0.0.1"})
+
+    response = browser.post("/updates/install", data={"version": "1.36.0"})
+
+    assert response.status_code == 409
+    assert response.json() == {"ok": False, "error": t("releases.client_only_pending", language)}
+    assert not install[1]
+
+
 def test_backup_failure_never_launches_an_updater(install, monkeypatch):
     def failed():
         raise RestorePointError("synthetic backup failure")

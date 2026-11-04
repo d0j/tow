@@ -437,6 +437,153 @@ def _waiting_for_its_client(install) -> None:
     )
 
 
+def _client_only_projection(install, *, pending: bool) -> None:
+    """The stdlib updater reads the projection; authenticated producer tests bind real receipts."""
+    folder = install["root"] / "data" / "run"
+    folder.mkdir(exist_ok=True)
+    raw = b"opaque encrypted handoff journal: " + str(pending).encode()
+    (folder / "client-only-adds.enc").write_bytes(raw)
+    (folder / "client-only-compat.json").write_text(
+        json.dumps(
+            {"schema": 1, "journal_sha256": hashlib.sha256(raw).hexdigest(), "pending": pending}, sort_keys=True
+        ),
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize(
+    ("version", "pending", "refused"),
+    [
+        ("1.36.0", True, True),
+        ("1.36.0", False, False),
+        ("1.37.0", True, True),
+        ("1.37.0", False, False),
+        ("1.37.1", True, False),
+    ],
+)
+def test_client_only_handoff_refuses_only_an_incompatible_target_while_pending(install, version, pending, refused):
+    _client_only_projection(install, pending=pending)
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", version)
+    if refused:
+        with pytest.raises(updater.UpdateError, match="one-time client handoff") as error:
+            work.refuse_pending_client_only(f"v{version}")
+        assert "v1.37.1" in str(error.value)
+    else:
+        work.refuse_pending_client_only(f"v{version}")
+
+
+def test_pending_client_only_handoff_refuses_rollback_before_stop_or_data_changes(install, github):
+    _client_only_projection(install, pending=True)
+    github.release("v1.36.0", tarball("1.36.0", extra={"src/tow/store.py": b"STATE_SCHEMA_VERSION = 2\n"}))
+    machine = Machine(install["app"], github)
+    code, lines = run(machine, "v1.36.0")
+    assert code == 2
+    assert machine.calls == []
+    assert "one-time client handoff" in lines[-1]
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert not (install["root"] / "backup").exists()
+    assert not (install["root"] / "update-state.json").exists()
+    assert leftovers(install) == []
+
+
+@pytest.mark.parametrize(("version", "refused"), [("1.37.0", True), ("1.37.1", False)])
+def test_orphan_evidence_requires_a_reader_that_preserves_the_outcome_barrier(install, version, refused):
+    _client_only_projection(install, pending=False)
+    (install["root"] / "data" / "run" / "client-only-adds.enc").unlink()
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", version)
+    if refused:
+        with pytest.raises(updater.UpdateError, match="one-time client handoff"):
+            work.refuse_pending_client_only(f"v{version}")
+    else:
+        work.refuse_pending_client_only(f"v{version}")
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "version = '1.36.0'",
+        "version = 'unknown'",
+        'dynamic = ["version"]',
+        "version = '1.37.0-invalid'",
+        "",
+        "version = [",
+    ],
+)
+def test_pending_client_only_handoff_requires_a_proven_compatible_target(install, declaration):
+    _client_only_projection(install, pending=True)
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", "1.36.0")
+    (install["root"] / "app.new" / "pyproject.toml").write_text(f"[project]\n{declaration}\n", encoding="utf-8")
+    with pytest.raises(updater.UpdateError, match="one-time client handoff"):
+        work.refuse_pending_client_only("v1.36.0")
+
+
+def test_tool_version_cannot_impersonate_a_compatible_project_version(install):
+    _client_only_projection(install, pending=True)
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", "1.36.0")
+    (install["root"] / "app.new" / "pyproject.toml").write_text(
+        "[tool.example]\nversion='2.0.0'\n[project]\nversion='1.36.0'\n", encoding="utf-8"
+    )
+    with pytest.raises(updater.UpdateError, match="one-time client handoff"):
+        work.refuse_pending_client_only("v1.36.0")
+
+
+def test_compatible_single_quoted_target_never_reads_handoff_store(install, monkeypatch):
+    work = _target(install, b"STATE_SCHEMA_VERSION = 2\n", "1.37.1")
+    (install["root"] / "app.new" / "pyproject.toml").write_text("[project]\nversion='1.37.1'\n", encoding="utf-8")
+    monkeypatch.setattr(updater, "client_only_pending", lambda *_args: pytest.fail("compatible version needs no floor"))
+    work.refuse_pending_client_only("v1.37.1")
+
+
+def test_handoff_created_after_preflight_restarts_old_version_without_snapshot_or_switch(install, github, monkeypatch):
+    _client_only_projection(install, pending=False)
+    before = (install["root"] / "data" / "state.json").read_bytes()
+    github.release("v1.36.0", tarball("1.36.0", extra={"src/tow/store.py": b"STATE_SCHEMA_VERSION = 2\n"}))
+    machine = Machine(install["app"], github)
+    stop = machine.request_stop
+
+    def stop_after_late_request():
+        _client_only_projection(install, pending=True)
+        stop()
+
+    monkeypatch.setattr(machine, "request_stop", stop_after_late_request)
+    code, lines = run(machine, "v1.36.0")
+    assert code == 1
+    assert any("one-time client handoff" in line for line in lines)
+    assert machine.calls == ["stop request", "spawn tow run 1.22.0"]
+    assert machine.up
+    assert (install["root"] / "data" / "state.json").read_bytes() == before
+    assert names(install["app"]) == [".venv", "marker-1.22.0", "pyproject.toml"]
+    assert not (install["root"] / "backup").exists()
+    assert state(install)["service_running"] is True
+    assert leftovers(install) == []
+
+
+@pytest.mark.parametrize(
+    "fault", ["missing", "stale", "schema", "bool_schema", "pending_type", "duplicate", "oversize"]
+)
+def test_standalone_rollback_never_trusts_unknown_or_stale_projection(install, fault):
+    _client_only_projection(install, pending=False)
+    folder = install["root"] / "data" / "run"
+    marker = folder / "client-only-compat.json"
+    value = json.loads(marker.read_bytes())
+    if fault == "missing":
+        marker.unlink()
+    elif fault == "stale":
+        (folder / "client-only-adds.enc").write_bytes(b"new pending encrypted content")
+    elif fault == "duplicate":
+        marker.write_bytes(marker.read_bytes().replace(b'"pending": false', b'"pending": true, "pending": false'))
+    elif fault == "oversize":
+        marker.write_bytes(b"x" * 4097)
+    else:
+        value[{"schema": "schema", "bool_schema": "schema", "pending_type": "pending"}[fault]] = {
+            "schema": 99,
+            "bool_schema": True,
+            "pending_type": "false",
+        }[fault]
+        marker.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+    assert updater.client_only_pending(install["root"] / "data") is True
+
+
 def test_going_below_1_30_5_while_a_client_checks_files_is_refused_before_tow_stops(install, github):
     """A version older than 1.30.5 knows no client file check: it takes the topic for done,
     never applies its file choice and never starts it (started by hand, every file downloads).
