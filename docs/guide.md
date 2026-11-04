@@ -313,6 +313,10 @@ once it is connected, **Send a test** sends a test message and **Disconnect** re
   when scheduled checks or nightly backups fall behind. On Windows it tells a restart from a shutdown by the kind
   Windows records for it, whatever the language of Windows; when that record is missing or unclear it says “shut
   down or restarted”. On Linux and macOS it does not tell them apart.
+  A confirmed normal shutdown or sleep with a healthy, timely return is informational; an unknown cause,
+  crash or continuing service/check failure stays a warning. In supervised automatic checks, a local client's
+  refused connection can wait for startup for at most five minutes after boot. Its observed connection remains
+  unavailable; after that deadline, or for a remote client, manual check or other error, the normal failure is shown.
 
 ## History and undo
 

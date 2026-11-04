@@ -5,6 +5,12 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- A confirmed normal computer restart or sleep followed by a healthy return is informational.
+  Automatic checks give a local client five minutes after boot to start without a false down/up alert pair;
+  persistent refusals, manual checks, remote clients and unexpected outages remain visible failures.
+
 ## [1.36.0] — 2026-11-03
 
 ### Added

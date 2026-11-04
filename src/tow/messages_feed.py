@@ -198,6 +198,7 @@ MATRIX: dict[str, tuple[str, Severity]] = {
     "check_site_skipped": (CHECKS, WARN),
     "qbit_unreachable": (CHECKS, ERR),
     "client_checked": (CHECKS, OK),
+    "client_starting": (CHECKS, INFO),
     "notifier_test": (DELIVERY, lambda rec: "ok" if rec.get("ok") is True else "err"),
     "settings_portable_check": (ACTIONS, OK),
     "action_feedback": (ACTIONS, lambda rec: str(rec.get("feedback_kind") or "")),
@@ -280,6 +281,7 @@ MATRIX: dict[str, tuple[str, Severity]] = {
     ),
     **dict.fromkeys(("backup_failed", "backup_restore_failed", "backup_restore_recovery_failed"), (OPERATIONS, ERR)),
     "backup_recovered": (OPERATIONS, OK),
+    "watchdog_notice": (OPERATIONS, INFO),
     "settings_update_started": (UPDATES, INFO),
     "settings_update_refused": (UPDATES, ERR),
     "settings_update_result": (UPDATES, _update_result),
@@ -926,6 +928,8 @@ def _href(entry: Mapping[str, Any]) -> str:
     rec, category = entry["rec"], entry["category"]
     if rec["_kind"] == "action_feedback":
         return _feedback_href(rec.get("feedback_href"))
+    if rec["_kind"] == "client_starting":
+        return "/history?group=changes"
     if rec["_kind"] in {"qbit_unreachable", "client_checked"}:
         if _TOPIC_ID.fullmatch(str(rec.get("client_id") or "")):
             client = str(rec["client_id"])

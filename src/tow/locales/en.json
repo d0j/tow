@@ -1574,9 +1574,11 @@
       "client_stop_failed": "not stopped in client",
       "client_start_failed": "not started in client",
       "client_unreachable": "torrent client unreachable",
+      "client_starting": "waiting for the torrent client to start",
       "reconcile_failed": "client check failed",
       "revision_updated": "new version",
       "watchdog_alert": "watchdog alert",
+      "watchdog_notice": "TOW service status",
       "watchdog_service_start": "watchdog started TOW",
       "site_edit": "site edited",
       "download_history_rebuilt": "download history started anew",
@@ -2370,6 +2372,9 @@
     "repair_restore_pending": "{ref} cannot finish the interrupted data restore safely. Start TOW {since} or newer to finish recovery before updating; nothing was updated"
   },
   "watchdog": {
+    "notice": {
+      "outage": "TOW is running again; pause {start}–{end} ({duration}): {cause}"
+    },
     "cause": {
       "hung": "the process hung: port {port} is busy but does not answer",
       "crashed": "the process crashed, last error: {error}",

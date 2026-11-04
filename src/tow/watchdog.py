@@ -386,15 +386,41 @@ def _outage(p: _Pass, probes: Probes, machine: Machine | None) -> None:
     if not isinstance(last_pass, (int, float)) or p.now() - last_pass <= OUTAGE_GAP_SEC:
         return
     asleep = p.previous.get("asleep_sec")
+    recorded = probes.shutdown_events(float(last_pass), p.now()) if machine and machine.boot_ts > last_pass else []
+    # Windows writes 41/6008 while the next boot is starting, after boot_ts. A prior
+    # shutdown request cannot make that later crash evidence informational.
+    events = [
+        item
+        for item in recorded
+        if machine is not None
+        and (at := epoch(item.get("ts"))) is not None
+        and (at <= machine.boot_ts or item.get("id") in (41, 6008))
+    ]
     why = outage_cause(
         since_ts=float(last_pass),
         now_ts=p.now(),
         now_machine=machine,
         asleep_before=float(asleep) if isinstance(asleep, (int, float)) else None,
-        events=probes.shutdown_events,
+        events=lambda _start, _end: events,
         lang=p.lang,
     )
     p.report["outage"] = {"from": int(last_pass), "to": int(p.now()), "cause": why}
+    # A known clean restart, followed promptly by a healthy TOW, is information.
+    # Unknown gaps, crashes and a delayed return still need investigation.
+    returned = max(machine.boot_ts, machine.logon_ts or 0) if machine else 0
+    clean_boot = bool(
+        events
+        and len(events) == len(recorded)
+        and events[-1].get("id") == 1074
+        and not any(e.get("id") in (41, 6008) for e in events)
+    )
+    slept = machine.asleep_sec - asleep if machine and isinstance(asleep, (int, float)) else 0
+    expected_sleep = bool(machine and machine.boot_ts <= last_pass and slept >= max(0.5 * (p.now() - last_pass), 600))
+    wake = p.report.get("wake_ts")
+    recent = (
+        0 <= p.now() - returned <= 600 if clean_boot else isinstance(wake, (int, float)) and 0 <= p.now() - wake <= 600
+    )
+    p.report["outage"]["expected"] = bool((clean_boot or expected_sleep) and recent)
     p.report["alerts"].append(
         t(
             "watchdog.alert.outage",
@@ -407,14 +433,38 @@ def _outage(p: _Pass, probes: Probes, machine: Machine | None) -> None:
     )
 
 
+def _unobserved_cleanup_monitor(key: str, report: dict[str, Any]) -> bool:
+    cleanup = next((name for name in ("backup_cleanup", "restore_point_cleanup") if key.startswith(name)), None)
+    return bool(
+        cleanup
+        and key.endswith("_monitoring")
+        and (
+            report[f"{cleanup}_legacy_migration"]
+            or (key == "backup_cleanup_monitoring" and not report["backup_cleanup_previously_known"])
+        )
+    )
+
+
+def _informational(p: _Pass, current: dict[str, bool]) -> bool:
+    report = p.report
+    expected = isinstance(report.get("outage"), dict) and report["outage"].get("expected") is True
+    recovered = any(p.previous.get(key) is False and ok is True for key, ok in current.items())
+    return bool(
+        report["service_ok"]
+        and report["checks_ok"]
+        and report["monitoring_ok"]
+        and not report.get("data_lost")
+        and all(ok for key, ok in current.items() if not _unobserved_cleanup_monitor(key, report))
+        and (expected or (recovered and not report.get("outage")))
+    )
+
+
 def _change_alerts(p: _Pass, current: dict[str, bool]) -> None:
     report, previous = p.report, p.previous
     for key, ok in current.items():
         cleanup_key = next((name for name in ("backup_cleanup", "restore_point_cleanup") if key.startswith(name)), None)
-        if cleanup_key and key.endswith("_monitoring") and report[f"{cleanup_key}_legacy_migration"]:
-            continue  # readable legacy metadata is neither a folder outage nor cleanup recovery
-        if key == "backup_cleanup_monitoring" and not report["backup_cleanup_previously_known"]:
-            continue  # there is no prior cleanup fact to lose; copy-status errors are reported separately
+        if _unobserved_cleanup_monitor(key, report):
+            continue  # unbound cleanup has no prior fact to lose or claim as recovered
         before = previous.get(key)
         if key == "backup" and previous.get("backup_watch_location", previous.get("backup_cleanup_location")) not in (
             None,
@@ -513,9 +563,6 @@ def _remember(p: _Pass, current: dict[str, bool], machine: Machine | None, cfg: 
         saved["down_since"] = (
             saved.get("failed_since", int(p.now())) if previous.get("service", True) else previous.get("down_since")
         )
-    problem = {"at": int(p.now()), "text": "\n".join(report["alerts"])} if report["alerts"] else None
-    if problem or previous.get("last_problem"):
-        saved["last_problem"] = problem or previous.get("last_problem")
     from tow.delivery import stage_text
     from tow.store import load_state, persistence_lock, save_state
 
@@ -543,7 +590,37 @@ def _remember(p: _Pass, current: dict[str, bool], machine: Machine | None, cfg: 
             if state.get("watchdog_notice_revision") != token:
                 stage_text(state, "\n".join(report["alerts"]), cfg=cfg, operation_id="watchdog")
                 state["watchdog_notice_revision"] = token
+                state["watchdog_notice_observation"] = {
+                    "revision": token,
+                    "at": int(p.now()),
+                    "notice": report.get("notice") is True,
+                    "alerts": list(report["alerts"]),
+                }
                 save_state(state)
+            else:
+                observed = state.get("watchdog_notice_observation")
+                if (
+                    isinstance(observed, dict)
+                    and observed.get("revision") == token
+                    and type(observed.get("notice")) is bool
+                    and (stamp := epoch(observed.get("at"))) is not None
+                    and stamp <= p.now()
+                    and isinstance(messages := observed.get("alerts"), list)
+                    and 0 < len(messages) <= 16
+                    and all(isinstance(item, str) and len(item) <= 4096 for item in messages)
+                ):
+                    # A retry of this exact observation keeps its first message and
+                    # severity, even when the diagnostic write outlasted boot grace.
+                    report["alerts"] = list(messages)
+                    report["notice"] = observed["notice"]
+                    report["notice_at"] = int(stamp)
+        problem = (
+            {"at": report.get("notice_at", int(p.now())), "text": "\n".join(report["alerts"])}
+            if report["alerts"]
+            else None
+        )
+        if problem or previous.get("last_problem"):
+            saved["last_problem"] = problem or previous.get("last_problem")
         _save_state(saved)
     return True
 
@@ -623,6 +700,16 @@ def run_watchdog(
         current["service"] = previous.get("service", True)  # the first failed pass: not said yet
     _outage(p, probes, machine)
     _change_alerts(p, current)
+    report["notice"] = _informational(p, current)
+    if report["notice"] and (outage := report.get("outage")):
+        report["alerts"][0] = t(
+            "watchdog.notice.outage",
+            p.lang,
+            start=clock(outage["from"]),
+            end=clock(outage["to"]),
+            duration=duration(outage["to"] - outage["from"], p.lang),
+            cause=outage["cause"],
+        )
     _remember(p, current, machine, cfg)
 
     heartbeat = str(cfg.get("heartbeat_url") or "").strip()
@@ -654,7 +741,12 @@ def run_watchdog(
             delivered = False
             report["held"] = True
         report["delivered"] = delivered
-        log_event("watchdog_alert", alerts=report["alerts"], delivered=delivered, how="auto")
+        log_event(
+            "watchdog_notice" if report["notice"] else "watchdog_alert",
+            alerts=report["alerts"],
+            delivered=delivered,
+            how="auto",
+        )
     return report
 
 

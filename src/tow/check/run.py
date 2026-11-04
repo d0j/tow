@@ -85,6 +85,7 @@ def record_check_failure(error: str | BaseException, *, how: str = "auto", whole
             "history_trimmed_at",
             "ping_failed",
             "clients_empty",
+            "clients_starting",
         ):
             if kept in previous:
                 health[kept] = previous[kept]
@@ -365,6 +366,8 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False, *, hist
             health["ping_failed"] = previous_health["ping_failed"]
     if empty := pool.empty_counts():
         health["clients_empty"] = empty
+    if starting := pool.starting_clients():
+        health["clients_starting"] = starting
     disk = load_state()
     edited = {
         str(topic.get("id")): changed
@@ -516,6 +519,11 @@ def _run_check(
         previous_clients_ok=dict(previous_health.get("clients_ok") or {}),
         expect_torrents=_clients_expected_to_list(state, want, default_id),
         previous_empty={str(k): int(v) for k, v in as_dict(previous_health.get("clients_empty")).items()},
+        previous_starting=frozenset(
+            value for value in previous_health.get("clients_starting", []) if isinstance(value, str)
+        )
+        if isinstance(previous_health.get("clients_starting", []), list)
+        else frozenset(),
         observe_failure=observed_failure,
     )
     held_clients = client_waits.deferred_clients(
