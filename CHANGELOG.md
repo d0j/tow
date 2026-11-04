@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- Read the canonical FAT volume identity on macOS so remounting the same disk does not look like
+  a replacement. An unavailable canonical identity stays unknown.
+
 ## [1.37.1] — 2026-11-04
 
 ### Fixed

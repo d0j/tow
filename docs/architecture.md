@@ -468,6 +468,10 @@ Stable names other modules build on.
   - `browser_executables()` — Chromium-family browsers found, best first;
   - `bring_to_front(pid)` — Windows only; no-op elsewhere;
   - `protected_folders()` — folders a download or backup must never go to;
+  - `volume(path)` → `Volume(identity, kind)` or `None`: the mounted volume and its stable identity.
+    On macOS FAT, the read-only, bounded `diskutil info -plist` probe supplies the canonical volume UUID;
+    the kernel UUID may change on remount. An unavailable canonical FAT UUID remains unknown, while
+    other local macOS file systems keep the `getattrlist` fast path and `diskutil` fallback;
   - `folder_shared(path)` → bool | None: other accounts of this computer may open it;
     `root_shared(path)` → bool | None: the same question for the install root (Linux, macOS:
     every account may write in it); `make_private(path, created=False)` → bool: only this

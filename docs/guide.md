@@ -175,6 +175,9 @@ disk, accept it in Needs attention (**Same disk — accept**, on the computer ru
 `tow check --apply --rebind-volumes` once the files are on the new one: only a disk a file of the topic is found on now
 is accepted.
 
+After updating to 1.37.1, a FAT disk on macOS may need **Same disk — accept** once because TOW now reads
+its permanent ID. Confirm that it is the expected disk and its files are present before accepting it.
+
 When a new version arrives while the previous one is still seeding the same file, TOW does not touch the old
 torrent. It asks you: **Stop the previous one and add** stops the old torrent (its files stay) and adds the new one.
 To have TOW do that by itself, tick **Stop the previous version of a topic by itself** in Settings → Checks (off by
