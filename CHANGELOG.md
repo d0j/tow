@@ -5,6 +5,11 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+### Fixed
+
+- Pin all Apple Silicon CI and release checks to the supported macOS 15 ARM64 image, preserving the
+  complete required test suite and stable check names when the floating macOS image cannot allocate runners.
+
 ## [1.37.1] — 2026-11-04
 
 ### Fixed

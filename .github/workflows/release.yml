@@ -166,9 +166,23 @@ jobs:
         include:
           - os: ubuntu-latest
             runner: ubuntu-24.04
+          - os: macos-latest
+            runner: macos-15
     runs-on: ${{ matrix.runner || matrix.os }}
     timeout-minutes: 20
     steps:
+      - name: Verify native macOS ARM runner
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          machine=$(uname -m)
+          version=$(sw_vers -productVersion)
+          translated=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
+          echo "macOS $version; uname -m: $machine; RUNNER_ARCH: $RUNNER_ARCH; translated: $translated"
+          [ "$RUNNER_OS" = macOS ] && [ "$machine" = arm64 ] && [ "$RUNNER_ARCH" = ARM64 ] && [ "${version%%.*}" = 15 ] && [ "$translated" = 0 ] || {
+            echo "::error::expected native macOS 15 ARM64 without Rosetta"
+            exit 1
+          }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.source.outputs.commit }}
@@ -188,9 +202,24 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-24.04, macos-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - os: macos-latest
+            runner: macos-15
+    runs-on: ${{ matrix.runner || matrix.os }}
     timeout-minutes: 75
     steps:
+      - name: Verify native macOS ARM runner
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          machine=$(uname -m)
+          version=$(sw_vers -productVersion)
+          translated=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
+          echo "macOS $version; uname -m: $machine; RUNNER_ARCH: $RUNNER_ARCH; translated: $translated"
+          [ "$RUNNER_OS" = macOS ] && [ "$machine" = arm64 ] && [ "$RUNNER_ARCH" = ARM64 ] && [ "${version%%.*}" = 15 ] && [ "$translated" = 0 ] || {
+            echo "::error::expected native macOS 15 ARM64 without Rosetta"
+            exit 1
+          }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.source.outputs.commit }}

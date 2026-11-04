@@ -1031,7 +1031,8 @@ def test_a_release_waits_for_the_real_autostart_of_its_commit_and_never_for_a_sk
     assert call["inputs"]["strict"]["type"] == "boolean"
     assert call["inputs"]["strict"]["default"] is False
     job = flow["jobs"]["autostart"]
-    assert job["steps"][0]["with"] == {"ref": "${{ inputs.ref }}", "persist-credentials": False}
+    checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"] == {"ref": "${{ inputs.ref }}", "persist-credentials": False}
     systemd = next(step for step in job["steps"] if "loginctl enable-linger" in step.get("run", ""))
     assert systemd["env"] == {"STRICT": "${{ inputs.strict }}"}
     run = systemd["run"]
@@ -1118,8 +1119,11 @@ def test_a_docs_only_pull_request_skips_the_heavy_work_but_reports_every_check()
         assert job["needs"] == "changes"
         assert job["if"] == "${{ !cancelled() }}"  # also when `changes` failed: then everything runs
         assert "!= 'false'" in job["env"]["RUN"]
-        assert "if" not in job["steps"][0]  # the checkout
-        assert all(step["if"].startswith("env.RUN == 'true'") for step in job["steps"][1:]), job_id
+        checkout = next(
+            i for i, step in enumerate(job["steps"]) if step.get("uses", "").startswith("actions/checkout@")
+        )
+        assert "if" not in job["steps"][checkout]
+        assert all(step["if"].startswith("env.RUN == 'true'") for step in job["steps"][checkout + 1 :]), job_id
     assert "matrix.os == 'ubuntu-latest'" in jobs["gate"]["env"]["RUN"]
     assert "ubuntu-latest" not in jobs["install"]["env"]["RUN"]
 
@@ -1364,16 +1368,121 @@ def test_linux_runners_keep_both_lts_versions_without_renaming_required_checks(w
     job = flow["jobs"][job_id]
     matrix = job["strategy"]["matrix"]
     overrides = {row["os"]: row["runner"] for row in matrix.get("include", [])}
-    assert overrides == {"ubuntu-latest": "ubuntu-24.04"}
+    assert overrides == {"ubuntu-latest": "ubuntu-24.04", "macos-latest": "macos-15"}
     assert len(matrix["os"]) == len(set(matrix["os"]))
     actual = {overrides.get(label, label) for label in matrix["os"]}
-    expected = {"ubuntu-24.04", "ubuntu-26.04", "macos-latest"}
+    expected = {"ubuntu-24.04", "ubuntu-26.04", "macos-15"}
     if job_id == "gate":
         expected.add("windows-latest")
     assert actual == expected
     assert job["runs-on"] == "${{ matrix.runner || matrix.os }}"
     prefix = "gate" if job_id == "gate" else "install.sh"
     assert job["name"] == f"{prefix} (${{{{ matrix.os }}}})"
+
+
+_MACOS_ARM_JOBS = (
+    ("ci", "gate"),
+    ("ci", "install"),
+    ("real", "probes"),
+    ("real", "filesystems"),
+    ("installers", "update"),
+    ("release", "posix"),
+    ("release", "update"),
+    ("autostart", "autostart"),
+    ("smokes", "crash"),
+    ("smokes", "macos"),
+)
+
+
+@pytest.mark.parametrize(("workflow", "job_id"), _MACOS_ARM_JOBS)
+def test_every_macos_arm_job_uses_the_stable_native_pool_without_renaming_checks(workflow, job_id):
+    job = _workflow(workflow)[1]["jobs"][job_id]
+    matrix = job.get("strategy", {}).get("matrix")
+    guard = job["steps"][0]
+    assert guard["name"] == "Verify native macOS ARM runner"
+    assert guard["shell"] == "bash"
+    if matrix is None:
+        assert (workflow, job_id) == ("smokes", "macos")
+        assert job["runs-on"] == "macos-15"
+        assert "if" not in guard
+    else:
+        assert matrix["os"].count("macos-latest") == 1
+        overrides = [row for row in matrix.get("include", []) if row["os"] == "macos-latest"]
+        assert overrides == [{"os": "macos-latest", "runner": "macos-15"}]
+        assert job["runs-on"] == "${{ matrix.runner || matrix.os }}"
+        # Match the intended matrix leg, not the runner that may have been assigned wrongly.
+        assert guard["if"] == "matrix.os == 'macos-latest'"
+        assert "${{ matrix.os }}" in job["name"]
+    # Execute the common guard below; no job can silently weaken one copy of it.
+    assert guard["run"] == _workflow("ci")[1]["jobs"]["gate"]["steps"][0]["run"]
+    assert next(i for i, step in enumerate(job["steps"]) if step.get("uses", "").startswith("actions/checkout@")) > 0
+
+
+def test_the_native_arm_inventory_covers_all_workflows_and_keeps_the_intel_diagnostic_separate():
+    found = set()
+    for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        for job_id, job in _workflow(path.stem)[1]["jobs"].items():
+            matrix = job.get("strategy", {}).get("matrix", {})
+            labels = [*matrix.get("os", []), *(row.get("os", "") for row in matrix.get("include", []))]
+            if isinstance(runner := job.get("runs-on"), str):
+                labels.append(runner)
+            if any(label.startswith("macos-") and not label.endswith("-intel") for label in labels):
+                found.add((path.stem, job_id))
+    assert found == set(_MACOS_ARM_JOBS)
+    arch = _workflow("smokes")[1]["jobs"]["arch"]
+    assert arch["runs-on"] == "${{ matrix.os }}"
+    assert arch["strategy"]["matrix"]["include"] == [
+        {"os": "ubuntu-24.04-arm", "machine": "aarch64"},
+        {"os": "macos-15-intel", "machine": "x86_64"},
+    ]
+
+
+@pytest.mark.allow_system  # the actual guard, with fake platform commands and no network or native OS changes
+@pytest.mark.parametrize(
+    ("runner_os", "machine", "runner_arch", "version", "translated", "accepted"),
+    [
+        ("macOS", "arm64", "ARM64", "15.7.1", "0", True),
+        ("Linux", "arm64", "ARM64", "15.7.1", "0", False),
+        ("macOS", "x86_64", "ARM64", "15.7.1", "0", False),
+        ("macOS", "arm64", "X64", "15.7.1", "0", False),
+        ("macOS", "arm64", "ARM64", "26.0", "0", False),
+        ("macOS", "arm64", "ARM64", "15.7.1", "1", False),
+        ("macOS", "arm64", "ARM64", "", "0", False),
+        ("macOS", "arm64", "ARM64", "15.7.1", None, True),
+    ],
+    ids=[
+        "native",
+        "wrong-os",
+        "wrong-cpu",
+        "wrong-runner-arch",
+        "wrong-image",
+        "rosetta",
+        "unknown-image",
+        "native-without-rosetta-key",
+    ],
+)
+def test_the_native_macos_guard_refuses_wrong_platform_facts(
+    tmp_path, runner_os, machine, runner_arch, version, translated, accepted
+):
+    shell, path = _sh_with_stubs(
+        tmp_path,
+        {
+            "uname": f'[ "$1" = -m ] || exit 1\nprintf "%s\\n" "{machine}"',
+            "sw_vers": f'[ "$1" = -productVersion ] || exit 1\nprintf "%s\\n" "{version}"',
+            "sysctl": "exit 1" if translated is None else f'printf "%s\\n" "{translated}"',
+        },
+    )
+    run = _workflow("ci")[1]["jobs"]["gate"]["steps"][0]["run"]
+    done = subprocess.run(
+        [shell, "-e", "-c", run],
+        env={**os.environ, "PATH": path, "RUNNER_OS": runner_os, "RUNNER_ARCH": runner_arch},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert done.returncode == (0 if accepted else 1), done.stdout + done.stderr
+    assert ("::error::expected native macOS 15 ARM64 without Rosetta" in done.stdout) is not accepted
 
 
 def test_release_archive_and_publish_use_a_pinned_linux_runner():
