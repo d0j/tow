@@ -5,6 +5,7 @@ ownership and relocation checks too."""
 
 from __future__ import annotations
 
+import os
 import re
 import socket
 import ssl
@@ -12,11 +13,13 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 import httpx
 import requests
 
+from tow import clock, platform
 from tow.clients import factory as client_factory
 from tow.clients.spec import TorrentClientAdapter
 from tow.clients.state import is_stopped, matches_hash
@@ -412,6 +415,7 @@ def _open_client(cfg: dict[str, Any], secrets: dict[str, Any], client_id: str, *
 
 # How many checks in a row a client that lists nothing is taken for one still starting.
 EMPTY_CLIENT_CHECKS = 2
+CLIENT_BOOT_GRACE_SEC = 300
 
 
 def _still_starting(error: Exception) -> bool:
@@ -442,6 +446,8 @@ class ClientPool:
     expect_torrents: frozenset[str] = frozenset()
     # How many checks in a row each client listed nothing (before this run, and with it).
     previous_empty: dict[str, int] = field(default_factory=dict)
+    previous_starting: frozenset[str] = frozenset()
+    starting: set[str] = field(default_factory=set)
     empty: dict[str, int] = field(default_factory=dict)
     # The clients this run pinged: only their count is this run's, the others keep theirs.
     pinged: set[str] = field(default_factory=set)
@@ -472,7 +478,60 @@ class ClientPool:
 
     def _was_starting(self, client_id: str) -> bool:
         """The last check found the client still loading its torrents (not down: never said so)."""
-        return int(self.previous_empty.get(client_id) or 0) > 0
+        return int(self.previous_empty.get(client_id) or 0) > 0 or client_id in self.previous_starting
+
+    def _starting_after_boot(self, client_id: str, secrets: dict[str, Any], error: Exception) -> bool:
+        """Only a local refused socket in a live supervised automatic check may be starting."""
+        self.pinged.add(client_id)
+        if (
+            not self.apply
+            or self.how not in {"auto", "retry", "timer"}
+            or _transport_reason(error) != "doctor.reason.refused"
+        ):
+            return False
+        from tow.supervisor import layout
+        from tow.supervisor.jobs import BY_NAME
+
+        try:
+            if not client_factory.on_this_computer(self.cfg, secrets, client_id):
+                return False
+            now = clock.machine_now().timestamp()
+            boot = platform.current().boot_time(now)
+            report = layout.status()
+            job = report.get("job")
+            if (
+                not isinstance(job, dict)
+                or report.get("stopping")
+                or type(job.get("pid")) is not int
+                or job.get("pid") != os.getpid()
+            ):
+                return False
+            spec = BY_NAME.get(str(job.get("name") or ""))
+            if (
+                spec is None
+                or spec.name not in {"check", "timer", "site_retry", "progress", "space"}
+                or spec.timeout_sec is None
+            ):
+                return False
+            deadline = datetime.fromisoformat(str(job.get("deadline")))
+            since = datetime.fromisoformat(str(job.get("since")))
+            active = bool(
+                deadline.tzinfo is not None
+                and since.tzinfo is not None
+                and since.timestamp() <= now < deadline.timestamp()
+                and abs(deadline.timestamp() - since.timestamp() - spec.timeout_sec) <= 1
+            )
+            recent = (
+                isinstance(boot, (float, int))
+                and not isinstance(boot, bool)
+                and 0 <= now - boot < CLIENT_BOOT_GRACE_SEC
+            )
+        except AttributeError, OSError, ValueError, TypeError, OverflowError:
+            return False
+        if active and recent:
+            self.starting.add(client_id)
+            return True
+        return False
 
     def _client_event(self, client_id: str, kind: str, title: str = "") -> None:
         self.batch.queue(
@@ -492,15 +551,21 @@ class ClientPool:
                 e = self.observe_failure(client_id, e)
             self.ping = str(e) if _still_starting(e) else f"down: {e}"
             self.errors[client_id] = e
+            starting = self._starting_after_boot(client_id, secrets, e)
             self.record(
-                "client_unreachable",
+                "client_starting" if starting else "client_unreachable",
                 component="client",
                 integration_id=client_id,
                 client_kind="unknown",
                 **error_fields(e),
                 how=self.how,
             )
-            if self.notify and self.previous_qbit_ok is not False and not _still_starting(e):
+            if (
+                self.notify
+                and not starting
+                and not _still_starting(e)
+                and (self.previous_qbit_ok is not False or client_id in self.previous_starting)
+            ):
                 self._client_event(client_id, "qbit_down")
             elif (
                 self.notify
@@ -528,10 +593,20 @@ class ClientPool:
                 e = self.observe_failure(wanted, e)
             self.errors[wanted] = e
             self.ok[wanted] = _still_starting(e)
+            starting = self._starting_after_boot(wanted, secrets, e)
             self.record(
-                "client_unreachable", component="client", integration_id=wanted, **error_fields(e), how=self.how
+                "client_starting" if starting else "client_unreachable",
+                component="client",
+                integration_id=wanted,
+                **error_fields(e),
+                how=self.how,
             )
-            if self.notify and self.previous_clients_ok.get(wanted) is not False and not _still_starting(e):
+            if (
+                self.notify
+                and not starting
+                and not _still_starting(e)
+                and (self.previous_clients_ok.get(wanted) is not False or wanted in self.previous_starting)
+            ):
                 self._client_event(wanted, "qbit_down", _client_title(self.cfg, wanted))
             return wanted, None
         self.clients[wanted] = adapter
@@ -559,6 +634,13 @@ class ClientPool:
         keeps its earlier one (a check of another client's topic must not restart its count)."""
         kept = {k: v for k, v in self.previous_empty.items() if k not in self.pinged and v > 0}
         return {**kept, **self.empty}
+
+    def starting_clients(self) -> list[str]:
+        """A run asking another client cannot erase an unannounced startup observation."""
+        configured = {
+            str(row["id"]) for row in client_factory.client_configurations(self.cfg) if row.get("enabled", True)
+        }
+        return sorted(((set(self.previous_starting) - self.pinged) | self.starting) & configured)
 
     def health(self) -> dict[str, bool]:
         """Every client's state for the header: the earlier ones of the clients still configured,

@@ -121,6 +121,7 @@ class Health(TypedDict, total=False):
     qbit_ok: bool
     clients_ok: dict[str, bool]
     clients_empty: dict[str, int]  # client -> checks in a row it listed no torrent
+    clients_starting: list[str]  # local boot-time refusals not announced as a downtime
     check_ok: bool
     check_error: str
     check_failures: int

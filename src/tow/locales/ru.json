@@ -1582,9 +1582,11 @@
       "client_stop_failed": "не остановлен в клиенте",
       "client_start_failed": "не запущен в клиенте",
       "client_unreachable": "торрент-клиент недоступен",
+      "client_starting": "ожидается запуск торрент-клиента",
       "reconcile_failed": "сверка с клиентом не удалась",
       "revision_updated": "новая версия",
       "watchdog_alert": "тревога сторожа",
+      "watchdog_notice": "работа TOW",
       "watchdog_service_start": "сторож запустил TOW",
       "site_edit": "сайт изменён",
       "download_history_rebuilt": "история загрузок начата заново",
@@ -2396,6 +2398,9 @@
     "repair_restore_pending": "{ref} не может безопасно завершить прерванное восстановление данных. Сначала запустите TOW {since} или новее для завершения восстановления; обновление не выполнено"
   },
   "watchdog": {
+    "notice": {
+      "outage": "TOW снова работает; пауза {start}–{end} ({duration}): {cause}"
+    },
     "cause": {
       "hung": "процесс завис: порт {port} занят, но не отвечает",
       "crashed": "процесс аварийно завершился, последняя ошибка: {error}",

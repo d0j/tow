@@ -563,6 +563,8 @@ HISTORY_GROUPS = {
     "changes": frozenset(
         {
             "topic_add",
+            "client_starting",
+            "watchdog_notice",
             "topic_delete",
             "topic_edit",
             "topic_pause",
