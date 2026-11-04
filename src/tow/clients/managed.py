@@ -96,6 +96,7 @@ class ManagedClient:
     add_category = ""
     add_tags: Sequence[str] = ()
     read_only = False  # a dry run: a client with a mode that changes nothing honours it
+    operation_guard: Callable[[], None] | None = None
     capabilities: ClassVar[dict[str, bool]] = {
         "inspect": True,
         "list_files": True,
@@ -189,9 +190,13 @@ class ManagedClient:
 
     def _require_owned(self, infohash: str) -> list[str]:
         """Re-read the owner mark right before every mutation; returns the current tags."""
+        if self.operation_guard is not None:
+            self.operation_guard()
         tags = self._owner_tags(infohash) or []
         if OWNER not in self._tags({"tags": tags}):
             raise self._fail("client.managed.not_owned")
+        if self.operation_guard is not None:
+            self.operation_guard()
         return tags
 
     def _labels_for_add(self) -> list[str]:
@@ -470,6 +475,8 @@ class ManagedClient:
             # seeding limit may keep it stopped then).
             self._require_owned(infohash)
             on_start()
+            if self.operation_guard is not None:
+                self.operation_guard()
             self._start(infohash)
             try:
                 self._wait_started(infohash, repeats=0)
@@ -581,6 +588,8 @@ class ManagedClient:
             return self._clear_pending(infohash)  # released stopped: its files wait for disk space
         self._require_owned(infohash)
         on_start()
+        if self.operation_guard is not None:
+            self.operation_guard()
         self._start(infohash)
         try:
             self._wait_started(infohash, repeats=0)
@@ -744,6 +753,8 @@ class ManagedClient:
             if not {OWNER, PENDING}.issubset(tags):
                 raise original  # merely appearing after a timeout does not prove an add of ours
             return  # both marks prove the accepted add without claiming any unmarked torrent
+        if OWNER not in tags and self.operation_guard is not None:
+            self.operation_guard()
         try:
             if OWNER not in tags:
                 self._set_labels(present, labels)
@@ -862,9 +873,13 @@ class ManagedClient:
         )
         if any(self.inspect_torrent(alias) is not None for alias in aliases):
             raise self._fail("client.managed.already_there")
+        if self.operation_guard is not None:
+            self.operation_guard()
         self._prepare_add()
         labels = self._labels_for_add()
         try:
+            if self.operation_guard is not None:
+                self.operation_guard()
             self._add_stopped(content, destination, labels)
         except Exception as error:  # noqa: BLE001 - re-raised unless the torrent is there and marked again
             self._mark_after_failed_add(aliases, labels, error)

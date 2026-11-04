@@ -26,6 +26,7 @@ How TOW thinks, what each screen and colour means, and what to do about each mes
 |---|---|
 | **Topic** | A page on a torrent site that holds one torrent, for example a series. TOW remembers its link, a name, a folder and a torrent client. |
 | **Add new versions** | A box in the add form and in the topic's edit panel. Ticked: TOW checks the topic on a schedule and adds every new version. Clear: TOW adds it one time and then only follows the download progress. |
+| **Torrent client only** | A separate box in the add form. Sends the chosen contents to the selected client once and verifies its response. No watched topic or subsequent download monitoring is created. |
 | **Version** | One `.torrent` of a topic. Sites replace the `.torrent` when episodes are added; each replacement is a new version with a new hash. |
 | **Site** | A torrent site TOW knows how to read: how to recognise its links, where the `.torrent` is, how to sign in. Known sites come preconfigured. |
 | **Mirror** | Another address of the same site. TOW tries them in order and remembers the one that worked. |
@@ -78,6 +79,13 @@ their disk**, where the computer running TOW accepts the disk with **Same disk â
 If the site is not known yet, add it first on **Sites** â€” pasting any topic link there fills in the fields.
 
 ## Choosing files
+
+For a one-time remote download that should stay out of TOW's list, tick **Torrent client only**.
+The pale yellow outline distinguishes it from **Add new versions**. File choices and the client still apply;
+the watch checkbox and timer do not. A prepared local `.torrent` is used as explicitly chosen, without
+another site download. A long initial client check finishes in the background, with a finite deadline;
+the final message appears on every signed-in browser. **Cancel** revokes further TOW commands and leaves
+any torrent already handed to the client there. The client then manages the download itself.
 
 | Choice | Example | Notes |
 |---|---|---|

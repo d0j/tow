@@ -60,6 +60,7 @@ CLASSES: dict[str, str] = {
     "client.factory.not_configured": "qbit",
     "client.factory.disabled": "qbit",
     "client.factory.not_implemented": "qbit",
+    "client_only.connection_wait": "qbit",
     "check.": "error",
     "check.add_unconfirmed": "qbit",
     "check.existing_unconfirmed": "qbit",

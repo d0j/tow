@@ -62,7 +62,15 @@ def test_every_client_adapter_satisfies_the_contract(name, cls):
     assert isinstance(adapter, TorrentClientAdapter), name
     for member in get_protocol_members(TorrentClientAdapter):
         value = getattr(cls, member, None)
-        if member in {"client_id", "client_kind", "capabilities", "add_category", "add_tags", "read_only"}:
+        if member in {
+            "client_id",
+            "client_kind",
+            "capabilities",
+            "add_category",
+            "add_tags",
+            "read_only",
+            "operation_guard",
+        }:
             continue
         assert callable(value), f"{name}.{member} is not a method"
 

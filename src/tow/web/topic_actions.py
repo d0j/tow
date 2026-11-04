@@ -64,6 +64,7 @@ class _Added(NamedTuple):
     tracker: GenericHttpTracker
     policy: dict[str, Any]
     interval: int | None
+    prepared_content: bytes | None = None
 
 
 def _prepared(token: str, url: str, client_id: str) -> TorrentMetadata | None:
@@ -79,8 +80,17 @@ def _folder_refusal(dest: str, *, current: str = "") -> str | None:
 def add_topic(form: TopicForm) -> RedirectResponse:
     """A new topic, checked at once. A refused add never happened: the form says why, History
     logs no failed check for it."""
+    if form.client_only:
+        from tow.web import client_only_actions
+
+        if replayed := client_only_actions.replay(form):
+            return replayed
     try:
         added = _new_topic(form)
+        if form.client_only:
+            from tow.web import client_only_actions
+
+            return client_only_actions.send(form, added.topic, added.policy, prepared_content=added.prepared_content)
         _save_new_topic(added.topic)
     except Refused as refusal:
         return refusal.response(form)
@@ -106,7 +116,7 @@ def _new_topic(form: TopicForm) -> _Added:
     """The new topic's record; refused at once - before the site is asked for a title - when
     the form cannot be saved."""
     try:
-        interval = parse_interval(form.check_interval_min or "")
+        interval = None if form.client_only else parse_interval(form.check_interval_min or "")
     except TowError as exc:
         raise Refused(str(exc), field="timer") from exc
     url = canon_watch_url(form.url)
@@ -115,7 +125,7 @@ def _new_topic(form: TopicForm) -> _Added:
     tracker = match_tracker(load_trackers(cfg), url)
     if not tracker:
         raise Refused(t("web.topics.unknown_link"), field="no_site")
-    if any(item.get("url") == url for item in state.setdefault("topics", [])):
+    if not form.client_only and any(item.get("url") == url for item in state.setdefault("topics", [])):
         raise Refused("web.topics.already_watched", "warn")
     dest = resolve_save_path(form.save_path, state)
     if not dest:
@@ -130,9 +140,16 @@ def _new_topic(form: TopicForm) -> _Added:
         raise Refused(t("web.topics.client_disabled"), field="client")
     client_id = str(selected_client["id"])
     try:
-        prepared = _prepared(form.content_token, url, client_id)
+        blob = None
+        if form.client_only and form.content_token:
+            blob = services.read_content(form.content_token, url, client_id)
+        prepared = parse_torrent_metadata(blob) if blob is not None else _prepared(form.content_token, url, client_id)
         policy = selection_policy(
-            form.selection_mode, form.selection_value, form.tracking_mode, prepared, form.selection_indices
+            form.selection_mode,
+            form.selection_value,
+            "once" if form.client_only else form.tracking_mode,
+            prepared,
+            form.selection_indices,
         )
     except (ValueError, RuntimeError) as exc:
         raise Refused(str(exc), field="selection") from exc
@@ -141,7 +158,7 @@ def _new_topic(form: TopicForm) -> _Added:
     # Typed or changed by the owner: not empty, not a link, and not the title TOW guessed
     # into the field (no guess at all: what is there was typed).
     owner_named = bool(name) and not title_is_placeholder(name, url) and name != form.guessed_title.strip()
-    if title_is_placeholder(name, url):
+    if not form.client_only and title_is_placeholder(name, url):
         name = services.guess_topic_title(url) or name or url
     topic = new_topic(
         form,
@@ -155,7 +172,7 @@ def _new_topic(form: TopicForm) -> _Added:
     )
     if owner_named:
         topic["title_set"] = True
-    return _Added(topic, tracker, policy, interval)
+    return _Added(topic, tracker, policy, interval, blob)
 
 
 def _save_new_topic(new: dict[str, Any]) -> None:

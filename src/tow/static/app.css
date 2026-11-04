@@ -1334,6 +1334,11 @@ button:disabled:not(.spinning) { cursor: not-allowed; }
 .field-row > .interval-field { flex: 0 0 auto; }
 .interval-field > label, .interval-field > .field-hint { white-space: nowrap; }
 .follow-row > .check-label { flex: 0 0 auto; min-height: var(--field-h); }
+.client-only-choice {
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line));
+  border-radius: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+}
 @container (min-width: 38rem) {
   .follow-row { align-items: start; }
   /* Level with the interval field beside it: its label's line (12 px at 1.45) and 3 px down. */

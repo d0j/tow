@@ -86,6 +86,7 @@ def record_check_failure(error: str | BaseException, *, how: str = "auto", whole
             "ping_failed",
             "clients_empty",
             "clients_starting",
+            "client_only_monitor",
         ):
             if kept in previous:
                 health[kept] = previous[kept]
@@ -331,6 +332,8 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False, *, hist
     # The header countdown runs from the last *scheduled* check; a manual check of
     # one topic must not move it.
     previous_health = health_of(load_state(quarantine=False))
+    if "client_only_monitor" in previous_health:
+        health["client_only_monitor"] = previous_health["client_only_monitor"]
     _note_history_rebuilt(health, previous_health, rebuilt=history_rebuilt)
     _note_history_trimmed(health, previous_health, trimmed=history_trimmed)
     health["auto_at_ts"] = health["at_ts"] if how == "auto" else previous_health.get("auto_at_ts")

@@ -259,6 +259,7 @@ def flash_location(
     subject: str | None = None,
     href: str = "",
     link: str = "",
+    cancel: str = "",
     **params: Any,
 ) -> str:
     """``url`` with ``flash=<token>`` of a message kept on the server (see ``flash_redirect``).
@@ -273,6 +274,7 @@ def flash_location(
         subject=_context.subject() if subject is None else subject,
         href=href,
         link=link,
+        cancel=cancel,
         value_first=starts_with_value(message),
     )
     # The undo this action made goes with its message: a check right after a save says

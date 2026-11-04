@@ -7,6 +7,19 @@
     "decimal": ".",
     "datetime_short": "%Y-%m-%d %H:%M"
   },
+  "client_only": {
+    "monitor_unavailable": "TOW cannot currently read the one-time handoff results; the client addition outcome is unknown — check History and the torrent client before submitting again",
+    "store_invalid": "the saved client handoff cannot be read safely — check the client before submitting again",
+    "capacity": "too many client handoffs are pending, or their saved content is too large — wait for the current requests to finish",
+    "request_changed": "this request was already used with different choices — submit the changed form again",
+    "context_changed": "the client, its settings or the selected torrent changed — check the client and submit again if needed",
+    "volume_unavailable": "the original destination disk cannot be confirmed — restore access to that disk",
+    "overlap": "another active torrent uses the selected files — check overlapping tasks in the client",
+    "expired": "the client handoff deadline expired — check the client before submitting again",
+    "failed": "the client handoff could not be confirmed — check the client before submitting again",
+    "cancelled": "continuation of the client addition was cancelled",
+    "connection_wait": "waiting for the torrent client to become available"
+  },
   "site_access": {
     "row_limited": "Site access limited",
     "row_no_connection": "No connection to the site",
@@ -1092,6 +1105,7 @@
     "none": "Every folder is on its disk."
   },
   "issues": {
+    "client_only_monitor": "One-time handoff results are unavailable. Check History and the torrent client before submitting again; TOW will retry reading automatically.",
     "volume_missing_topic": "The folder of {title} is on another disk, or its disk is not connected ({folder})",
     "volume_missing_night": "The nightly backups folder is on another disk, or its disk is not connected ({folder}): no nightly backup is written there",
     "volume_missing_manual": "The folder of backups made by hand is on another disk, or its disk is not connected ({folder}): no restore point is written there",
@@ -1130,6 +1144,8 @@
       "mode_episodes": "Episodes by number",
       "mode_files": "Files by pattern",
       "follow": "Add new versions",
+      "client_only": "Torrent client only",
+      "client_only_hint": "Send the selected contents to the client and verify the result. This torrent stays out of TOW's list; new versions and download progress are not watched.",
       "selection": "Episodes or masks",
       "selection_placeholder": "S01E03-E05, S01E07  or  *.mkv, Subs/*.srt",
       "selection_hint": "If nothing matches, or a match is ambiguous, nothing is added.",
@@ -1596,6 +1612,9 @@
       "backup_recovered": "nightly backup works again",
       "delivery_recovered": "messages are delivered again",
       "settings_update_result": "TOW update finished",
+      "client_only_result": "one-time client handoff",
+      "client_only_monitor_failed": "one-time handoff monitoring unavailable",
+      "client_only_monitor_recovered": "one-time handoff monitoring restored",
       "files_repair_requested": "file recovery requested",
       "files_repair_started": "checking files for recovery",
       "files_repair_resumed": "file recovery download started",
@@ -1678,6 +1697,12 @@
         "settings_access": "Network access change undone",
         "settings_clients": "Torrent client change undone"
       }
+    },
+    "client_only": {
+      "added": "added to the client and confirmed; not watched in TOW",
+      "existing": "already present in the client; the chosen folder and files are confirmed",
+      "failed": "client addition was not confirmed; check the client before trying again",
+      "cancelled": "further handoff commands cancelled; the client torrent was left as it is"
     },
     "update": {
       "ok": "version {version} is installed",
@@ -2415,6 +2440,32 @@
     }
   },
   "web": {
+    "client_only": {
+      "added": "Added to the client and confirmed. This torrent is not watched in TOW.",
+      "failed": "The client addition was not confirmed.",
+      "page_title": "Add to the torrent client",
+      "details": "Addition status",
+      "client_unknown": "Selected torrent client",
+      "selected_files": "Selected files: {count}",
+      "refresh": "Refresh",
+      "refresh_hint": "Addition continues in the background. Press “Refresh” for its latest status.",
+      "history": "History",
+      "phase": {
+        "queued": "Waiting to complete the addition",
+        "observing_add": "Waiting for the client to confirm the torrent",
+        "checking": "The client is checking existing files",
+        "ready": "Preparing the selected files for start",
+        "observing_start": "Waiting for the client to confirm the start"
+      },
+      "existing": "Already present in the client; the folder and selected files match. No new watch was added.",
+      "pending": "Adding to the client. The result will appear in Recent messages; no watch will be added.",
+      "replayed": "This request was already completed. No new client command was sent.",
+      "unconfirmed": "the client addition could not be confirmed — check the client before trying again",
+      "expired": "this form is out of date — reopen it and submit the torrent again",
+      "cancelled": "Continuation of this addition was cancelled. A torrent already passed to the client remains there.",
+      "missing": "this client handoff is no longer available — check the client",
+      "already_finished": "This handoff has already finished. No further commands will be sent."
+    },
     "file": {
       "choose": "Choose a file",
       "none": "No file chosen"

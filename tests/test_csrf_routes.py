@@ -31,6 +31,7 @@ SAMPLE = {
     "point_id": "20260101-000000-abcdef",
     "kind": "ntfy",
     "job": "abcdef1234567890",
+    "operation_id": "a" * 32,
 }
 LOCAL = "http://127.0.0.1:8787"
 LAN = "http://192.168.1.2:8787"

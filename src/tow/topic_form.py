@@ -46,10 +46,15 @@ class TopicForm:
     # The add form: the title TOW guessed and put into the name field (empty when none was):
     # a name other than it is the owner's own (``Topic.title_set``).
     guessed_title: str = ""
+    client_only: bool = False
+    submission_id: str = ""
 
     def draft(self) -> dict[str, str]:
         """The fields a refused add brings back into the form."""
-        return {name: "" if value is None else str(value) for name, value in asdict(self).items()}
+        return {
+            name: ("1" if value else "") if isinstance(value, bool) else "" if value is None else str(value)
+            for name, value in asdict(self).items()
+        }
 
 
 def selection_policy(

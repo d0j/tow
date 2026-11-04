@@ -149,6 +149,8 @@ def topics_add(
     content_token: str = Form(""),
     selection_indices: str = Form(""),
     guessed_title: str = Form(""),
+    client_only: bool = Form(False),
+    submission_id: str = Form(""),
 ) -> Response:
     form = TopicForm(
         url=url.strip(),
@@ -162,6 +164,8 @@ def topics_add(
         check_interval_min=check_interval_min,
         content_token=content_token,
         selection_indices=selection_indices,
+        client_only=client_only,
+        submission_id=submission_id,
     )
     return topic_actions.add_topic(form)
 

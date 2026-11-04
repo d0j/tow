@@ -1939,6 +1939,30 @@ document.addEventListener("change", (event) => {
 // A reset (Cancel) puts the boxes back after its event: the groups follow once it has.
 document.addEventListener("reset", () => setTimeout(syncEnabledGroups, 0));
 syncEnabledGroups();
+// A one-time handoff has no watching or check timer; their previous choices stay for when it is cleared.
+const syncClientOnly = (form) => {
+  const box = form?.querySelector?.('[name="client_only"]');
+  const hint = form?.querySelector?.("[data-client-only-hint]");
+  if (!box) return;
+  const follow = form.querySelector('[name="tracking_mode"]');
+  if (follow) {
+    if (box.checked) {
+      if (box.dataset.previousFollow === undefined) box.dataset.previousFollow = follow.checked ? "1" : "0";
+      follow.checked = false;
+    } else if (box.dataset.previousFollow !== undefined) {
+      follow.checked = box.dataset.previousFollow === "1";
+      delete box.dataset.previousFollow;
+    }
+  }
+  const timer = form.querySelector(".interval-field");
+  if (timer) timer.hidden = box.checked;
+  if (hint) hint.hidden = !box.checked;
+};
+document.addEventListener("change", (event) => {
+  if (event.target?.name === "client_only") syncClientOnly(event.target.form);
+});
+document.addEventListener("reset", (event) => setTimeout(() => syncClientOnly(event.target), 0));
+document.querySelectorAll(".new-topic-form").forEach(syncClientOnly);
 // A group drawn again (pages.js) is enabled as its box says.
 components.register("enabled-group", "[data-enabled-by]", (group) => { syncEnabledGroup(group); });
 

@@ -52,7 +52,7 @@
     // "Follow the topic" is a checkbox: ticked sends its value ("watch"); cleared, the form's
     // tracking_unchecked says what it means ("once"). A select (an older page) sends its value.
     const tracking = field("tracking_mode");
-    const lifecycle = () => tracking.type === "checkbox"
+    const lifecycle = () => field("client_only")?.checked ? "once" : tracking.type === "checkbox"
       ? (tracking.checked ? tracking.value : field("tracking_unchecked")?.value || "once")
       : tracking.value;
     // The whole box for "Choose files", one line that previews a rule, nothing for all files.
@@ -393,6 +393,7 @@
       if (!manual()) ruleTimer = window.setTimeout(resolveRule, 200);
     });
     tracking.addEventListener("change", () => { ruleGeneration++; if (!manual()) resolveRule(); });
+    field("client_only")?.addEventListener("change", () => { ruleGeneration++; if (!manual()) resolveRule(); });
     search.addEventListener("input", () => { page = 0; render(); });
     more.addEventListener("click", () => { page++; render(); tree.scrollTop = 0; });
     previous.addEventListener("click", () => { page--; render(); tree.scrollTop = 0; });

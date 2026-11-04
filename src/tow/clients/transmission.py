@@ -222,6 +222,8 @@ class TransmissionClient(ManagedClient):
         if added.get("hashString"):
             # Older Transmission ignores labels on add; set them before anything else.
             identity = str(added["hashString"])
+            if self.operation_guard is not None:
+                self.operation_guard()
             try:
                 self._set_labels(identity, labels)
             except Exception as error:

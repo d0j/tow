@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<h1 id="page-title">{{ t('web.client_only.page_title') }}</h1>
+<section class="card" aria-labelledby="handoff-title">
+  <div class="card-body">
+    <h2 id="handoff-title">{{ t('web.client_only.details') }}</h2>
+    {% if operation_error %}
+    <p class="form-error" role="alert">{{ operation_error }}</p>
+    {% elif operation %}
+    <p class="confirm-text"><strong>{{ operation.title }}</strong></p>
+    <p class="sub">{{ t('home.add.client') }}: {{ operation_client }}{% if operation_selected is not none %} · {{ t('web.client_only.selected_files', count=operation_selected) }}{% endif %}</p>
+    {% if operation_status == 'pending' %}
+    <p role="status">{{ operation_phase or t('web.client_only.pending') }}</p>
+    <p class="field-hint">{{ t('web.client_only.refresh_hint') }}</p>
+    {% else %}
+    <p role="status">{{ t('web.client_only.' ~ operation_status) }}</p>
+    {% if operation_reason %}<p class="form-error">{{ operation_reason }}</p>{% endif %}
+    {% endif %}
+    {% endif %}
+    <div class="actions">
+      {% if not operation_error and operation_status == 'pending' %}
+      <form method="post" action="/client-only/{{ operation_id }}/cancel"><button type="submit" class="ghost">{{ t('home.cancel') }}</button></form>
+      <a class="btn ghost" href="/client-only/{{ operation_id }}">{{ t('web.client_only.refresh') }}</a>
+      {% endif %}
+      <a class="btn ghost" href="/">{{ t('home.edit.back') }}</a>
+      <a class="btn ghost" href="/history?group=downloads">{{ t('web.client_only.history') }}</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

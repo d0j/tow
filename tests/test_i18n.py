@@ -1216,6 +1216,11 @@ def _families() -> dict[str, set[str]]:
         "log.kind.{kind}": set(),  # optional by design: kind_label() falls back to words
         "log.cls.{cls}": set(log._CLASSES),
         "log.update.{outcome}": set(messages_feed._UPDATE_RESULTS),
+        "log.client_only.{rec['status']}": {"added", "existing", "failed", "cancelled"},
+        "web.client_only.{key}": {"added", "existing", "replayed", "cancelled", "already_finished"},
+        # The terminal status is also joined to the prefix by client_only.html's Jinja call.
+        "web.client_only.{operation_status}": {"added", "existing", "failed", "cancelled"},
+        "web.client_only.phase.{result['phase']}": {"queued", "observing_add", "checking", "ready", "observing_start"},
         "notify.action.{kind}": set(notify._ACTIONS),
         "notify.client_{state}": {"down", "up"},
         "notify.client_{state}_named": {"down", "up"},
