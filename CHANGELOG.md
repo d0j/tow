@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+## [1.37.0] — 2026-11-04
+
 ### Added
 
 - A separate **Torrent client only** choice sends the selected contents once, confirms the client result,
