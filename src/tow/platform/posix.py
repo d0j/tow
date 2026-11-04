@@ -355,13 +355,21 @@ def _volume_uuid(mount_point: str) -> str | None:
 def _diskutil_uuid(mount_point: str) -> str | None:
     """``diskutil info -plist``'s VolumeUUID of the volume at ``mount_point`` (it only reads)."""
     import plistlib
+    import uuid
 
     output = _run(["/usr/sbin/diskutil", "info", "-plist", mount_point], timeout=10)
     try:
         found = plistlib.loads(output.encode("utf-8")).get("VolumeUUID") if output else None
     except AttributeError, ValueError, plistlib.InvalidFileException:
         return None
-    return found.upper() if isinstance(found, str) and re.fullmatch(r"[0-9A-Fa-f-]{36}", found) else None
+    if not isinstance(found, str):
+        return None
+    try:
+        identifier = uuid.UUID(found)
+    except ValueError:
+        return None
+    canonical = str(identifier)
+    return canonical.upper() if identifier.int and canonical.casefold() == found.casefold() else None
 
 
 def _parent_pid() -> int:
@@ -861,7 +869,10 @@ class PosixBackend:
         kind = _kind(fstype)
         if kind == "network":
             return Volume(_network_identity(source), kind)
-        uuid = _volume_uuid(mount_point)
+        # macOS's FAT mount may expose a new getattrlist UUID for every mount session.
+        # Disk Arbitration's VolumeUUID is the filesystem identity derived from its serial.
+        # If it is unavailable, do not substitute the transient mount-session identifier.
+        uuid = _diskutil_uuid(mount_point) if fstype == "msdos" else _volume_uuid(mount_point)
         return Volume("uuid:" + uuid if uuid else None, kind)
 
     # --- handing a folder back to its owner (tow permissions fix) ---------------------------------

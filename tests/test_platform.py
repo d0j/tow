@@ -1763,6 +1763,52 @@ def test_a_mac_volume_uuid_falls_back_to_diskutil(monkeypatch):
     assert posix._diskutil_uuid("/Volumes/USB") is None
 
 
+def test_a_mac_fat_remount_uses_its_canonical_disk_identity_not_the_mount_session(monkeypatch):
+    monkeypatch.setattr(posix, "_statfs", lambda path: ("msdos", "/Volumes/USB", "/dev/disk4s1"))
+    transient_calls = []
+    monkeypatch.setattr(posix, "_volume_uuid", lambda point: transient_calls.append(point) or "transient-mount")
+    canonical = {"value": "11111111-2222-3333-8444-555555555555"}
+    diskutil_calls = []
+
+    def disk_uuid(point):
+        diskutil_calls.append(point)
+        return canonical["value"]
+
+    monkeypatch.setattr(posix, "_diskutil_uuid", disk_uuid)
+    backend = PosixBackend("macos")
+    folder = Path("/Volumes/USB/TV")
+    first = backend.volume(folder)
+    assert first == platform.Volume("uuid:11111111-2222-3333-8444-555555555555", "local")
+    assert backend.volume(folder) == first  # the same FAT volume remounted
+    canonical["value"] = "66666666-7777-3888-9999-AAAAAAAAAAAA"
+    assert backend.volume(folder) == platform.Volume("uuid:66666666-7777-3888-9999-AAAAAAAAAAAA", "local")
+    canonical["value"] = None
+    assert backend.volume(folder) == platform.Volume(None, "local")
+    assert diskutil_calls == ["/Volumes/USB"] * 4
+    assert transient_calls == []  # an unknown canonical identity never falls back to a session UUID
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "00000000-0000-0000-0000-000000000000",
+        "-" * 36,
+        "0a1b2c3d111122223333444455556666",
+        "{0a1b2c3d-1111-2222-3333-444455556666}",
+        "not a uuid",
+        "",
+        None,
+        123,
+    ],
+)
+def test_a_mac_diskutil_missing_invalid_or_nil_uuid_is_unknown(monkeypatch, value):
+    import plistlib
+
+    document = {} if value is None else {"VolumeUUID": value}
+    monkeypatch.setattr(posix, "_run", lambda args, timeout=20: plistlib.dumps(document).decode())
+    assert posix._diskutil_uuid("/Volumes/USB") is None
+
+
 class _WindowsVolumes:
     """What Windows answers about drives, mount points and shares (the module's seams)."""
 

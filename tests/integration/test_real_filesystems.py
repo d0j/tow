@@ -95,6 +95,14 @@ def _space_known(folder: Path, volume: str | None) -> bool:
     return known
 
 
+def _print_fat_uuid_sources(mounted: Mounted) -> None:
+    if SYSTEM == "macos" and mounted.leg.name == "msdos":
+        from tow.platform import posix
+
+        point = str(mounted.point)
+        print(f"msdos: generic UUID probe {posix._volume_uuid(point)!r}; diskutil {posix._diskutil_uuid(point)!r}")
+
+
 def test_the_recorded_volume_follows_the_mount(mounted):
     from tow import platform
     from tow.folders import seen_from_here, volume_at
@@ -106,6 +114,7 @@ def test_the_recorded_volume_follows_the_mount(mounted):
     found = platform.volume_of(folder)
     assert found is not None
     print(f"{mounted.leg.name}: {recorded!r}, {found.kind}")
+    _print_fat_uuid_sources(mounted)
     if mounted.leg.name != "exfat-fuse":
         assert found.kind == "local"
     if mounted.leg.name == "tmpfs":  # no UUID: unknown, never "tmpfs <mount point>"
@@ -129,6 +138,7 @@ def test_the_recorded_volume_follows_the_mount(mounted):
     assert not _space_known(folder, recorded)  # unknown: the disk below's space is never credited
 
     mounted.mount()
+    _print_fat_uuid_sources(mounted)
     assert volume_at(str(folder)) == recorded  # a remount keeps the identity
     assert seen_from_here(str(folder), volume=recorded)
     assert _space_known(folder, recorded)
