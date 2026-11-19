@@ -684,6 +684,15 @@ def test_an_unsigned_older_copy_can_be_checked_but_is_not_restored(backup):
     (snapshot / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
     save_state({"topics": [{"id": "current"}], "mirrors": {}})
 
+    assert list_snapshots()[0]["access"] == "legacy"
+    from fastapi.testclient import TestClient
+
+    from tow.web import create_app
+
+    html = TestClient(create_app()).get("/settings").text
+    assert f"/night/{snapshot.name}/check" in html
+    assert f"/night/{snapshot.name}/restore" not in html
+    assert f"/night/{snapshot.name}/delete" not in html
     assert verify_snapshot(snapshot)["signed"] is False  # the files themselves are intact
     preview = restore_snapshot(snapshot)
     assert preview["signed"] is False

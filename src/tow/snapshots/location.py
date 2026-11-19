@@ -12,7 +12,7 @@ from tow.log import owner_language
 from tow.paths import data_dir
 from tow.platform import child_path
 from tow.snapshots.errors import SnapshotError
-from tow.snapshots.manifest import member_size, read_manifest
+from tow.snapshots.manifest import FORMAT, member_size, read_manifest, signature_matches, signing_key
 
 PREFIX = "tow-"
 
@@ -55,6 +55,10 @@ def list_snapshots(limit: int | None = 10) -> list[dict[str, Any]]:
         folders = snapshot_folders(root)
     except SnapshotError, OSError:
         return []
+    try:
+        key = signing_key() if folders else None
+    except SnapshotError:
+        key = None
     rows = []
     for folder in reversed(folders if limit is None else folders[-limit:]):
         try:
@@ -64,6 +68,9 @@ def list_snapshots(limit: int | None = 10) -> list[dict[str, Any]]:
             size = sum(member_size(name, meta) for name, meta in manifest["files"].items())
         except SnapshotError, OSError, ValueError, TypeError, AttributeError, OverflowError:
             continue
+        access = "legacy"
+        if manifest["format"] == FORMAT:
+            access = "signed" if key is not None and signature_matches(manifest, key) else "unverified"
         rows.append(
             {
                 "name": folder.name,
@@ -71,6 +78,7 @@ def list_snapshots(limit: int | None = 10) -> list[dict[str, Any]]:
                 "created_at": created.isoformat(),
                 "bytes": size,
                 "version": manifest.get("version"),
+                "access": access,
             }
         )
     return rows

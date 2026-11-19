@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+- Nightly backups with a legacy or unverified manifest show only the check action.
+
 - Preserve concurrently restored or imported download history during checks. Retain a removed watch from its removal date.
 
 - Update Soup Sieve and OpenTelemetry API together to fix five dependency advisories.
