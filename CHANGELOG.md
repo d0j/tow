@@ -5,17 +5,16 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
-- A client scan that finishes after a watch is removed leaves its retained history intact.
+## [1.37.2] — 2026-11-19
 
-- The supervisor preserves the exit code during a confirmed Windows shutdown without reporting a web-server crash.
-
-- Client confirmation and disk-space waits retain the original operation ID. Portable diagnostic logs keep check scope and result counts.
-
-- Nightly backups with a legacy or unverified manifest show only the check action.
-
-- Preserve concurrently restored or imported download history during checks. Retain a removed watch from its removal date.
+### Fixed
 
 - Update Soup Sieve and OpenTelemetry API together to fix five dependency advisories.
+- Preserve concurrently restored or imported download history during checks. Retain a removed watch from its removal date.
+- Nightly backups with a legacy or unverified manifest show only the check action.
+- Client confirmation and disk-space waits retain the original operation ID. Portable diagnostic logs keep check scope and result counts.
+- The supervisor preserves the exit code during a confirmed Windows shutdown without reporting a web-server crash.
+- A client scan that finishes after a watch is removed leaves its retained history intact.
 
 ## [1.37.1] — 2026-11-04
 
