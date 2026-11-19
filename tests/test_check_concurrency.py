@@ -622,6 +622,28 @@ def test_inflight_check_preserves_a_restored_topic_history(tmp_path_factory, mon
     assert load_download_history()["topics"] == restored
 
 
+@pytest.mark.parametrize("edit", [{"url": "https://tracker.example/topic/2"}, {"client_id": "other"}])
+def test_an_observation_of_an_old_topic_identity_does_not_enter_history(monkeypatch, edit):
+    from tow.store import load_download_history, save_download_history
+
+    baseline = {"t": {"items": {"known": {"label": "known file"}}}}
+    save_download_history({"topics": baseline})
+    save_state({"topics": [{**TOPIC, "client_id": "main", "hash": "HASH-NEW"}]})
+    _wire_fake_check(monkeypatch, FakeClient())
+
+    def reconcile(topic, adapter, history, now):
+        with persistence_lock():
+            current = load_state()
+            current["topics"][0].update(edit)
+            save_state(current)
+        history["topics"]["t"]["items"]["old-client"] = {"label": "old observation"}
+        return {"events": [], "summary": {}}
+
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
+    check.run_check(apply=True, notify=False)
+    assert load_download_history()["topics"] == baseline
+
+
 def test_removed_watch_and_restored_content_supersede_substantive_client_observations():
     from tow.check.reconcile import _merge_history
 
