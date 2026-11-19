@@ -508,8 +508,10 @@
               {{ folder_form(backups.folders.night, t('settings.backups.folders_hint')) }}
             </details>
             <details class="technical-details"><summary>{{ t('settings.backups.replica') }}</summary>
-              {{ folder_form(backups.folders.replica, t('settings.backups.replica_hint')) }}
-              {% if backups.replica_state %}<p class="field-hint">{{ t('settings.backups.replica_' ~ backups.replica_state) }}</p>{% endif %}
+              <div class="details-body">
+                {{ folder_form(backups.folders.replica, t('settings.backups.replica_hint')) }}
+                {% if backups.replica_message %}<p class="field-hint">{{ t(backups.replica_message) }}</p>{% endif %}
+              </div>
             </details>
             </div>
           </article>

@@ -467,7 +467,7 @@ gone, so Diagnostics, Settings → TOW service, `tow status` and `tow doctor` sa
   file system of `data/` as a network one (NFS, SMB, 9p, SSHFS and the like; FUSE in general is not
   recognised); a device on the network sees the warning without the folder.
   Night copies and restore points may go to a network folder: only the live `data/` must be local.
-  Settings → Backups → Second nightly copy optionally enrolls an existing folder on another disk
+  Settings → Backups → Second nightly backup optionally enrolls an existing folder on another disk
   or share (set a network share from this computer). TOW writes the finished signed copy under its `TOW-nightly` folder,
   reads it back and rotates that destination independently. An absent second disk leaves the
   primary usable. Keep the master key separately. On a replacement installation with that key,

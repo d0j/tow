@@ -14,14 +14,14 @@ from tow.locations import REPLICA, install_dir, resolve_checked
 from tow.paths import data_dir
 from tow.platform import locks
 from tow.snapshots.create import (
-    _PARTIAL_PROOF,
-    _check_copy_space,
-    _copy_snapshot_member,
-    _partial_proof,
-    _prune_night_copies,
-    _remove_stale_partials,
-    _rename_with_retry,
-    _write_snapshot_manifest,
+    PARTIAL_PROOF,
+    check_copy_space,
+    copy_snapshot_member,
+    partial_proof,
+    prune_night_copies,
+    remove_stale_partials,
+    rename_with_retry,
+    write_snapshot_manifest,
 )
 from tow.snapshots.errors import SnapshotError
 from tow.snapshots.location import backup_root
@@ -32,6 +32,14 @@ from tow.snapshots.verify import verify_snapshot
 from tow.storage.locks import init_lock_file, persistence_lock
 
 _MARKER = ".tow-replica"
+
+
+def replica_message(status: object) -> str:
+    return {
+        "verified": "settings.backups.replica_verified",
+        "cleanup": "settings.backups.replica_cleanup",
+        "unavailable": "settings.backups.replica_unavailable",
+    }.get(str(status), "")
 
 
 def _root(raw: str, cfg: dict[str, Any]) -> Path:
@@ -98,28 +106,28 @@ def _replicate(source: Path, raw: str, cfg: dict[str, Any]) -> str:
         # Independent retention: the primary may reuse a same-second name the replica still has.
         stem = source.name[: len("tow-YYYYMMDD-HHMMSS")]
         target = root / f"{stem}-{manifest['signature'][:6]}"
-    pending = _remove_stale_partials(root, key)
+    pending = remove_stale_partials(root, key)
     if target.exists():
         if owned_manifest(target, key) != manifest:
             raise ValueError("a different snapshot already uses that name")
         verify_snapshot(target, payloads=False)
     else:
-        _check_copy_space(root, members)
+        check_copy_space(root, members)
         partial = root / f".{target.name}.partial"
         partial.mkdir()
-        _write_snapshot_manifest(partial / _PARTIAL_PROOF, _partial_proof(partial.name, key))
+        write_snapshot_manifest(partial / PARTIAL_PROOF, partial_proof(partial.name, key))
         try:
             for name, path in members:
-                if _copy_snapshot_member(path, partial / name, name) != manifest["files"][name]:
+                if copy_snapshot_member(path, partial / name, name) != manifest["files"][name]:
                     raise ValueError("source changed during replication")
-            _write_snapshot_manifest(partial / "MANIFEST.json", manifest)
+            write_snapshot_manifest(partial / "MANIFEST.json", manifest)
             verify_snapshot(partial, payloads=False)
-            (partial / _PARTIAL_PROOF).unlink()
-            _rename_with_retry(partial, target)
+            (partial / PARTIAL_PROOF).unlink()
+            rename_with_retry(partial, target)
         except OSError, ValueError, SnapshotError:
-            _remove_stale_partials(root, key)
+            remove_stale_partials(root, key)
             raise
-    _, cleanup, over_budget = _prune_night_copies(root, target, key, retention_settings(cfg))
+    _, cleanup, over_budget = prune_night_copies(root, target, key, retention_settings(cfg))
     return "cleanup" if pending or cleanup or over_budget else "verified"
 
 

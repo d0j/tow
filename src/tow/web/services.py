@@ -65,7 +65,7 @@ from tow.issues import collect as collect_issues
 from tow.lifecycle import request_restart, service_status, set_autostart
 from tow.locations import check_writable as folder_write_problem
 from tow.locations import free_bytes
-from tow.log import history_events, log_event, observe_events, read_events, scrub_text
+from tow.log import history_events, log_event, observe_events, read_events, scrub_text, valid_check_outcomes
 from tow.messages_feed import MarkerRefused as MessageMarkerRefused
 from tow.messages_feed import feed as message_feed
 from tow.messages_feed import reconcile_update as reconcile_update_result
@@ -112,6 +112,7 @@ from tow.snapshots import (
 from tow.snapshots import cleanup_status as night_cleanup_status
 from tow.snapshots import cleanup_status_unlocked as night_cleanup_status_unlocked
 from tow.snapshots import current_status as snapshot_status
+from tow.snapshots.replica import configure_replica, replica_message
 from tow.storage.locks import CheckBusyError
 from tow.store import (
     StoreWriteError,
@@ -194,6 +195,7 @@ __all__ = [
     "collect_issues",
     "commit_stores",
     "config_from_bytes",
+    "configure_replica",
     "content_context_title",
     "content_metadata",
     "create_restore_point",
@@ -264,6 +266,7 @@ __all__ = [
     "release_relocation",
     "release_status",
     "render_message_feed",
+    "replica_message",
     "request_file_repair",
     "request_restart",
     "reserve_relocation",
@@ -312,6 +315,7 @@ __all__ = [
     "undo_label",
     "undo_local_only",
     "undo_stamped_here",
+    "valid_check_outcomes",
     "validate_protection_settings",
     "watchdog_problem",
     "web_update_log",

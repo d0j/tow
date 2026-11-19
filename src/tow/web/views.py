@@ -573,7 +573,7 @@ def technical_log_rows(state: Mapping[str, Any], cfg: Mapping[str, Any], *, loca
     """Fold adjacent identical successful progress polls in the technical view, newest first."""
     from itertools import groupby
 
-    from tow.log import format_event, index_event_titles, index_site_titles, valid_check_outcomes
+    from tow.log import format_event, index_event_titles, index_site_titles
 
     titles = index_event_titles(state.get("topics") or [])
     sites = index_site_titles(cfg)
@@ -589,7 +589,7 @@ def technical_log_rows(state: Mapping[str, Any], cfg: Mapping[str, Any], *, loca
             and type(event.get("n")) is int
             and type(event.get("ok")) is int
             and event["n"] == event["ok"]
-            and valid_check_outcomes(outcomes)
+            and services.valid_check_outcomes(outcomes)
             and event["n"] == outcomes["same"] + outcomes["skipped"]
             and not (outcomes["fail"] or outcomes["pending"] or outcomes["new"])
             and event.keys() <= volatile | {"kind", "how", "apply", "scope", "n", "ok", "outcomes"}
@@ -1224,10 +1224,8 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "error": _shown_error(str(st.get("last_error") or ""), local=access.is_local(request)),
         "error_at": _epoch_time(failed_at) if isinstance(failed_at, (int, float)) else "",
         "error_when": failed_at if isinstance(failed_at, (int, float)) else None,
-        "replica_state": st["replica_state"]
-        if cfg.get("backup_replica_dir")
-        and cfg["backup_replica_dir"] == st.get("replica_location")
-        and st.get("replica_state") in ("verified", "unavailable", "cleanup")
+        "replica_message": services.replica_message(st.get("replica_state"))
+        if cfg.get("backup_replica_dir") and cfg["backup_replica_dir"] == st.get("replica_location")
         else "",
         "cleanup_pending": night_cleanup["pending"] is True,
         "cleanup_read_error": night_cleanup["read_error"],

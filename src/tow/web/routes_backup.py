@@ -228,8 +228,6 @@ def settings_backup_location(
                 return _backup_redirect("web.common.no_changes")
             path = str(merged.values["path"])
     if kind == "replica":
-        from tow.snapshots.replica import configure_replica
-
         if action not in {"check", "save", "default"}:
             return _backup_redirect("web.backup.unknown_folder", "err")
         raw = "" if action == "default" else path.strip().strip('"')
@@ -237,7 +235,7 @@ def settings_backup_location(
             return _backup_redirect("web.backup.share_local_only", "err")
         try:
             if raw:
-                target = configure_replica(raw, cfg, enroll=action == "save")
+                target = services.configure_replica(raw, cfg, enroll=action == "save")
                 if action == "check":
                     return _backup_redirect(t("web.backup.write_works", path=target, room=""))
                 cfg[location.key] = raw
@@ -315,8 +313,8 @@ def settings_backup_now() -> Response:
     if result.get("budget_warning"):
         message += f" · {t('backup.snapshot.over_budget', limit=result.get('over_budget_mib'))}"
     replica = result.get("replica")
-    if replica:
-        message += f" · {t('settings.backups.replica_' + replica)}"
+    if key := services.replica_message(replica):
+        message += f" · {t(key)}"
     warned = (
         result.get("missing")
         or result.get("cleanup_warning")
