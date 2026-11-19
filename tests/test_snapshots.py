@@ -555,7 +555,7 @@ def test_a_partial_copy_left_by_a_killed_copy_is_removed_by_the_next_one(backup,
     class Killed(BaseException):  # the supervisor's time limit, a power loss: no except clause runs
         pass
 
-    real_copy, real_rename = tow.snapshots.create._copy_snapshot_member, tow.snapshots.create._rename_with_retry
+    real_copy, real_rename = tow.snapshots.create.copy_snapshot_member, tow.snapshots.create.rename_with_retry
 
     def copy(source, destination, name):
         if name == killed_at:
@@ -568,8 +568,8 @@ def test_a_partial_copy_left_by_a_killed_copy_is_removed_by_the_next_one(backup,
         return real_rename(source, target)
 
     with monkeypatch.context() as patch:
-        patch.setattr(tow.snapshots.create, "_copy_snapshot_member", copy)
-        patch.setattr(tow.snapshots.create, "_rename_with_retry", rename)
+        patch.setattr(tow.snapshots.create, "copy_snapshot_member", copy)
+        patch.setattr(tow.snapshots.create, "rename_with_retry", rename)
         with pytest.raises(Killed):
             create_snapshot()
     (left,) = backup.glob(".tow-*.partial")
@@ -592,7 +592,7 @@ def test_a_partial_proof_signed_by_another_key_is_never_removed(backup, monkeypa
 
     folder = backup / ".tow-20200101-000000.partial"
     folder.mkdir(parents=True)
-    proof = tow.snapshots.create._partial_proof(folder.name, b"another install's key")
+    proof = tow.snapshots.create.partial_proof(folder.name, b"another install's key")
     (folder / "PARTIAL.json").write_text(json.dumps(proof), encoding="utf-8")
     (folder / "state.json").write_text("{}", encoding="utf-8")
 
@@ -1340,7 +1340,7 @@ def test_a_copy_that_fails_its_check_and_cannot_be_renamed_back_is_not_left_as_a
     _clock(monkeypatch, [f"20261001-0000{n:02d}" for n in range(10)])
     for _ in range(3):
         create_snapshot()
-    real_rename = tow.snapshots.create._rename_with_retry
+    real_rename = tow.snapshots.create.rename_with_retry
 
     def held(source, target, **kwargs):
         if source.name.startswith("tow-"):  # back to its partial name: a file in it is held
@@ -1350,7 +1350,7 @@ def test_a_copy_that_fails_its_check_and_cannot_be_renamed_back_is_not_left_as_a
     def unreadable(_path, **_kwargs):
         raise SnapshotError("file damaged in the copy: state.json")
 
-    monkeypatch.setattr(tow.snapshots.create, "_rename_with_retry", held)
+    monkeypatch.setattr(tow.snapshots.create, "rename_with_retry", held)
     monkeypatch.setattr(tow.snapshots.create, "verify_snapshot", unreadable)
     with pytest.raises(SnapshotError):
         create_snapshot()
@@ -1432,3 +1432,88 @@ def test_a_restore_that_died_before_its_marker_leaves_no_folder_for_ever(backup,
     assert not unjournaled.exists()
     assert "cleanup_warning" not in result
     assert len(list(data_dir().glob("before-restore-*"))) == 1  # this restore's own
+
+
+def test_replica_is_verified_independently_and_offline_keeps_primary(backup, tmp_path_factory, monkeypatch):
+    from tow.snapshots.replica import configure_replica
+
+    external = tmp_path_factory.mktemp("second-drive")
+    cfg = load_config()
+    root = configure_replica(str(external), cfg, enroll=True)
+    cfg["backup_replica_dir"] = str(external)
+    save_config(cfg)
+    result = create_snapshot()
+    primary = Path(result["snapshot"])
+    secondary = root / primary.name
+    assert result["replica"] == "verified"
+    assert verify_snapshot(secondary) == verify_snapshot(primary)
+    assert not (secondary / "master.key").exists()
+
+    disconnected = external.with_name(external.name + "-offline")
+    external.rename(disconnected)
+    external.mkdir()  # the empty local directory below an unmounted drive
+    later = create_snapshot()
+    assert later["replica"] == "unavailable"
+    assert verify_snapshot(Path(later["snapshot"]))["signed"]
+    assert not list(external.iterdir())
+    external.rmdir()
+    disconnected.rename(external)
+    assert create_snapshot()["replica"] == "verified"
+
+    # A new installation has only the independently held key (supplied by the fixture).
+    fresh = tmp_path_factory.mktemp("restored-install")
+    monkeypatch.setenv("TOW_CONFIG", str(fresh / "config.yaml"))
+    monkeypatch.setenv("TOW_ROOT", str(fresh))
+    monkeypatch.setenv("TOW_HOME", str(fresh / "data"))
+    assert restore_snapshot(secondary, apply=True)["applied"]
+    assert load_state()["topics"][0]["id"] == "before"
+    assert load_secrets()["telegram"]["token"] == "t-before"
+    assert not load_config().get("backup_replica_dir")
+
+
+def test_replica_rejects_overlapping_folders_and_does_not_enroll_foreign_files(backup, tmp_path_factory):
+    from tow.snapshots.replica import configure_replica
+
+    cfg = load_config()
+    backup.mkdir()
+    with pytest.raises(ValueError, match="overlap"):
+        configure_replica(str(backup), cfg, enroll=True)
+    other = tmp_path_factory.mktemp("foreign-drive")
+    folder = other / "TOW-nightly"
+    folder.mkdir()
+    (folder / "keep").write_bytes(b"foreign")
+    with pytest.raises(ValueError, match="unrecognised"):
+        configure_replica(str(other), cfg, enroll=True)
+    assert (folder / "keep").read_bytes() == b"foreign"
+    assert not (folder / ".tow-replica").exists()
+
+
+def test_failed_second_copy_does_not_rotate_the_previous_verified_copy(backup, tmp_path_factory, monkeypatch):
+    from tow.snapshots import replica
+
+    external = tmp_path_factory.mktemp("replica-retention")
+    cfg = load_config()
+    root = replica.configure_replica(str(external), cfg, enroll=True)
+    cfg.update(backup_replica_dir=str(external), backup_keep=1)
+    cfg.pop("backup_days", None)
+    save_config(cfg)
+    first = create_snapshot()
+    older = root / Path(first["snapshot"]).name
+    assert verify_snapshot(older)["signed"]
+    with monkeypatch.context() as faults:
+
+        def unreadable(*args, **kwargs):
+            raise SnapshotError("readback failed")
+
+        faults.setattr(replica, "verify_snapshot", unreadable)
+        second = create_snapshot()
+    assert second["replica"] == "unavailable"
+    assert verify_snapshot(Path(second["snapshot"]))["signed"]
+    assert verify_snapshot(older)["signed"]
+    assert not (root / Path(second["snapshot"]).name).exists()
+    third = create_snapshot()
+    assert third["replica"] == "verified"
+    assert not older.exists()
+    copies = list(root.glob("tow-*"))
+    assert len(copies) == 1
+    assert verify_snapshot(copies[0]) == verify_snapshot(Path(third["snapshot"]))

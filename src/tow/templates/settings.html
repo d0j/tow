@@ -433,14 +433,14 @@
             <label for="backup-path-{{ f.kind }}" class="sr-only">{{ t('settings.backups.folder', title=f.title) }}</label>
             <input id="backup-path-{{ f.kind }}" name="path" value="{{ fc.draft.get('path', f.value) if fc else f.value }}" class="w-xl" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="backup-path-{{ f.kind }}-where{% if hint %} backup-path-{{ f.kind }}-hint{% endif %}">
             {#- Where the copies go, always: an empty field is the default folder, not "no copies". -#}
-            {% set where = t('common.default_path', path=f.default_path) if not f.value else (t('settings.backups.now', path=f.path) if f.path != f.value else '') %}
+            {% set where = t('settings.backups.replica_off') if f.kind == 'replica' and not f.value else t('common.default_path', path=f.default_path) if not f.value else (t('settings.backups.now', path=f.path) if f.path != f.value else '') %}
             <p class="field-hint" id="backup-path-{{ f.kind }}-where">{{ where }}{% if f.free %}{% if where %} <span class="nowrap">· {% else %}<span class="nowrap">{% endif %}<span data-sync-volatile>{{ t('settings.backups.free', free=f.free) }}</span></span>{% endif %}</p>
             {% if hint %}<p class="field-hint" id="backup-path-{{ f.kind }}-hint">{{ hint }}</p>{% endif %}
           </div>
           <div class="settings-actions">
             <button class="ghost" type="submit" name="action" value="save">{{ t('settings.common.save') }}</button>
             <button class="ghost" type="submit" name="action" value="check" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
-            {% if not f.is_default %}<button class="ghost" type="submit" name="action" value="default">{{ t('settings.backups.use_default') }}</button>{% endif %}
+            {% if not f.is_default %}<button class="ghost" type="submit" name="action" value="default">{{ t('settings.backups.replica_disable' if f.kind == 'replica' else 'settings.backups.use_default') }}</button>{% endif %}
           </div>
         </form>
         {% endmacro %}
@@ -506,6 +506,12 @@
             <details class="backup-location">
               <summary>{{ t('settings.backups.folder_short') }}{% if backups.folders.night.is_default %} <span class="pill mut">{{ t('settings.backups.default_pill') }}</span>{% endif %}</summary>
               {{ folder_form(backups.folders.night, t('settings.backups.folders_hint')) }}
+            </details>
+            <details class="technical-details"><summary>{{ t('settings.backups.replica') }}</summary>
+              <div class="details-body">
+                {{ folder_form(backups.folders.replica, t('settings.backups.replica_hint')) }}
+                {% if backups.replica_message %}<p class="field-hint">{{ t(backups.replica_message) }}</p>{% endif %}
+              </div>
             </details>
             </div>
           </article>

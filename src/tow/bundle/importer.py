@@ -48,6 +48,7 @@ _OVERRIDE_TYPES: dict[str, type] = {
     "port": int,
     "allow_lan": bool,
     "backup_dir": str,
+    "backup_replica_dir": str,
     "restore_points_dir": str,
     "allow_unc_save_paths": bool,
     "allow_private_tracker_hosts": bool,

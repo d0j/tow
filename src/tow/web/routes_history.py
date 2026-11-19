@@ -10,7 +10,7 @@ from tow.web import _context, page_sync, services
 from tow.web.messages import request_flash
 from tow.web.templating import TEMPLATES
 from tow.web.text import t, time_parts
-from tow.web.views import issue_notes, log_line
+from tow.web.views import issue_notes, technical_log_rows
 
 router = APIRouter()
 
@@ -46,18 +46,7 @@ def history_page(request: Request, group: str = "", q: str = "") -> Response:
 
 @router.get("/log.json")
 def log_json(request: Request) -> Response:
-    from tow.log import format_event, index_event_titles, index_site_titles
-
-    local = access.is_local(request)  # a network device's lines are scrubbed (views.log_line)
-
-    title_index = index_event_titles(_context.state().get("topics") or [])
-    site_titles = index_site_titles(_context.config())
-    # Each with the server's words for its time: the one time rule in the page script (towTime).
-    rows = [
-        {**log_line(row, local=local), "time": time_parts(row.get("iso"))}
-        for row in (
-            format_event(e, title_index=title_index, site_titles=site_titles, paths=local)
-            for e in services.read_events(limit=200)
-        )
-    ]
+    rows = technical_log_rows(_context.state(), _context.config(), local=access.is_local(request))
+    for row in rows:
+        row["time"] = time_parts(row.get("iso"))
     return JSONResponse({"ok": True, "rows": rows})

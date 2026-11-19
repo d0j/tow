@@ -499,3 +499,29 @@ def test_the_version_has_room_at_the_end_of_every_page():
     body = _rules(updates)["body:has(> .app-version)"]
     assert "padding-bottom: 2.2rem" in body
     assert "box-sizing: border-box" in body
+
+
+def test_open_topic_reports_the_site_revision_client_observation_and_wait(client):
+    from tow.store import save_download_history
+
+    at = "2026-01-03T10:15:23Z"
+    _seed(
+        [
+            {
+                "id": "t1",
+                "title": "Show",
+                "url": "https://tracker.example/topic/1",
+                "hash": "A" * 40,
+                "site_ok_at": at,
+                "waiting_space": {"hash": "A" * 40},
+            }
+        ]
+    )
+    save_download_history({"topics": {"t1": {"items": {}, "client_present": True, "last_scan_at": at}}})
+    response = client.get("/topics/t1/edit-panel")
+    assert response.status_code == 200
+    assert "Сайт ответил" in response.text
+    assert "Ревизия" in response.text
+    assert "AAAAAAAAAAA…" in response.text
+    assert "Была в клиенте" in response.text
+    assert "когда освободится место" in response.text

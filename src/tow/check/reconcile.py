@@ -12,7 +12,7 @@ from tow.check.client_ops import client_unreachable, info_confirms
 from tow.check.notices import queue_recoveries
 from tow.check.rows import fail_row, note_removed, row_error, stamp_result
 from tow.check.topic import CheckRun
-from tow.check_steps import mark_reconcile_failure, reconcile_notification
+from tow.check_steps import changed_owner_fields, identity_changed, mark_reconcile_failure, reconcile_notification
 from tow.clients import files
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import iso_now, machine_now
@@ -144,6 +144,8 @@ def reconcile_and_commit(
     records: list[tuple[str, dict[str, Any]]],
     want: set[str] | None,
     commit_state: Callable[[bool], None],
+    *,
+    started: Mapping[str, tuple[Any, ...]],
 ) -> bool:
     """Reconcile with the clients, then commit history and state; True when a journal
     cleanup is left pending.
@@ -164,8 +166,12 @@ def reconcile_and_commit(
             history = history_seen  # restored meanwhile: an empty-history reconcile must not overwrite it
         current = load_state()
         watched = {str(topic.get("id")) for topic in topics_of(current)}
-        checked_ids = {str(topic.get("id")) for topic in topics_of(state)}
-        conflicts = checked_ids if rebuilt and not disk_rebuilt else checked_ids - watched
+        checked = {str(topic.get("id")): topic for topic in topics_of(state)}
+        conflicts = set(checked) if rebuilt and not disk_rebuilt else set(checked) - watched
+        for topic in topics_of(current):
+            tid = str(topic.get("id"))
+            if tid in checked and identity_changed(changed_owner_fields(started.get(tid), topic), topic, checked[tid]):
+                conflicts.add(tid)
         changed = _merge_history(disk_history, history_seen, history, conflicts=conflicts)
         if conflicts:
             records[:] = [entry for entry in records if str(entry[1].get("topic_id")) not in conflicts]

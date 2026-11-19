@@ -652,3 +652,20 @@ def test_import_with_identical_paths_and_ids_forgets_file_absence_but_preserves_
     assert file_presence.count(restored["topics"][0], load_config()) == 0
     expected_record = {key: value for key, value in history["topics"][topic["id"]].items() if key != "volume"}
     assert load_download_history()["topics"][topic["id"]] == expected_record
+
+
+def test_replica_folder_can_be_checked_enabled_and_disabled(night, tmp_path_factory):
+    client = _client()
+    target = tmp_path_factory.mktemp("second-backup")
+    endpoint = "/settings/backup/location"
+    form = {"kind": "replica", "path": str(target)}
+    check = client.post(endpoint, data={**form, "action": "check"}, follow_redirects=False)
+    assert "запись работает" in _flash(check), _flash(check)
+    assert not (target / "TOW-nightly").exists()
+    assert not load_config().get("backup_replica_dir")
+    saved = client.post(endpoint, data={**form, "action": "save"}, follow_redirects=False)
+    assert load_config().get("backup_replica_dir") == str(target), _flash(saved)
+    assert (target / "TOW-nightly" / ".tow-replica").is_file()
+    client.post(endpoint, data={**form, "action": "default"}, follow_redirects=False)
+    assert not load_config().get("backup_replica_dir")
+    assert (target / "TOW-nightly" / ".tow-replica").is_file()

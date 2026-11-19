@@ -656,6 +656,7 @@ def _run_check(
         pending_reconcile_records,
         want,
         lambda rebuilt: _commit_run_state(outcome, rebuilt, history_trimmed=run.history_started_over > 0),
+        started=started,
     )
     _publish_reconcile_records(pending_reconcile_records, _record)
     flush_notifications(cfg, secrets, how=how, notify=notify)

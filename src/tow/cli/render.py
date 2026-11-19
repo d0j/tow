@@ -262,6 +262,10 @@ def backup_text(result: dict[str, Any]) -> str:
         lines.append(str(result["cleanup_warning"]))
     if result.get("budget_warning"):
         lines.append(str(result["budget_warning"]))
+    from tow.snapshots.replica import replica_message
+
+    if key := replica_message(result.get("replica")):
+        lines.append(t(key))
     return "\n".join(lines)
 
 
