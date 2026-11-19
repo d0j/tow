@@ -1176,7 +1176,8 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
     for kind, location in LOCATIONS.items():
         raw = str(cfg.get(location.key) or "")
         path = resolve(raw, location)
-        free = services.free_bytes(path, state=_context.state())  # the request's state: read once
+        # The optional replica can be offline; opening Settings never probes that disk.
+        free = None if kind == "replica" else services.free_bytes(path, state=_context.state())
         folders[kind] = {
             "kind": kind,
             "title": location.title,
@@ -1223,6 +1224,11 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
         "error": _shown_error(str(st.get("last_error") or ""), local=access.is_local(request)),
         "error_at": _epoch_time(failed_at) if isinstance(failed_at, (int, float)) else "",
         "error_when": failed_at if isinstance(failed_at, (int, float)) else None,
+        "replica_state": st["replica_state"]
+        if cfg.get("backup_replica_dir")
+        and cfg["backup_replica_dir"] == st.get("replica_location")
+        and st.get("replica_state") in ("verified", "unavailable", "cleanup")
+        else "",
         "cleanup_pending": night_cleanup["pending"] is True,
         "cleanup_read_error": night_cleanup["read_error"],
         "cleanup_unrecorded": night_cleanup["pending"] is None,

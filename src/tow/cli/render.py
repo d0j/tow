@@ -262,6 +262,8 @@ def backup_text(result: dict[str, Any]) -> str:
         lines.append(str(result["cleanup_warning"]))
     if result.get("budget_warning"):
         lines.append(str(result["budget_warning"]))
+    if result.get("replica") in ("verified", "cleanup", "unavailable"):
+        lines.append(t("settings.backups.replica_" + result["replica"]))
     return "\n".join(lines)
 
 

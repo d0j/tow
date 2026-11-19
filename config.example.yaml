@@ -72,6 +72,8 @@ interval_sec: 3600
 # `tow restore-snapshot --path <copy> --apply`. A relative folder is inside the install (moves with it), an
 # absolute one may be another drive. The master key is never copied - keep it offline yourself.
 # backup_dir: backup/night
+# Optional second destination: enroll an existing folder in Settings -> Backups -> Second nightly copy.
+# backup_replica_dir is unset until enrollment. Keep the master key separately.
 # backup_keep: 14
 # backup_days: 7               # new installs: seven days; overrides a legacy backup_keep
 # backup_enabled: true         # false disables scheduled copies, not manual actions

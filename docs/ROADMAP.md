@@ -39,9 +39,9 @@ Roughly in order of value:
    inbound port), changes confirmed with a button.
 3. **More messengers** — e-mail (SMTP), Matrix, Slack; each one module with HTTP-faked tests.
 4. **More clients** — BiglyBT through the Transmission-compatible RPC, after a full live test.
-5. **Backups** — an off-machine copy target; restoring state and history from a nightly backup without the key.
+5. **Backups** — restoring state and history from a nightly backup without the key.
 6. **Internals** — one HTTP connection per tracker per run; `qbit*` health keys renamed to `client*`.
-7. **Python 3.15** — move when the final release is out.
+7. **Python 3.15** — the final interpreter is available. The current portable lock still needs compatible binary wheels (including httptools); qualify offline installation, update and rollback on the supported platforms before changing the bundled interpreter.
 8. **Optional browser transport** — isolated, separately managed browser sessions for path-specific/continuous
    challenges, only after preserving origin/redirect/credential boundaries, bounded responses, cancellation,
    process cleanup and three-platform tests. Native nodriver/zendriver and curl_cffi transport are not bundled today;

@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+- An optional second backup folder receives the verified nightly snapshot. It is checked independently and rotated only after read-back; reconnecting it resumes copying.
+
 - Open a topic to see its site response, revision, client observation and next automatic step. The technical log now groups identical successful progress polls.
 
 ## [1.37.2] — 2026-11-19
