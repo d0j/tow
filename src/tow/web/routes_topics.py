@@ -182,6 +182,7 @@ def topics_delete(tid: str) -> Response:
         # M5: undo puts the topic back where it was, not at the top.
         undo.stamp(state, "topic", item=gone, index=topics.index(gone))
     state["topics"] = [item for item in topics if str(item.get("id")) != tid]
+    services.note_removal(state, tid)
     services.save_state(state)
     # Logged once the removal is saved: a failed save is no "removed" (Recent messages).
     services.log_event(

@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+- Preserve concurrently restored or imported download history during checks. Retain a removed watch from its removal date.
+
 - Update Soup Sieve and OpenTelemetry API together to fix five dependency advisories.
 
 ## [1.37.1] — 2026-11-04

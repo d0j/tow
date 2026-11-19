@@ -49,6 +49,7 @@ from tow.content import metadata as content_metadata
 from tow.content import read as read_content
 from tow.doctor import doctor_report, stale_autostart
 from tow.doctor import reason_text as doctor_reason
+from tow.download_history import note_removal
 from tow.errors import diagnostic_details as _diagnostic_details
 from tow.errors import render as _render_error
 from tow.errors import summary_record as _summary_record
@@ -240,6 +241,7 @@ __all__ = [
     "night_cleanup_status_unlocked",
     "note_client_only_monitor_failure",
     "note_client_only_monitor_recovery",
+    "note_removal",
     "note_signed_in",
     "notify_topic_error",
     "observe_events",

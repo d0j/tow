@@ -473,6 +473,21 @@ def small_bundles(monkeypatch):
     monkeypatch.setattr(download_history, "MAX_BYTES", 160 * 1024)
 
 
+def test_removal_keeps_the_history_from_the_day_the_watch_was_removed(monkeypatch):
+    from tow import download_history
+    from tow.store import load_download_history, save_download_history
+
+    state = {"topics": []}
+    download_history.note_removal(state, "quiet-show")
+    save_state(state)
+    save_download_history({"topics": {"quiet-show": {"last_scan_at": "2020-01-01T00:00:00Z", "items": {}}}})
+    _wire_fake_check(monkeypatch, FakeClient())
+    check.run_check(apply=True, notify=False)
+    record = load_download_history()["topics"]["quiet-show"]
+    assert record["unwatched_at"] == state["history_removals"]["quiet-show"]
+    assert "history_removals" not in load_state()
+
+
 def test_a_history_too_large_for_a_restore_point_is_trimmed_by_the_check(monkeypatch, small_bundles):
     """Every current file of every topic stayed for ever: past the bundle's size every restore
     point, and so every update from Settings, failed, and a shorter keep time did not help."""
@@ -576,6 +591,35 @@ def test_merge_history_takes_only_what_the_reconcile_changed():
     disk = {"schema_version": 1, "topics": {"a": {"n": 1}, "b": {"n": 9}, "gone": {"n": 1}, "c": {"n": 5}}}
     _merge_history(disk, seen, reconciled)
     assert disk["topics"] == {"a": {"n": 2}, "b": {"n": 9}, "new": {"n": 1}, "c": {"n": 5}}
+
+
+@pytest.mark.parametrize("restored_items", [{"restored": {"label": "S01E02"}}, None])
+def test_inflight_check_preserves_a_restored_topic_history(tmp_path_factory, monkeypatch, restored_items):
+    from pathlib import Path
+
+    from tow.config import load_config, save_config
+    from tow.snapshots import create_snapshot, restore_snapshot
+    from tow.store import load_download_history, save_download_history
+
+    cfg = load_config()
+    cfg["backup_dir"] = str(tmp_path_factory.mktemp("backup-disk") / "copies")
+    save_config(cfg)
+    save_state({"topics": [{**TOPIC, "hash": "HASH-NEW"}]})
+    restored = {"t": {"items": restored_items}} if restored_items is not None else {}
+    save_download_history({"topics": restored})
+    snapshot = Path(create_snapshot()["snapshot"])
+    save_download_history({"topics": {"t": {"items": {"old": {"label": "S01E01"}}}}})
+    _wire_fake_check(monkeypatch, FakeClient())
+
+    def reconcile(topic, adapter, history, now):
+        assert restore_snapshot(snapshot, apply=True)["applied"]
+        assert load_download_history()["topics"] == restored
+        history["topics"]["t"]["last_scan_at"] = now
+        return {"events": [], "summary": {}}
+
+    monkeypatch.setattr(check_reconcile, "reconcile_topic", reconcile)
+    check.run_check(apply=True, notify=False)
+    assert load_download_history()["topics"] == restored
 
 
 def test_a_new_scan_time_alone_does_not_count_as_a_history_change():

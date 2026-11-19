@@ -193,6 +193,7 @@ class HistoryRecord(TypedDict, total=False):
 
     items: dict[str, HistoryItem]
     baseline_at: str
+    unwatched_at: str
     last_scan_at: str
     expected: dict[str, Any]
     summary: dict[str, Any]
