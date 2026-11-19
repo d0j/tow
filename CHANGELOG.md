@@ -5,11 +5,16 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
-- If a topic's link or client is changed during a poll, the old torrent's observation can no longer enter that topic's history.
+## [1.38.0] — 2026-11-19
+
+### Added
 
 - An optional second backup folder receives the verified nightly snapshot. It is checked independently and rotated only after read-back; reconnecting it resumes copying.
-
 - Open a topic to see its site response, revision, client observation and next automatic step. The technical log now groups identical successful progress polls.
+
+### Fixed
+
+- If a topic's link or client is changed during a poll, the old torrent's observation can no longer enter that topic's history.
 
 ## [1.37.2] — 2026-11-19
 
