@@ -33,17 +33,17 @@ requires-python = ">=3.14"
 dependencies = [
     "beautifulsoup4>=4.15.0",
     "cryptography>=50.0.1",
-    "fastapi>=0.149.0",
+    "fastapi>=0.162.5",
     "httpcore>=1.0.9,<2",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
-    "python-multipart>=0.0.32",
+    "python-multipart>=0.0.33",
     "pyyaml>=6.0.3",
-    "qbittorrent-api>=2026.10.0",
-    "regex>=2026.9.29",
-    "tzdata>=2026.5",
+    "qbittorrent-api>=2026.10.1",
+    "regex>=2026.11.9",
+    "tzdata>=2026.6",
     "uvicorn[standard]>=0.52.4",
-    "websockets>=17.2",
+    "websockets>=17.4",
 ]
 
 [project.urls]
@@ -63,15 +63,15 @@ build-backend = "uv_build"
 dev = [
     # Imported by nothing in TOW: FastAPI's TestClient (starlette.testclient) runs on httpx2; with
     # only httpx it warns that this is deprecated.
-    "httpx2>=2.12.0",
-    "mypy>=2.4.0",
-    "pytest>=9.1.1",
+    "httpx2>=2.16.0",
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
     # Branch coverage of the gate; locked with its coverage, not fetched unpinned on each run.
     "pytest-cov>=7.1.0",
     "pytest-timeout>=2.4",
     "pytest-xdist>=3.8",
-    "ruff>=0.17.1",
-    "types-regex>=2026.9.29.20261005",
+    "ruff>=0.17.4",
+    "types-regex>=2026.11.9.20261110",
 ]
 
 [tool.uv]
