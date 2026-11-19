@@ -114,6 +114,7 @@ class Deps:
     tow_server: Callable[[int], bool] = field(default=lambda _port: False)
     # A job stopped before it ended (its time limit, or TOW stopping): its name and minutes.
     job_stopped: Callable[[str, float], Any] = field(default=lambda _name, _minutes: None)
+    session_ending: Callable[[], bool] = field(default=lambda: False)
 
 
 @dataclass
@@ -131,6 +132,7 @@ class _Server:
     backoff: float = BACKOFF_FIRST_SEC
     last_exit: str = ""
     pending_cause: str = ""  # why it was (re)started, told once it answers
+    shutdown_exit: bool = False
     pending_crash: str = ""
     operation: dict[str, Any] | None = None  # a restart asked from Settings, until it answers
     operation_exits: int = 0  # how often the server of that restart exited before answering
@@ -383,12 +385,25 @@ class Supervisor:
     def _server_tick(self, wall: float, mono: float) -> None:
         server = self.server
         if server.child is None:
+            if server.shutdown_exit:
+                if self.deps.session_ending():
+                    return
+                server.shutdown_exit = False  # shutdown cancelled: resume supervision
             if mono >= server.next_start:
                 self._start_server(wall, mono)
             return
         code = server.child.poll()
         if code is not None:
             server.last_exit = f"exit code {code}"
+            if self.deps.session_ending():
+                server.child = None
+                server.answered = False
+                server.healthy_since = None
+                server.shutdown_exit = True
+                server.pending_cause = ""
+                server.pending_crash = ""
+                LOG.info("web server exited with code %s during session shutdown", code)
+                return
             server.pending_cause = "crashed"
             server.pending_crash = self.deps.crash_line(server.started_wall)
             self._count_restart(wall)

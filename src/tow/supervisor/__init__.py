@@ -271,6 +271,7 @@ def default_deps() -> Deps:
         own_server=lambda port: healthy(port, install=layout.install_id()),
         tow_server=healthy,
         job_stopped=_job_stopped,
+        session_ending=lambda: platform.current().session_ending(),
     )
 
 

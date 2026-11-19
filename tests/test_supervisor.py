@@ -130,6 +130,23 @@ def test_the_web_server_is_started_and_watched(tmp_path):
     assert status["server"]["pid"] == server.pid
 
 
+def test_session_shutdown_exit_and_cancelled_shutdown(tmp_path, caplog):
+    world, sup = make(tmp_path)
+    run_for(sup, world.clock, 7)
+    sup.deps.session_ending = lambda: True
+    world.servers()[0].code = 1073807364
+    with caplog.at_level("INFO"):
+        run_for(sup, world.clock, 5)
+    assert len(world.servers()) == 1
+    assert not sup.restarts
+    assert not world.sent
+    assert "during session shutdown" in caplog.text
+    sup.deps.session_ending = lambda: False
+    run_for(sup, world.clock, 10)
+    assert len(world.servers()) == 2
+    assert sup.server.answered
+
+
 def test_a_status_write_a_reader_blocked_is_written_at_the_next_tick(tmp_path, monkeypatch):
     # Audit 08.10.2026: on Windows a reader holding status.json made the replace fail; the
     # supervisor had already marked it written and left it stale until something else changed.
