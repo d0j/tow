@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+- Client confirmation and disk-space waits retain the original operation ID. Portable diagnostic logs keep check scope and result counts.
+
 - Nightly backups with a legacy or unverified manifest show only the check action.
 
 - Preserve concurrently restored or imported download history during checks. Retain a removed watch from its removal date.

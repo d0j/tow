@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from uuid import uuid4
 
 
@@ -9,3 +10,10 @@ def new_event_id() -> str:
 
 def new_operation_id(prefix: str = "op") -> str:
     return f"{prefix}-{uuid4().hex[:16]}"
+
+
+def handoff_operation(value: object, *, fallback: str = "client-add") -> str:
+    """Only reuse a TOW operation ID from persisted, potentially imported receipts."""
+    if isinstance(value, str) and re.fullmatch(r"client-(?:add|start|confirm)-[0-9a-f]{16}", value):
+        return value
+    return new_operation_id(fallback)

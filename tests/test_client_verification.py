@@ -526,8 +526,11 @@ def test_deferred_revision_is_saved_but_never_reported_as_success(world):
 def test_next_pass_finishes_without_tracker_fetch_or_reconfiguration(world, scope):
     client, tracker, sent = world
     _run()
+    from tow.log import read_events
+
     before_check = load_state()["topics"][0]["last_check"]
     disk = load_state()
+    operation = disk["topics"][0]["verification_pending"]["operation_id"]
     disk["mirrors"] = {"fake": {"frozen": True}}
     save_state(disk)
     client.torrents[H]["state"] = "downloading"
@@ -543,6 +546,11 @@ def test_next_pass_finishes_without_tracker_fetch_or_reconfiguration(world, scop
     assert [call[0] for call in client.calls] == ["labels"]
     assert tracker.fetches == 1
     assert sent == ["updated"]
+    chain = [
+        e for e in read_events() if e["kind"] in {"client_added", "client_verification_pending", "client_add_started"}
+    ]
+    assert [e["kind"] for e in chain] == ["client_added", "client_verification_pending", "client_add_started"]
+    assert {e["operation_id"] for e in chain} == {operation}
     if scope:
         assert topic["last_check"] == before_check
     check.run_check(apply=True, notify=True, how="test", **scope)

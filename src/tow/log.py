@@ -12,7 +12,7 @@ from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import closing, contextmanager, suppress
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 from urllib.parse import urlsplit
 
 from tow import errors, i18n
@@ -39,6 +39,8 @@ EXPORT_EVENT_KEYS = {
     "kind",
     "operation_id",
     "confirmed",
+    "scope",
+    "outcomes",
     "topic_id",
     "topic",
     "status",
@@ -319,6 +321,14 @@ def _redact(obj: Any) -> Any:
     return obj
 
 
+def valid_check_outcomes(value: Any) -> TypeGuard[dict[str, int]]:
+    return (
+        isinstance(value, dict)
+        and set(value) == {"new", "same", "pending", "skipped", "fail"}
+        and all(type(n) is int and 0 <= n <= 2**31 - 1 for n in value.values())
+    )
+
+
 def export_event_projection(record: dict[str, Any]) -> dict[str, Any]:
     """Return the bounded, non-secret diagnostic schema used by .towx exports."""
     if not isinstance(record, dict):
@@ -326,7 +336,13 @@ def export_event_projection(record: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key in EXPORT_EVENT_KEYS:
         value = record.get(key)
-        if value is None or isinstance(value, (bool, int, float)):
+        if key == "outcomes":
+            if valid_check_outcomes(value):
+                out[key] = dict(value)
+        elif key == "scope":
+            if value in ("space", "progress"):
+                out[key] = value
+        elif value is None or isinstance(value, (bool, int, float)):
             out[key] = value
         elif isinstance(value, str):
             if key == "hash" and value and (len(value) != 40 or not re.fullmatch(r"[0-9a-fA-F]{40}", value)):

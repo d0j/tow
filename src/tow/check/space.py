@@ -43,7 +43,7 @@ from tow.clients import state as client_state
 from tow.clients.spec import TorrentClientAdapter
 from tow.clock import iso_now, machine_now
 from tow.errors import TowError
-from tow.events import new_operation_id
+from tow.events import handoff_operation, new_operation_id
 from tow.jsonish import as_dict
 from tow.log import error_fields
 from tow.progress import safe_relative_path
@@ -293,6 +293,7 @@ def wait_for_space(
         "free": shortfall.free,
         "path": shortfall.path,
         "since": str(earlier.get("since") or iso_now()),
+        "operation_id": handoff_operation(earlier.get("operation_id") or row.get("operation_id")),
         "selection": selection_key(info),
         "kind": kind,
         "client_generation": topic.get("file_observation_revision"),
@@ -336,10 +337,13 @@ def _report_waiting(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str,
 
 def started(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str, client_id: str, kind: str) -> None:
     """The waiting torrent was started (its start read back): History and the owner hear it."""
+    operation_id = handoff_operation(
+        waiting_of(topic).get("operation_id") or row.get("operation_id"), fallback="client-start"
+    )
     forget(topic)
     run.record(
         "client_started",
-        operation_id=new_operation_id("client-start"),
+        operation_id=operation_id,
         component="client",
         integration_id=client_id,
         client_id=client_id,
@@ -354,9 +358,7 @@ def started(topic: Topic, run: CheckRun, row: dict[str, Any], *, h: str, client_
     )
     if run.notify:
         # The waiting error was reported: queue_recoveries adds "problem fixed" to this message.
-        run.queue_notification(
-            topic, kind=kind, operation_id=new_operation_id("bot"), tracker=str(row.get("tracker") or "")
-        )
+        run.queue_notification(topic, kind=kind, operation_id=operation_id, tracker=str(row.get("tracker") or ""))
 
 
 def recheck(
