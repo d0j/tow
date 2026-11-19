@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+- Update Soup Sieve and OpenTelemetry API together to fix five dependency advisories.
+
 ## [1.37.1] — 2026-11-04
 
 ### Fixed
