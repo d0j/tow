@@ -620,6 +620,9 @@ class PosixBackend:
     def logon_time(self) -> float | None:
         return None  # not kept in a form worth parsing; the messages do without it
 
+    def session_ending(self) -> bool:
+        return False  # an exit without a positive system signal stays actionable
+
     def shutdown_reasons(self, since: float, until: float) -> list[dict[str, Any]]:
         if self.name != "linux":
             return []

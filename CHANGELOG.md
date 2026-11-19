@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+- The supervisor preserves the exit code during a confirmed Windows shutdown without reporting a web-server crash.
+
 - Client confirmation and disk-space waits retain the original operation ID. Portable diagnostic logs keep check scope and result counts.
 
 - Nightly backups with a legacy or unverified manifest show only the check action.

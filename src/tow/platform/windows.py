@@ -1047,6 +1047,12 @@ class WindowsBackend:
     def logon_time(self) -> float | None:
         return logon_time()
 
+    def session_ending(self) -> bool:
+        try:
+            return bool(_dll("user32").GetSystemMetrics(0x2000))  # SM_SHUTTINGDOWN
+        except AttributeError, OSError:
+            return False
+
     def shutdown_reasons(self, since: float, until: float) -> list[dict[str, Any]]:
         return shutdown_events(since, until)
 
