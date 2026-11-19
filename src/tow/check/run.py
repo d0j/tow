@@ -377,7 +377,11 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False, *, hist
         for topic in topics_of(disk)
         if (changed := changed_owner_fields(result.started.get(str(topic.get("id"))), topic))
     }
-    dropped = merge_check_results(disk, state, edited=edited)
+    superseded = {str(row.get("id")) for row in result.results if row.get("history_superseded")}
+    fresh_state = {**state, "topics": [topic for topic in topics_of(state) if str(topic.get("id")) not in superseded]}
+    dropped = merge_check_results(disk, fresh_state, edited=edited) | superseded
+    # Under the same lock as the history write. Its journal restores both on failure.
+    disk.pop("history_removals", None)
     for row in result.results:
         if str(row.get("id")) in dropped:
             row["note"] = t("check.identity_changed_meanwhile", owner_language())
@@ -386,7 +390,9 @@ def _commit_run_state(result: _RunResult, history_rebuilt: bool = False, *, hist
     # Staged in the same write as the result: a TOW stopped before sending loses nothing.
     from tow import delivery
 
-    delivery.stage(disk, list(result.notifications), cfg=result.cfg)
+    delivery.stage(
+        disk, [item for item in result.notifications if str(item.topic.get("id")) not in dropped], cfg=result.cfg
+    )
     save_state(disk)
 
 

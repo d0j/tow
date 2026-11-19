@@ -3,7 +3,7 @@
 download_history.json grew forever: every older revision's files and every deleted topic's
 record stayed. The check prunes it when it commits:
 
-- a topic TOW no longer watches keeps its record ``history_keep_days`` after its last scan
+- a topic TOW no longer watches keeps its record ``history_keep_days`` after removal (legacy records use the last scan)
   (an undone delete within that time finds its history intact);
 - files of older revisions, and files gone from the torrent (``superseded``), go after
   ``history_keep_days``; beyond ``history_max_items`` per topic the oldest of them go first.
@@ -27,7 +27,7 @@ from collections.abc import Collection, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from tow.clock import parse_timestamp
+from tow.clock import iso_now, parse_timestamp
 from tow.records import DownloadHistory, HistoryItem, HistoryRecord
 
 DEFAULT_KEEP_DAYS = 730
@@ -148,6 +148,25 @@ def fit(history: DownloadHistory, *, watched: Collection[str], limit: int | None
     return True, started_over
 
 
+def note_removal(state: dict[str, Any], topic_id: str) -> None:
+    """Commit the retention clock in the same state write as removing the watch."""
+    state.setdefault("history_removals", {})[topic_id] = iso_now()
+
+
+def apply_removals(history: DownloadHistory, state: Mapping[str, Any], watched: set[str]) -> bool:
+    changed = False
+    pending = _mapping(state.get("history_removals"))
+    for tid, record in (history.get("topics") or {}).items():
+        if not isinstance(record, dict):
+            continue
+        if tid in watched:
+            changed = record.pop("unwatched_at", None) is not None or changed
+        elif isinstance(removed := pending.get(tid), str) and record.get("unwatched_at") != removed:
+            record["unwatched_at"] = removed
+            changed = True
+    return changed
+
+
 def prune(
     history: DownloadHistory,
     *,
@@ -169,7 +188,7 @@ def prune(
         if not isinstance(record, dict):
             continue
         if topic_id not in watched and cutoff is not None:
-            scanned = _moment(record.get("last_scan_at"))
+            scanned = _moment(record.get("unwatched_at") or record.get("last_scan_at"))
             if scanned is not None and scanned < cutoff:
                 del topics[topic_id]
                 changed = True

@@ -28,6 +28,7 @@ from tow.store import (
     StoreCorruptionError,
     StoreReadError,
     load_download_history,
+    load_state,
     persistence_lock,
     save_download_history,
 )
@@ -44,11 +45,17 @@ def _relabel_source_hash(record: HistoryRecord | None, old: str, new: str) -> No
 
 def _without_scan_time(record: Any) -> Any:
     """A topic record as far as a change counts: ``last_scan_at`` changes on every pass and
-    nothing reads it, so it is saved together with a real change, never alone."""
+    its time alone does not justify writing the entire history."""
     return {k: v for k, v in record.items() if k != "last_scan_at"} if isinstance(record, dict) else record
 
 
-def _merge_history(disk: DownloadHistory, seen: Mapping[str, Any], reconciled: Mapping[str, Any]) -> bool:
+def _merge_history(
+    disk: DownloadHistory,
+    seen: Mapping[str, Any],
+    reconciled: Mapping[str, Any],
+    *,
+    conflicts: set[str] | None = None,
+) -> bool:
     """Put what the reconcile changed onto the history as it is on disk now, topic by topic;
     True when that changed the history (a new scan time alone does not).
 
@@ -62,13 +69,24 @@ def _merge_history(disk: DownloadHistory, seen: Mapping[str, Any], reconciled: M
     if not isinstance(disk_topics, dict):
         disk_topics = disk["topics"] = {}
     for key in set(seen_topics) | set(new_topics):
+        before = disk_topics.get(key, _ABSENT)
+        original = seen_topics.get(key, _ABSENT)
+        if _without_scan_time(before) != _without_scan_time(original):
+            # Restore/import or another writer won while the client was being asked.
+            # Keep even an absent record. A later progress pass observes it afresh.
+            if conflicts is not None and before != new_topics.get(key, _ABSENT):
+                conflicts.add(key)
+            continue
         if key not in new_topics:
             changed = disk_topics.pop(key, _ABSENT) is not _ABSENT or changed
         elif new_topics[key] != seen_topics.get(key):
-            before = disk_topics.get(key, _ABSENT)
             changed = changed or before is _ABSENT or _without_scan_time(before) != _without_scan_time(new_topics[key])
             disk_topics[key] = new_topics[key]
-    others = {key: value for key, value in reconciled.items() if key != "topics" and seen.get(key) != value}
+    others = {
+        key: value
+        for key, value in reconciled.items()
+        if key != "topics" and seen.get(key) != value and disk.get(key, _ABSENT) == seen.get(key, _ABSENT)
+    }
     changed = changed or any(key not in disk or disk.get(key) != value for key, value in others.items())
     cast(dict[str, Any], disk).update(others)
     return changed
@@ -138,12 +156,21 @@ def reconcile_and_commit(
     _reconcile_all(state, results, run, history, records, want)
     queue_recoveries(state, results, run)
     keep_days, max_items = run.history_retention
-    watched = {str(topic.get("id")) for topic in topics_of(state)}
     with persistence_lock():
         disk_history, disk_rebuilt = _load_history(quarantine=True)
         if rebuilt and not disk_rebuilt:
             history = history_seen  # restored meanwhile: an empty-history reconcile must not overwrite it
-        changed = _merge_history(disk_history, history_seen, history)
+        current = load_state()
+        watched = {str(topic.get("id")) for topic in topics_of(current)}
+        conflicts: set[str] = set()
+        changed = _merge_history(disk_history, history_seen, history, conflicts=conflicts)
+        conflicts.update(str(topic.get("id")) for topic in topics_of(state) if str(topic.get("id")) not in watched)
+        if conflicts:
+            records[:] = [entry for entry in records if str(entry[1].get("topic_id")) not in conflicts]
+            for row in results:
+                if str(row.get("id")) in conflicts:
+                    row["history_superseded"] = True
+        changed = download_history.apply_removals(disk_history, current, watched) or changed
         pruned = download_history.prune(disk_history, watched=watched, keep_days=keep_days, max_items=max_items)
         pruned = _fit_history(disk_history, watched, run, changed=changed or disk_rebuilt) or pruned
         if disk_rebuilt:

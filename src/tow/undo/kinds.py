@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 from typing import Any, cast
 
-from tow import access, file_presence
+from tow import access, download_history, file_presence
 from tow.config import as_bool, flash_ttl, interval_sec_of, load_config
 from tow.log import error_fields, log_event
 from tow.records import shown_title
@@ -150,6 +150,8 @@ def _topic_added(ctx: Context) -> Restore:
     added = str(cast(TopicAdded, ctx.record)["id"])
     gone = next((topic for topic in ctx.state.get("topics") or [] if str(topic.get("id")) == added), None)
     ctx.state["topics"] = [topic for topic in ctx.state.get("topics") or [] if str(topic.get("id")) != added]
+    if gone:
+        download_history.note_removal(ctx.state, added)
     return Restore(
         Outcome("web.undo.topic_add_done"),
         after_commit=(lambda: torrent_cache.forget_if_unused(str(gone.get("url") or ""))) if gone else None,
