@@ -20,7 +20,7 @@ from tow.clients.spec import TorrentClientAdapter
 from tow.clients.state import is_stopped
 from tow.clock import machine_now, parse_timestamp
 from tow.errors import Msg, TowError
-from tow.events import new_operation_id
+from tow.events import handoff_operation, new_operation_id
 from tow.i18n import t
 from tow.jsonish import as_dict
 from tow.log import error_fields, owner_language
@@ -290,7 +290,9 @@ def _defer_start(
         set(receipt["wanted"]),
         fail=lambda: TowError("check.selection_unconfirmed"),
     )
+    operation_id = handoff_operation((topic.get("waiting_space") or {}).get("operation_id") or row.get("operation_id"))
     topic["verification_pending"] = {
+        "operation_id": operation_id,
         "hash": h,
         "client": client_id,
         "path": destination,
@@ -308,7 +310,14 @@ def _defer_start(
     topic.pop("waiting_space", None)
     pending_row(row, h)
     run.record(
-        "client_verification_pending", topic=topic.get("id"), client_id=client_id, hash=h, status="pending", how=run.how
+        "client_verification_pending",
+        operation_id=operation_id,
+        topic_id=topic.get("id"),
+        topic=topic.get("id"),
+        client_id=client_id,
+        hash=h,
+        status="pending",
+        how=run.how,
     )
 
 
@@ -384,7 +393,10 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
         and previous.get("owner") == list(client_marks(work.topic))
         and not work.row.get("readd_removed")
     )
+    previous_operation = previous.get("operation_id") if same_transaction else None
+    space_operation = waiting_space.get("operation_id") if waited_for_space else None
     work.topic["verification_pending"] = {
+        "operation_id": handoff_operation(previous_operation or space_operation or work.operation_id),
         "hash": h,
         "client": work.client_id,
         "path": dest,
@@ -420,7 +432,7 @@ def _defer(work: TopicCheck, error: ClientVerificationPending, metadata: Any, pl
     pending_row(work.row, h)
     work.run.record(
         "client_verification_pending",
-        operation_id=work.operation_id,
+        operation_id=work.topic["verification_pending"]["operation_id"],
         component="client",
         integration_id=work.client_id,
         client_id=work.client_id,
@@ -925,9 +937,10 @@ def _finished(
         return  # the add/selection is complete, but stopped+complete proves no running transition
     if event == "client_started":
         row["started"] = True
+    operation_id = handoff_operation(waiting.get("operation_id"), fallback="client-confirm")
     run.record(
         event,
-        operation_id=new_operation_id("client-confirm"),
+        operation_id=operation_id,
         component="client",
         integration_id=client_id,
         client_id=client_id,
@@ -939,7 +952,7 @@ def _finished(
         how=run.how,
     )
     if run.notify and not waiting.get("selection_update"):
-        run.queue_notification(topic, kind=str(waiting.get("kind") or "added"), operation_id=new_operation_id("bot"))
+        run.queue_notification(topic, kind=str(waiting.get("kind") or "added"), operation_id=operation_id)
 
 
 def _wait_for_room(
@@ -959,9 +972,10 @@ def _wait_for_room(
     from tow.check import space
 
     topic.pop("verification_pending", None)
+    operation_id = handoff_operation(waiting.get("operation_id"), fallback="client-confirm")
     run.record(
         "client_added",
-        operation_id=new_operation_id("client-confirm"),
+        operation_id=operation_id,
         component="client",
         integration_id=client_id,
         client_id=client_id,
@@ -975,6 +989,7 @@ def _wait_for_room(
     )
     path = str(waiting.get("path") or "")
     topic["waiting_space"] = {
+        "operation_id": operation_id,
         "hash": h,
         "client": client_id,
         "needed": 0,

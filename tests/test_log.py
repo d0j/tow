@@ -124,6 +124,24 @@ def test_a_line_names_the_site_by_its_title_as_home_does():
     assert format_event(event)["detail"] == format_event(event, site_titles={})["detail"]
 
 
+def test_export_keeps_the_meaning_of_scoped_and_pending_checks():
+    from tow.bundle.secret_scan import events_are_redacted
+
+    counts = {"new": 0, "same": 7, "pending": 1, "skipped": 0, "fail": 0}
+    for extras in ({"scope": "space", "how": "progress"}, {"outcomes": counts}):
+        event = {"kind": "check", "ok": 7, "n": 8, **extras}
+        projected = export_event_projection(event)
+        assert events_are_redacted({"events": [projected]})
+        assert format_event(projected) == format_event(event)
+    for invalid in (
+        {"scope": "private text"},
+        {"outcomes": {**counts, "extra": 0}},
+        {"outcomes": {**counts, "fail": True}},
+    ):
+        assert not events_are_redacted({"events": [invalid]})
+        assert next(iter(invalid)) not in export_event_projection(invalid)
+
+
 def test_export_event_projection_rejects_hash_suffix_data():
     projected = export_event_projection({"hash": "a" * 64 + "SECRET"})
     assert "hash" not in projected

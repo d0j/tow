@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 from tow.bundle.errors import ExportImportError
-from tow.log import EXPORT_EVENT_KEYS
+from tow.log import EXPORT_EVENT_KEYS, valid_check_outcomes
 
 # Field names that hold credentials. Matched exactly (plus the suffixes below) - a substring
 # match also refused TOW's own metadata (secret_scope, secret_undo_ref, secrets_ref, ...)
@@ -205,7 +205,13 @@ def events_are_redacted(value: Any) -> bool:
     for event in value["events"]:
         if not isinstance(event, dict) or not set(event).issubset(EXPORT_EVENT_KEYS):
             return False
-        for item in event.values():
+        for key, item in event.items():
+            if key == "outcomes":
+                if not valid_check_outcomes(item):
+                    return False
+                continue
+            if key == "scope" and item not in ("space", "progress"):
+                return False
             if item is not None and not isinstance(item, (str, int, float, bool)):
                 return False
     return True
