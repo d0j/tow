@@ -569,6 +569,46 @@ def _without_folders(params: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def technical_log_rows(state: Mapping[str, Any], cfg: Mapping[str, Any], *, local: bool) -> list[dict[str, Any]]:
+    """Fold adjacent identical successful progress polls in the technical view, newest first."""
+    from itertools import groupby
+
+    from tow.log import format_event, index_event_titles, index_site_titles, valid_check_outcomes
+
+    titles = index_event_titles(state.get("topics") or [])
+    sites = index_site_titles(cfg)
+    volatile = {"ts", "created_at", "event_id"}
+
+    def repeat_key(event: dict[str, Any]) -> object:
+        outcomes = event.get("outcomes")
+        if (
+            event.get("kind") == "check"
+            and event.get("scope") == "progress"
+            and event.get("how") == "progress"
+            and event.get("apply") is True
+            and type(event.get("n")) is int
+            and type(event.get("ok")) is int
+            and event["n"] == event["ok"]
+            and valid_check_outcomes(outcomes)
+            and event["n"] == outcomes["same"] + outcomes["skipped"]
+            and not (outcomes["fail"] or outcomes["pending"] or outcomes["new"])
+            and event.keys() <= volatile | {"kind", "how", "apply", "scope", "n", "ok", "outcomes"}
+        ):
+            return {k: v for k, v in event.items() if k not in volatile}
+        return object()  # unknown or significant events each keep their own row
+
+    rows = []
+    for _key, group in groupby(services.read_events(limit=200), key=repeat_key):
+        events = list(group)  # at most the 200 events already read
+        event = events[0]
+        row = log_line(format_event(event, title_index=titles, site_titles=sites, paths=local), local=local)
+        count = len(events)
+        if count > 1:
+            row["label"] = f"{row['label']} × {count}"
+        rows.append(row)
+    return rows
+
+
 def log_line(row: dict[str, Any], *, local: bool) -> dict[str, Any]:
     """A line of the log (``tow.log.format_event``: History, ``/log.json``, Settings' log) for
     this PC (every word) or a network device: its details and its raw error scrubbed as Recent
@@ -905,6 +945,8 @@ def topic_rows(state: Mapping[str, Any], *, local: bool) -> list[dict[str, Any]]
                 "name": shown_title(topic),
                 "series": shown_title(topic).split(" / ")[0],
                 "download_summary": summary,
+                "client_observed": record.get("client_present"),
+                "client_observed_at": record.get("last_scan_at"),
                 "missing_file_count": services.missing_file_count(topic, cfg),
                 "file_repair_phase": _repair_phase(topic),
                 "has_file_repair_request": bool(topic.get("repair_pending")),

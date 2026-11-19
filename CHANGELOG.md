@@ -5,6 +5,8 @@ project uses [semantic versioning](https://semver.org/). Русская верс
 
 ## [Unreleased]
 
+- Open a topic to see its site response, revision, client observation and next automatic step. The technical log now groups identical successful progress polls.
+
 ## [1.37.2] — 2026-11-19
 
 ### Fixed

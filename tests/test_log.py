@@ -691,3 +691,22 @@ def test_error_classes_reachable(message, cls):
     from tow.log import error_class
 
     assert error_class(message) == cls
+
+
+def test_only_identical_adjacent_successful_progress_polls_are_folded(monkeypatch):
+    from tow.web import services
+    from tow.web.views import technical_log_rows
+
+    counts = {"same": 1, "skipped": 1, "new": 0, "fail": 0, "pending": 0}
+    poll = {"kind": "check", "how": "progress", "scope": "progress", "ok": 2, "n": 2, "apply": True, "outcomes": counts}
+    pending = {**poll, "outcomes": {**counts, "pending": 1, "same": 0}}
+    first = {**poll, "ts": "2026-01-01T12:00:00Z"}
+    old = {**poll, "ts": "2026-01-01T11:00:00Z"}
+    different = {**poll, "scope": "space"}
+    source = [first, old, pending, pending, different, old, old]
+    monkeypatch.setattr(services, "read_events", lambda *, limit: source[:limit])
+    rows = technical_log_rows({}, {}, local=True)
+    assert len(rows) == 5
+    assert rows[0]["iso"] == first["ts"]
+    assert [r["label"].endswith("× 2") for r in rows] == [True, False, False, False, True]
+    assert len(source) == 7
