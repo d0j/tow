@@ -40,9 +40,9 @@ from tow.web.views import (
     client_notes,
     flash_ttl_sec,
     issue_notes,
-    log_line,
     repeated_password,
     service_view,
+    technical_log_rows,
 )
 
 router = APIRouter()
@@ -60,7 +60,6 @@ def settings_view(request: Request, *, live: bool) -> Response:
     without the log, which is no fragment (its own section reads ``/log.json`` while open) and
     whose reading takes the log's lock."""
     from tow.clients.factory import ready as ready_clients
-    from tow.log import format_event, index_event_titles, index_site_titles
 
     cfg = _context.config()  # read-only snapshots of this request (tow.web._context)
     secrets = _context.secrets_or_none()
@@ -68,8 +67,6 @@ def settings_view(request: Request, *, live: bool) -> Response:
     s = secrets or {}
     state = _context.state()
     topics = state.get("topics") or []
-    title_index = index_event_titles(topics)
-    site_titles = index_site_titles(cfg)
     clients = client_cards(cfg, s, topics)
     restore_points_error = False
     try:
@@ -120,15 +117,7 @@ def settings_view(request: Request, *, live: bool) -> Response:
             "backups": backups,
             "language_setting": _language_setting(cfg),
             "theme_setting": cfg.get("theme") if cfg.get("theme") in THEMES else "auto",
-            "log_rows": []
-            if live
-            else [
-                log_line(
-                    format_event(e, title_index=title_index, site_titles=site_titles, paths=access.is_local(request)),
-                    local=access.is_local(request),
-                )
-                for e in services.read_events(limit=200)
-            ],
+            "log_rows": [] if live else technical_log_rows(state, cfg, local=access.is_local(request)),
             # What needs the owner and is said in its card ("Needs attention" lands there).
             "notes": issue_notes(state, cfg, "settings", local=access.is_local(request)),
             # Each form's base (edit_base): what it shows, saved now; a refused save's ?conflict=

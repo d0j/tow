@@ -1197,6 +1197,12 @@
     },
     "topic": {
       "no_events": "Событий пока нет",
+      "await_space": "TOW запустит раздачу, когда освободится место.",
+      "await_verification": "Когда клиент закончит проверку файлов, TOW сверит результат.",
+      "site_answered": "Сайт ответил {at}",
+      "seen_revision": "Ревизия",
+      "client_present_at": "Была в клиенте {at}",
+      "client_absent_at": "Отсутствовала в клиенте {at}",
       "episodes_history": "Открыть историю серий",
       "files_history": "Открыть историю файлов",
       "files_count": {

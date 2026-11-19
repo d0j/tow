@@ -1191,6 +1191,12 @@
     },
     "topic": {
       "no_events": "No events yet",
+      "await_space": "TOW will start the torrent when there is enough free space.",
+      "await_verification": "TOW will check the result when the client finishes verifying files.",
+      "site_answered": "Site responded {at}",
+      "seen_revision": "Revision",
+      "client_present_at": "Seen in client {at}",
+      "client_absent_at": "Absent from client {at}",
       "episodes_history": "Open the episode history",
       "files_history": "Open the file history",
       "files_count": {
