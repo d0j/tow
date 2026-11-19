@@ -69,6 +69,8 @@ def _merge_history(
     if not isinstance(disk_topics, dict):
         disk_topics = disk["topics"] = {}
     for key in set(seen_topics) | set(new_topics):
+        if conflicts is not None and key in conflicts:
+            continue
         before = disk_topics.get(key, _ABSENT)
         original = seen_topics.get(key, _ABSENT)
         if _without_scan_time(before) != _without_scan_time(original):
@@ -162,9 +164,9 @@ def reconcile_and_commit(
             history = history_seen  # restored meanwhile: an empty-history reconcile must not overwrite it
         current = load_state()
         watched = {str(topic.get("id")) for topic in topics_of(current)}
-        conflicts: set[str] = set()
+        checked_ids = {str(topic.get("id")) for topic in topics_of(state)}
+        conflicts = checked_ids if rebuilt and not disk_rebuilt else checked_ids - watched
         changed = _merge_history(disk_history, history_seen, history, conflicts=conflicts)
-        conflicts.update(str(topic.get("id")) for topic in topics_of(state) if str(topic.get("id")) not in watched)
         if conflicts:
             records[:] = [entry for entry in records if str(entry[1].get("topic_id")) not in conflicts]
             for row in results:

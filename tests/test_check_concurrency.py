@@ -622,6 +622,18 @@ def test_inflight_check_preserves_a_restored_topic_history(tmp_path_factory, mon
     assert load_download_history()["topics"] == restored
 
 
+def test_removed_watch_and_restored_content_supersede_substantive_client_observations():
+    from tow.check.reconcile import _merge_history
+
+    baseline = {"topics": {"removed": {"n": 1}, "restored": {"n": 1}}}
+    observed = {"topics": {"removed": {"n": 2}, "restored": {"n": 2}}}
+    disk = {"topics": {"removed": {"n": 1}, "restored": {"n": 3}}}
+    skipped = {"removed"}
+    assert not _merge_history(disk, baseline, observed, conflicts=skipped)
+    assert disk["topics"] == {"removed": {"n": 1}, "restored": {"n": 3}}
+    assert skipped == {"removed", "restored"}
+
+
 def test_a_new_scan_time_alone_does_not_count_as_a_history_change():
     import copy
 
