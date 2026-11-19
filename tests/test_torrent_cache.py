@@ -222,10 +222,13 @@ def test_cache_replaced_between_stat_and_open_is_refused(monkeypatch):
     watch()
     torrent_cache.remember(blob(), URL)
     original = torrent_cache.os.fstat
+    cached = torrent_cache._path(URL).stat()
 
     def swapped(fd):
         info = original(fd)
-        return SimpleNamespace(st_mode=info.st_mode, st_dev=info.st_dev, st_ino=info.st_ino + 1)
+        if not torrent_cache.os.path.samestat(info, cached):
+            return info
+        return SimpleNamespace(st_mode=info.st_mode, st_dev=info.st_dev, st_ino=info.st_ino + 1, st_size=info.st_size)
 
     monkeypatch.setattr(torrent_cache.os, "fstat", swapped)
     with pytest.raises(TowError):
