@@ -64,6 +64,11 @@ def _topic_deleted(ctx: Context) -> Restore:
             topics.insert(index, item)  # back where it was, not at the end
         else:
             topics.append(item)
+    pending = ctx.state.get("history_removals")
+    if isinstance(pending, dict):
+        pending.pop(str(item.get("id")), None)
+        if not pending:
+            ctx.state.pop("history_removals")
     return Restore(Outcome("web.undo.topic_done"))
 
 

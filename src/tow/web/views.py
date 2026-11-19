@@ -1152,7 +1152,7 @@ def backup_view(cfg: dict[str, Any], request: Request) -> dict[str, Any]:
             "at": format_ui_timestamp(str(row["created_at"])),
             "created_at": row["created_at"],
             "size": format_bytes(row["bytes"]),
-            "access": row["access"],
+            "access": row.get("access", "unverified"),
         }
         for row in copies
     ]

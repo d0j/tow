@@ -150,7 +150,10 @@ def fit(history: DownloadHistory, *, watched: Collection[str], limit: int | None
 
 def note_removal(state: dict[str, Any], topic_id: str) -> None:
     """Commit the retention clock in the same state write as removing the watch."""
-    state.setdefault("history_removals", {})[topic_id] = iso_now()
+    pending = state.get("history_removals")
+    if not isinstance(pending, dict):
+        pending = state["history_removals"] = {}
+    pending[topic_id] = iso_now()
 
 
 def apply_removals(history: DownloadHistory, state: Mapping[str, Any], watched: set[str]) -> bool:
