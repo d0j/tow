@@ -490,11 +490,13 @@
                   <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/check" data-return-target="acc-transfer">
                     <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.checking') }}">{{ t('settings.common.check') }}</button>
                   </form>
+                  {% if snap.access == 'signed' %}
                   <form method="post" action="/settings/backup/night/{{ snap.name|urlencode }}/restore" data-return-target="acc-transfer" data-confirm="{{ t('settings.backups.night_restore_confirm', at=snap.at) }} {{ t('settings.backups.night_restore_access') }}" data-confirm-label="{{ t('settings.common.restore') }}" data-confirm-danger>
                     {#- The newest copy: what "Needs attention" offers when the data folder was lost. -#}
                     <button class="ghost" type="submit" data-busy-label="{{ t('common.busy.restoring') }}"{% if loop.first %}{{ fix_attrs('restore_night') }}{% endif %}>{{ t('settings.common.restore') }}</button>
                   </form>
                   <a class="btn ghost danger" href="/settings/backup/night/{{ snap.name|urlencode }}/delete">{{ t('settings.common.delete') }}</a>
+                  {% else %}<span class="mut">{{ t('settings.backups.legacy_copy' if snap.access == 'legacy' else 'settings.backups.unverified_copy') }}</span>{% endif %}
                 </div>
               </div>
               {% endfor %}

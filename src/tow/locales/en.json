@@ -2162,6 +2162,8 @@
       "night_hint": "Settings, history and encrypted passwords, every night.",
       "failed": "The last backup ({at}) failed: {error}",
       "make_now": "Back up now",
+      "legacy_copy": "Old format · check only",
+      "unverified_copy": "Signature unverified · check the copy",
       "night_restore_confirm": "Restore the settings and history from the nightly backup of {at}? TOW first saves its current data separately.",
       "folders_hint": "Use a local path or \\\\server\\share. “Check” tests writing.",
       "folder": "Folder for {title}",
