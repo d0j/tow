@@ -43,7 +43,7 @@ def manual():
 
 
 def nightly(monkeypatch):
-    monkeypatch.setattr(create, "_prune_night_copies", lambda *_args: ([], True, False))
+    monkeypatch.setattr(create, "prune_night_copies", lambda *_args: ([], True, False))
     for _index in range(3):
         snapshots.create_snapshot()
 
@@ -249,7 +249,7 @@ def test_only_the_install_signed_partial_without_foreign_members_is_removed(copi
     folder = snapshots.backup_root()
     partial = folder / ".tow-20261103-000000.partial"
     partial.mkdir()
-    proof = create._partial_proof(partial.name, signing_key())
+    proof = create.partial_proof(partial.name, signing_key())
     if problem == "foreign":
         proof["signature"] = "invalid"
     (partial / "PARTIAL.json").write_text(json.dumps(proof), encoding="utf-8")

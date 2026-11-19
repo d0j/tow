@@ -555,7 +555,7 @@ def test_a_partial_copy_left_by_a_killed_copy_is_removed_by_the_next_one(backup,
     class Killed(BaseException):  # the supervisor's time limit, a power loss: no except clause runs
         pass
 
-    real_copy, real_rename = tow.snapshots.create._copy_snapshot_member, tow.snapshots.create._rename_with_retry
+    real_copy, real_rename = tow.snapshots.create.copy_snapshot_member, tow.snapshots.create.rename_with_retry
 
     def copy(source, destination, name):
         if name == killed_at:
@@ -568,8 +568,8 @@ def test_a_partial_copy_left_by_a_killed_copy_is_removed_by_the_next_one(backup,
         return real_rename(source, target)
 
     with monkeypatch.context() as patch:
-        patch.setattr(tow.snapshots.create, "_copy_snapshot_member", copy)
-        patch.setattr(tow.snapshots.create, "_rename_with_retry", rename)
+        patch.setattr(tow.snapshots.create, "copy_snapshot_member", copy)
+        patch.setattr(tow.snapshots.create, "rename_with_retry", rename)
         with pytest.raises(Killed):
             create_snapshot()
     (left,) = backup.glob(".tow-*.partial")
@@ -592,7 +592,7 @@ def test_a_partial_proof_signed_by_another_key_is_never_removed(backup, monkeypa
 
     folder = backup / ".tow-20200101-000000.partial"
     folder.mkdir(parents=True)
-    proof = tow.snapshots.create._partial_proof(folder.name, b"another install's key")
+    proof = tow.snapshots.create.partial_proof(folder.name, b"another install's key")
     (folder / "PARTIAL.json").write_text(json.dumps(proof), encoding="utf-8")
     (folder / "state.json").write_text("{}", encoding="utf-8")
 
@@ -1340,7 +1340,7 @@ def test_a_copy_that_fails_its_check_and_cannot_be_renamed_back_is_not_left_as_a
     _clock(monkeypatch, [f"20261001-0000{n:02d}" for n in range(10)])
     for _ in range(3):
         create_snapshot()
-    real_rename = tow.snapshots.create._rename_with_retry
+    real_rename = tow.snapshots.create.rename_with_retry
 
     def held(source, target, **kwargs):
         if source.name.startswith("tow-"):  # back to its partial name: a file in it is held
@@ -1350,7 +1350,7 @@ def test_a_copy_that_fails_its_check_and_cannot_be_renamed_back_is_not_left_as_a
     def unreadable(_path, **_kwargs):
         raise SnapshotError("file damaged in the copy: state.json")
 
-    monkeypatch.setattr(tow.snapshots.create, "_rename_with_retry", held)
+    monkeypatch.setattr(tow.snapshots.create, "rename_with_retry", held)
     monkeypatch.setattr(tow.snapshots.create, "verify_snapshot", unreadable)
     with pytest.raises(SnapshotError):
         create_snapshot()

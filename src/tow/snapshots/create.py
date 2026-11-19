@@ -57,7 +57,7 @@ from tow.yaml_guard import MAX_INPUT_BYTES, YamlLimitError
 _OPTIONAL_MEMBERS = frozenset({"secrets-undo.enc"})
 # A copy being written: ``.tow-<stamp>.partial`` with a signed proof that this install made it.
 _PARTIAL_NAME = re.compile(r"\.tow-[0-9]{8}-[0-9]{6}(?:-[0-9a-f]{6})?\.partial")
-_PARTIAL_PROOF = "PARTIAL.json"
+PARTIAL_PROOF = "PARTIAL.json"
 _PARTIAL_FORMAT = "tow-snapshot-partial-v1"
 
 
@@ -185,7 +185,7 @@ def delete_snapshot(name: str, revision: str) -> dict[str, Any]:
         return {"ok": True, "deleted": name}
 
 
-def _copy_snapshot_member(source: Path, destination: Path, name: str) -> dict[str, Any] | None:
+def copy_snapshot_member(source: Path, destination: Path, name: str) -> dict[str, Any] | None:
     """Copy/hash the same bounded blocks; a missing source is distinct from an unsafe one."""
     lang = owner_language()
     try:
@@ -219,7 +219,7 @@ def _copy_snapshot_member(source: Path, destination: Path, name: str) -> dict[st
         raise SnapshotError(t("backup.snapshot.source_changed", lang, name=name)) from exc
 
 
-def _write_snapshot_manifest(path: Path, manifest: dict[str, Any]) -> None:
+def write_snapshot_manifest(path: Path, manifest: dict[str, Any]) -> None:
     content = manifest_bytes(manifest)
     with path.open("xb") as writer:
         if writer.write(content) != len(content):
@@ -253,19 +253,19 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
     files: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     key = signing_key()  # no key, no copy: an unsigned copy could never be restored
-    stale_pending = _remove_stale_partials(root, key)
+    stale_pending = remove_stale_partials(root, key)
     previous_members = _previous_members(root, key)
     partial_created = False
     try:
         members = live_members()
-        _check_copy_space(root, members)
+        check_copy_space(root, members)
         partial.mkdir(parents=True, exist_ok=False)
         partial_created = True
-        _write_snapshot_manifest(partial / _PARTIAL_PROOF, _partial_proof(partial.name, key))
+        write_snapshot_manifest(partial / PARTIAL_PROOF, partial_proof(partial.name, key))
         for name, source in members:
             guard = locked_log_path() if name == "tow.jsonl" else contextlib.nullcontext(source)
             with guard as stable_source:
-                meta = _copy_snapshot_member(stable_source, partial / name, name)
+                meta = copy_snapshot_member(stable_source, partial / name, name)
             if meta is None:
                 if name == "config.yaml" or name in previous_members:
                     raise SnapshotError(t("backup.snapshot.source_missing", owner_language(), name=name))
@@ -287,9 +287,9 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
             "missing": missing,
         }
         manifest["signature"] = signature_of(manifest, key)
-        _write_snapshot_manifest(partial / "MANIFEST.json", manifest)
-        (partial / _PARTIAL_PROOF).unlink()  # from here the signed MANIFEST proves the folder is ours
-        _rename_with_retry(partial, target)
+        write_snapshot_manifest(partial / "MANIFEST.json", manifest)
+        (partial / PARTIAL_PROOF).unlink()  # from here the signed MANIFEST proves the folder is ours
+        rename_with_retry(partial, target)
     except SnapshotError:
         if partial_created:
             shutil.rmtree(partial, ignore_errors=True)
@@ -310,7 +310,7 @@ def _create_snapshot(*, how: str, proven: dict[str, str] | None = None) -> dict[
         _withdraw_unverified(target, partial, root, key, {"MANIFEST.json", *files})
         raise SnapshotError(t("backup.snapshot.unverified", owner_language(), name=target.name, reason=exc)) from exc
     # Never the copy just verified, even when the clock went back and it does not sort last.
-    pruned, cleanup_pending, over_budget = _prune_night_copies(root, target, key, policy)
+    pruned, cleanup_pending, over_budget = prune_night_copies(root, target, key, policy)
     cleanup_pending = cleanup_pending or stale_pending
     size = sum(item["size"] for item in files.values())
     log_event(
@@ -347,17 +347,17 @@ def _withdraw_unverified(target: Path, partial: Path, root: Path, key: bytes, ex
     signed MANIFEST: still named as a copy, it would be listed, offered for restore and counted
     as one of the copies kept, so an older good one could be pruned in its place."""
     try:
-        _rename_with_retry(target, partial)
+        rename_with_retry(target, partial)
     except OSError:
         if not remove_copy(target, root, "MANIFEST.json", expected):
             with contextlib.suppress(OSError):
                 (target / "MANIFEST.json").unlink()
         return
     with contextlib.suppress(OSError):
-        _remove_stale_partials(root, key)
+        remove_stale_partials(root, key)
 
 
-def _partial_proof(folder: str, key: bytes) -> dict[str, Any]:
+def partial_proof(folder: str, key: bytes) -> dict[str, Any]:
     proof: dict[str, Any] = {"format": _PARTIAL_FORMAT, "folder": folder}
     proof["signature"] = signature_of(proof, key)
     return proof
@@ -365,9 +365,9 @@ def _partial_proof(folder: str, key: bytes) -> dict[str, Any]:
 
 def partial_owner_proof(folder: Path, key: bytes) -> str | None:
     """The member proving a partial folder is this install's: its signed proof, else a signed MANIFEST."""
-    if ordinary_file(folder / _PARTIAL_PROOF, missing=True):
+    if ordinary_file(folder / PARTIAL_PROOF, missing=True):
         try:
-            proof = json.loads(read_metadata_bytes(folder / _PARTIAL_PROOF, limit=MAX_MANIFEST_BYTES))
+            proof = json.loads(read_metadata_bytes(folder / PARTIAL_PROOF, limit=MAX_MANIFEST_BYTES))
         except UnicodeError, ValueError, RecursionError:
             return None
         if (
@@ -376,7 +376,7 @@ def partial_owner_proof(folder: Path, key: bytes) -> str | None:
             and proof.get("folder") == folder.name
             and signature_matches(proof, key)
         ):
-            return _PARTIAL_PROOF
+            return PARTIAL_PROOF
         return None
     return "MANIFEST.json" if owned_manifest(folder, key) is not None else None
 
@@ -386,7 +386,7 @@ def partial_folders(root: Path) -> list[Path]:
     return [path for path in root.iterdir() if _PARTIAL_NAME.fullmatch(path.name)] if root.is_dir() else []
 
 
-def _remove_stale_partials(root: Path, key: bytes) -> bool:
+def remove_stale_partials(root: Path, key: bytes) -> bool:
     """Remove the partial folders a crash, a power loss or a killed copy left (data lock held).
 
     Each is as large as a whole copy. Only one this install signed is removed, never a
@@ -408,7 +408,7 @@ def _remove_stale_partials(root: Path, key: bytes) -> bool:
     return pending
 
 
-def _check_copy_space(root: Path, members: list[tuple[str, Path]]) -> None:
+def check_copy_space(root: Path, members: list[tuple[str, Path]]) -> None:
     """Keep room for a complete new copy; never erase the old one to make space."""
     size = 0
     for name, source in members:
@@ -437,7 +437,7 @@ def copy_disk_bytes(folder: Path) -> int:
     return total
 
 
-def _prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, Any]) -> tuple[list[str], bool, bool]:
+def prune_night_copies(root: Path, target: Path, key: bytes, policy: dict[str, Any]) -> tuple[list[str], bool, bool]:
     """(removed, cleanup pending, over budget): a copy that cannot be read is left alone and
     makes cleanup pending, but the others are still pruned; the kept copies larger than the
     size budget (only the new copy and future-dated ones are never removed) is said apart,
@@ -530,7 +530,7 @@ def remove_copy(folder: Path, parent: Path, marker: str, expected: set[str]) -> 
     return False
 
 
-def _rename_with_retry(source: Path, target: Path, *, attempts: int = 6) -> None:
+def rename_with_retry(source: Path, target: Path, *, attempts: int = 6) -> None:
     """A folder just written can be held for a moment by an antivirus or the search indexer."""
     for attempt in range(attempts):
         try:
