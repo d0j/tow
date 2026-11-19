@@ -21,6 +21,7 @@ KEPT_SETTINGS = (
     "port",
     "allow_lan",
     "backup_dir",
+    "backup_replica_dir",
     "restore_points_dir",
     "allow_unc_save_paths",
     "allow_private_tracker_hosts",

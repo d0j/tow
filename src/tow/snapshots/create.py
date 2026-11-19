@@ -113,6 +113,11 @@ def create_snapshot(*, how: str = "auto") -> dict[str, Any]:
         failure = SnapshotError(t("backup.snapshot.cannot_write", owner_language(), reason=reason(exc)))
         record_failure(str(failure))
         raise failure from exc
+    # The primary is already readable and its success is recorded. An offline secondary
+    # must never prevent the primary copy or hold up writes to the live stores.
+    from tow.snapshots.replica import replicate_if_enabled
+
+    replicate_if_enabled(result)
     return result
 
 

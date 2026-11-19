@@ -227,6 +227,29 @@ def settings_backup_location(
             if action == "default":
                 return _backup_redirect("web.common.no_changes")
             path = str(merged.values["path"])
+    if kind == "replica":
+        from tow.snapshots.replica import configure_replica
+
+        if action not in {"check", "save", "default"}:
+            return _backup_redirect("web.backup.unknown_folder", "err")
+        raw = "" if action == "default" else path.strip().strip('"')
+        if is_network_share(raw) and not access.is_local(request):
+            return _backup_redirect("web.backup.share_local_only", "err")
+        try:
+            if raw:
+                target = configure_replica(raw, cfg, enroll=action == "save")
+                if action == "check":
+                    return _backup_redirect(t("web.backup.write_works", path=target, room=""))
+                cfg[location.key] = raw
+            elif action == "check":
+                return _backup_redirect("settings.backups.replica_folder", "err")
+            else:
+                cfg.pop(location.key, None)
+            services.save_config(cfg)
+        except OSError, ValueError, SnapshotError:
+            return _backup_redirect("settings.backups.replica_folder", "err")
+        services.log_event("settings_backup_location", location=kind, default=not raw, how="manual")
+        return _backup_redirect("web.common.saved" if raw else "settings.backups.replica_off")
     if action == "default":
         cfg.pop(location.key, None)
         services.save_config(cfg)
@@ -291,7 +314,15 @@ def settings_backup_now() -> Response:
         message += f" · {t('backup.snapshot.cleanup_warning')}"
     if result.get("budget_warning"):
         message += f" · {t('backup.snapshot.over_budget', limit=result.get('over_budget_mib'))}"
-    warned = result.get("missing") or result.get("cleanup_warning") or result.get("budget_warning")
+    replica = result.get("replica")
+    if replica:
+        message += f" · {t('settings.backups.replica_' + replica)}"
+    warned = (
+        result.get("missing")
+        or result.get("cleanup_warning")
+        or result.get("budget_warning")
+        or replica in {"unavailable", "cleanup"}
+    )
     return _backup_redirect(message, "warn" if warned else "ok")
 
 

@@ -38,7 +38,8 @@ class Location:
 
 NIGHT = Location("backup_dir", "locations.night", "backup/night")
 MANUAL = Location("restore_points_dir", "locations.manual", "", data_subdir="restore-points")
-LOCATIONS = {"night": NIGHT, "manual": MANUAL}
+REPLICA = Location("backup_replica_dir", "settings.backups.replica", "")
+LOCATIONS = {"night": NIGHT, "manual": MANUAL, "replica": REPLICA}
 
 
 def install_dir() -> Path:
@@ -96,7 +97,7 @@ def problem(value: str, location: Location) -> str | None:
     kind = protected_kind(raw) or protected_kind(str(path))
     if kind is not None:
         return t("locations.protected" if kind == "windows" else "locations.protected_system", owner_language())
-    if location is NIGHT:
+    if location in (NIGHT, REPLICA):
         text = os.path.normcase(os.path.realpath(path))
         data = os.path.normcase(os.path.realpath(data_dir()))
         if text == data or text.startswith(data.rstrip(os.sep) + os.sep):

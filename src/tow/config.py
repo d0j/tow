@@ -483,7 +483,7 @@ def _validate(data: dict[str, Any]) -> None:
         raise ConfigError("config_error.client")
     if "clients" in data and not isinstance(data["clients"], (dict, list)):
         raise ConfigError("config_error.clients")
-    for key in ("backup_dir", "restore_points_dir"):
+    for key in ("backup_dir", "restore_points_dir", "backup_replica_dir"):
         if data.get(key) is not None and not isinstance(data[key], str):
             raise ConfigError("config_error.folder", key=key)
     _folder_list_field(data, "allowed_save_roots")

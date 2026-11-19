@@ -600,6 +600,7 @@ def _keep_local_access(snapshot_config: bytes) -> bytes:
                 restored.pop(key, None)
     else:
         restored.update(bind="127.0.0.1", allow_lan=False)
+        restored.pop("backup_replica_dir", None)  # another computer must enroll its own destination
     try:
         return dump_yaml(restored).encode("utf-8")
     except YamlLimitError as exc:
